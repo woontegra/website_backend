@@ -1,4 +1,8 @@
 import 'dotenv/config'
+// Railway: DATABASE_URL referansı yoksa PGHOST/PGUSER/… ile URL üret (scripts/resolve-database-url.cjs)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
+
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
