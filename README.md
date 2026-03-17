@@ -32,13 +32,26 @@ Railway Postgres → **Connect** → **Public Network** → Connection URL kopya
 
 ## Kurulum (yerel)
 
+**Önem:** `npm install` ve `npm run dev` komutlarını **mutlaka `backend` klasöründe** çalıştırın. Üst dizinde (`Users\...\node_modules`) Prisma 6/7 varsa ve `backend/node_modules` eksikse `adapter or accelerateUrl` hatası oluşur.
+
 ```bash
 cd backend
 npm install
+npx prisma generate
 cp .env.example .env
-# .env: DATABASE_URL (Railway public URL veya local Postgres), JWT_SECRET, CORS_ORIGIN
+# .env: DATABASE_URL, JWT_SECRET, CORS_ORIGIN
 npx prisma db push
 npx tsx prisma/seed.ts
+```
+
+PowerShell — temiz kurulum:
+
+```powershell
+cd backend
+Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+npm install
+npx prisma generate
+npm run dev
 ```
 
 ## Çalıştırma

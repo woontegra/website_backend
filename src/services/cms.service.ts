@@ -1,5 +1,5 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
-import type { Prisma } from '@prisma/client'
 
 export async function getPublicPageBySlug(slug: string) {
   const page = await prisma.page.findFirst({
@@ -84,7 +84,13 @@ export async function updateSection(
   id: string,
   data: { type?: string; title?: string | null; content?: Prisma.InputJsonValue | null; order?: number; isActive?: boolean }
 ) {
-  return prisma.section.update({ where: { id }, data })
+  const updateData: Prisma.SectionUpdateInput = {}
+  if (data.type !== undefined) updateData.type = data.type
+  if (data.title !== undefined) updateData.title = data.title
+  if (data.content !== undefined) updateData.content = data.content === null ? Prisma.JsonNull : data.content
+  if (data.order !== undefined) updateData.order = data.order
+  if (data.isActive !== undefined) updateData.isActive = data.isActive
+  return prisma.section.update({ where: { id }, data: updateData })
 }
 
 export async function deleteSection(id: string) {
@@ -136,7 +142,15 @@ export async function updateSectionItem(
     isActive?: boolean
   }
 ) {
-  return prisma.sectionItem.update({ where: { id }, data })
+  const updateData: Prisma.SectionItemUpdateInput = {}
+  if (data.title !== undefined) updateData.title = data.title
+  if (data.description !== undefined) updateData.description = data.description
+  if (data.icon !== undefined) updateData.icon = data.icon
+  if (data.image !== undefined) updateData.image = data.image
+  if (data.extraData !== undefined) updateData.extraData = data.extraData === null ? Prisma.JsonNull : data.extraData
+  if (data.order !== undefined) updateData.order = data.order
+  if (data.isActive !== undefined) updateData.isActive = data.isActive
+  return prisma.sectionItem.update({ where: { id }, data: updateData })
 }
 
 export async function deleteSectionItem(id: string) {
