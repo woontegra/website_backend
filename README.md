@@ -4,12 +4,27 @@ Node.js + Express + TypeScript + **Prisma + PostgreSQL (Railway)**.
 
 ## Railway ile PostgreSQL
 
+### `DATABASE_URL` yok hatası (P1012)
+
+Build veya start’ta **Environment variable not found: DATABASE_URL** alıyorsanız:
+
+1. Railway’de **backend API servisinizi** açın (Postgres değil).
+2. **Variables** sekmesi → **Add Variable** → **Add Reference**.
+3. **PostgreSQL** servisinizi seçin → değişken olarak **`DATABASE_URL`** işaretleyin → kaydedin.
+4. **Redeploy** edin.
+
+> Referans yoksa: Postgres ile backend **aynı Railway projesinde** olmalı. `DATABASE_URL` sadece Postgres kutusunda duruyorsa API servisine **manuel kopyalamaz**; mutlaka Reference ekleyin.
+
+Build aşamasında `DATABASE_URL` olmasa bile `prisma generate` artık placeholder ile çalışır; **çalışma anında** (`db push` + API) gerçek `DATABASE_URL` şarttır.
+
+---
+
 1. **Railway**’de yeni proje oluşturun.
 2. **Add plugin → PostgreSQL** ekleyin (veritabanı servisi).
 3. **Backend API** için yeni servis ekleyin (GitHub repo veya boş servis):
    - **Root Directory:** `backend` (monorepo ise)
    - **Variables:**
-     - `DATABASE_URL` → **Add Reference** → PostgreSQL servisinizi seçin → `DATABASE_URL` (Railway iç ağ URL’si otomatik gelir; SSL gerekmez).
+     - **`DATABASE_URL`** → **Add Reference** → PostgreSQL → `DATABASE_URL` (**zorunlu**).
      - `JWT_SECRET` — güçlü rastgele string.
      - `CORS_ORIGIN` — frontend URL’niz (`https://xxx.up.railway.app` veya özel domain).
 4. **Build command:** `npm install && npm run build`
