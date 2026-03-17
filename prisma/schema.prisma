@@ -1,0 +1,70 @@
+// PostgreSQL — Railway: Projeye Postgres plugin ekleyince DATABASE_URL otomatik gelir.
+// Dışarıdan (localhost) bağlanırken Public Network URL kullanın; gerekirse sona ?sslmode=require ekleyin.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Page {
+  id        String    @id @default(uuid())
+  slug      String    @unique
+  title     String
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  sections  Section[]
+  faqs      Faq[]
+}
+
+model Section {
+  id        String        @id @default(uuid())
+  pageId    String
+  page      Page          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type      String
+  title     String?
+  content   Json?
+  order     Int           @default(0)
+  isActive  Boolean       @default(true)
+  items     SectionItem[]
+
+  @@index([pageId, order])
+}
+
+model SectionItem {
+  id          String   @id @default(uuid())
+  sectionId   String
+  section     Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title       String?
+  description String?
+  icon        String?
+  image       String?
+  extraData   Json?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  @@index([sectionId, order])
+}
+
+model Faq {
+  id        String   @id @default(uuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  order     Int      @default(0)
+
+  @@index([pageId, order])
+}

@@ -1,0 +1,9 @@
+# Railway: Root Directory olarak `backend` seçin veya bu dosyayı deploy köküne koyun.
+# https://docs.railway.app/guides/prisma
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# Şema senkronu + API başlatma (ilk kurulumdan sonra seed: Railway shell → npx tsx prisma/seed.ts)
+startCommand = "npx prisma db push && node dist/index.js"
