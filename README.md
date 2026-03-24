@@ -78,6 +78,37 @@ npm run build && npm start   # Production
 
 API varsayılan: `http://localhost:4000`
 
+## Section Builder & medya
+
+Sayfa içeriği `PageContent.content` içinde JSON olarak saklanır:
+
+```json
+{
+  "sections": [
+    {
+      "id": "uuid",
+      "type": "hero",
+      "order": 0,
+      "settings": {
+        "backgroundColor": "#fff7ed",
+        "gradient": "warm",
+        "padding": "2rem 1rem",
+        "margin": "",
+        "textAlign": "center"
+      },
+      "content": { "title": "...", "subtitle": "...", "buttonText": "...", "buttonLink": "/", "image": "/uploads/..." }
+    }
+  ]
+}
+```
+
+Eski kayıtlar yalnızca `props` kullanıyorsa API bunları `content` olarak okur.
+
+Şema değişikliği sonrası: `npx prisma db push` (yeni `MediaAsset` tablosu).
+
+- Görseller: `POST /api/admin/cms/media/upload` (multipart `file`), `GET /api/admin/cms/media`, `DELETE /api/admin/cms/media/:id`
+- Statik dosyalar: `GET /uploads/*` → `backend/public/uploads/`
+
 ## API özeti
 
 - `GET /api/health`

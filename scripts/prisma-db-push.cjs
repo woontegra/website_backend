@@ -30,4 +30,4 @@ Kaydedip Redeploy edin.
 
 const hostMatch = url.match(/@([^/:]+)/)
 console.log('[deploy] prisma db push →', hostMatch ? hostMatch[1] : 'bağlantı')
-execSync('npx prisma db push', { stdio: 'inherit', env: process.env })
+execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: process.env })

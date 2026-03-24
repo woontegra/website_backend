@@ -1,5 +1,4 @@
 // PostgreSQL — Railway: Projeye Postgres plugin ekleyince DATABASE_URL otomatik gelir.
-// Dışarıdan (localhost) bağlanırken Public Network URL kullanın; gerekirse sona ?sslmode=require ekleyin.
 generator client {
   provider = "prisma-client-js"
 }
@@ -18,53 +17,123 @@ model User {
   updatedAt    DateTime @updatedAt
 }
 
-model Page {
-  id        String    @id @default(uuid())
-  slug      String    @unique
-  title     String
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  sections  Section[]
-  faqs      Faq[]
-}
-
-model Section {
-  id        String        @id @default(uuid())
-  pageId    String
-  page      Page          @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  type      String
-  title     String?
-  content   Json?
-  order     Int           @default(0)
-  isActive  Boolean       @default(true)
-  items     SectionItem[]
-
-  @@index([pageId, order])
-}
-
-model SectionItem {
-  id          String   @id @default(uuid())
-  sectionId   String
-  section     Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  title       String?
-  description String?
-  icon        String?
-  image       String?
-  extraData   Json?
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-
-  @@index([sectionId, order])
-}
-
-model Faq {
+model PageContent {
   id        String   @id @default(uuid())
-  pageId    String
-  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  question  String
-  answer    String
-  order     Int      @default(0)
+  pageKey   String   @unique
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
-  @@index([pageId, order])
+/// WordPress-benzeri tek alan: HTML içerik
+model Page {
+  id        String     @id @default(uuid())
+  slug      String     @unique
+  title     String
+  content   String     @default("") @db.Text
+  /// draft | published
+  status    String     @default("published")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  menuItems MenuItem[]
+}
+
+model MediaAsset {
+  id        String   @id @default(uuid())
+  url       String
+  filename  String
+  mimeType  String?
+  size      Int?
+  createdAt DateTime @default(now())
+}
+
+model PostCategory {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String?
+  posts       Post[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Post {
+  id            String         @id @default(uuid())
+  slug          String         @unique
+  title         String
+  excerpt       String?
+  bodyHtml      String?        @db.Text
+  featuredImage String?
+  status        String         @default("draft")
+  publishedAt   DateTime?
+  categoryId    String?
+  category      PostCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+model Menu {
+  id        String     @id @default(uuid())
+  name      String
+  location  String     @unique
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model MenuItem {
+  id       String     @id @default(uuid())
+  menuId   String
+  menu     Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  label    String
+  url      String?
+  pageId   String?
+  page     Page?      @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  order    Int        @default(0)
+  parentId String?
+  parent   MenuItem?  @relation("MenuTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuTree")
+
+  @@index([menuId, order])
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @db.Text
+  icon        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Brand {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  image       String
+  url         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  message   String   @db.Text
+  phone     String?
+  company   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SiteSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

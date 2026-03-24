@@ -8,8 +8,8 @@ export const blogController = {
   },
 
   async listPosts(req: Request, res: Response) {
-    const { category, status } = req.query
-    const list = await blogService.listPosts({ category: category as string, status: status as string })
+    const { category } = req.query
+    const list = await blogService.listPosts({ category: category as string, status: 'published' })
     return res.json({ success: true, data: list })
   },
 
@@ -20,10 +20,7 @@ export const blogController = {
     return res.json({ success: true, data: post })
   },
 
-  async createPost(req: Request, res: Response) {
-    const { title, slug, excerpt, body, categoryId } = req.body
-    if (!title || !slug) return res.status(400).json({ success: false, message: 'Başlık ve slug gerekli' })
-    const post = await blogService.createPost({ title, slug, excerpt, body, categoryId })
-    return res.status(201).json({ success: true, data: post })
+  async createPost(_req: Request, res: Response) {
+    return res.status(501).json({ success: false, message: 'Admin panelinden oluşturun' })
   },
 }

@@ -1,44 +1,21 @@
-import crypto from 'crypto'
+import * as posts from './post.service'
 
-const categories: Array<{ id: string; name: string }> = [
-  { id: '1', name: 'Yazılım' },
-  { id: '2', name: 'E-Ticaret' },
-  { id: '3', name: 'Marka Tescil' },
-]
-const posts: Array<{
-  id: string
-  slug: string
-  title: string
-  excerpt: string
-  body?: string
-  categoryId: string
-  status: string
-  createdAt: Date
-}> = []
-
+/** Public blog API — veritabanı (Post / PostCategory) */
 export const blogService = {
   async listCategories() {
-    return categories
+    return posts.listCategoriesPublic()
   },
-  async listPosts(_opts: { category?: string; status?: string }) {
-    return posts
+
+  async listPosts(opts: { category?: string; status?: string }) {
+    if (opts.status === 'draft') return []
+    return posts.listPostsPublic({ categorySlug: opts.category })
   },
+
   async getBySlug(slug: string) {
-    return posts.find((p) => p.slug === slug) ?? null
+    return posts.getPostBySlugPublic(slug)
   },
-  async createPost(data: { title: string; slug: string; excerpt?: string; body?: string; categoryId?: string }) {
-    const id = crypto.randomUUID()
-    const record = {
-      id,
-      title: data.title,
-      slug: data.slug,
-      excerpt: data.excerpt ?? '',
-      body: data.body,
-      categoryId: data.categoryId ?? categories[0]?.id ?? '',
-      status: 'draft',
-      createdAt: new Date(),
-    }
-    posts.push(record)
-    return record
+
+  async createPost(_data: { title: string; slug: string; excerpt?: string; body?: string; categoryId?: string }) {
+    throw new Error('Blog oluşturma yalnızca admin API üzerinden')
   },
 }

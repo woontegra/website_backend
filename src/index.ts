@@ -3,6 +3,7 @@ import 'dotenv/config'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
 
+import path from 'path'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -18,6 +19,11 @@ import { notificationsRoutes } from './routes/notifications.routes'
 import { settingsRoutes } from './routes/settings.routes'
 import { pagesRoutes } from './routes/pages.routes'
 import { adminCmsRoutes } from './routes/admin.cms.routes'
+import { menusPublicRoutes } from './routes/menus.public.routes'
+import { servicesRoutes } from './routes/services.routes'
+import { brandsRoutes } from './routes/brands.routes'
+import { contactMessagesRoutes } from './routes/contact-messages.routes'
+import pageContentRoutes from './routes/page-content.routes'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
@@ -26,6 +32,8 @@ app.use(helmet())
 app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173', credentials: true }))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')))
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -44,7 +52,12 @@ app.use('/api/blog', blogRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/pages', pagesRoutes)
+app.use('/api/menus', menusPublicRoutes)
 app.use('/api/admin/cms', adminCmsRoutes)
+app.use('/api/services', servicesRoutes)
+app.use('/api/brands', brandsRoutes)
+app.use('/api/contact-messages', contactMessagesRoutes)
+app.use('/api/page-content', pageContentRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'Woontegra API' })

@@ -6,4 +6,6 @@ export const settingsRoutes = Router()
 
 settingsRoutes.get('/', settingsController.getPublic)
 settingsRoutes.get('/admin', authMiddleware, adminOnly, settingsController.getAll)
-settingsRoutes.patch('/admin', authMiddleware, adminOnly, settingsController.update)
+settingsRoutes.patch('/', authMiddleware, adminOnly, settingsController.update)
+settingsRoutes.post('/test-email', authMiddleware, adminOnly, settingsController.testEmail)
+settingsRoutes.post('/clear-cache', authMiddleware, adminOnly, settingsController.clearCache)

@@ -1,564 +1,546 @@
+import path from 'path'
+import { config } from 'dotenv'
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
 
+config({ path: path.resolve(process.cwd(), '.env') })
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require(path.join(process.cwd(), 'scripts/resolve-database-url.cjs')).applyToProcessEnv()
+} catch {
+  /* */
+}
+
+const dbUrl = process.env.DATABASE_URL?.trim() ?? ''
+if (
+  !dbUrl ||
+  (!dbUrl.toLowerCase().startsWith('postgresql://') && !dbUrl.toLowerCase().startsWith('postgres://'))
+) {
+  console.error('Geçerli Postgres URL yok. backend/.env içinde DATABASE_URL ayarlayın.')
+  process.exit(1)
+}
+
 const prisma = new PrismaClient()
 
+// Builder JSON format for pages
+function getBuilderContent(heroTitle: string, heroSubtitle: string, buttonText = 'Başlayın', buttonLink = '#') {
+  return JSON.stringify({
+    ROOT: {
+      type: { resolvedName: 'Container' },
+      isCanvas: true,
+      props: {},
+      displayName: 'Container',
+      custom: {},
+      hidden: false,
+      nodes: ['hero-1'],
+      linkedNodes: {},
+    },
+    'hero-1': {
+      type: { resolvedName: 'Hero' },
+      isCanvas: false,
+      props: {
+        title: heroTitle,
+        subtitle: heroSubtitle,
+        buttonText,
+        buttonLink,
+        backgroundImage: '',
+      },
+      displayName: 'Hero',
+      custom: {},
+      parent: 'ROOT',
+      hidden: false,
+      nodes: [],
+      linkedNodes: {},
+    },
+  })
+}
+
+function stub(title: string) {
+  return `<h1 class="text-3xl font-bold text-slate-900">${title}</h1><p class="mt-4 text-slate-600">İçeriği <strong>Admin → Sayfalar</strong> üzerinden düzenleyin.</p>`
+}
+
 async function main() {
-  await prisma.faq.deleteMany()
-  await prisma.sectionItem.deleteMany()
-  await prisma.section.deleteMany()
+  await prisma.menuItem.deleteMany()
+  await prisma.menu.deleteMany()
+  await prisma.post.deleteMany()
+  await prisma.postCategory.deleteMany()
   await prisma.page.deleteMany()
+  await prisma.contactMessage.deleteMany()
+  await prisma.brand.deleteMany()
+  await prisma.service.deleteMany()
   await prisma.user.deleteMany()
 
-  const passwordHash = await bcrypt.hash('Admin123!', 10)
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD ?? 'Admin123!'
+  const passwordHash = await bcrypt.hash(adminPassword, 10)
   await prisma.user.create({
-    data: { email: 'admin@woontegra.com', passwordHash, role: 'admin' },
+    data: { email: 'info@woontegra.com', passwordHash, role: 'admin' },
   })
 
-  /* ——— HOME ——— */
-  await prisma.page.create({
-    data: {
-      slug: 'home',
-      title: 'Ana Sayfa',
-      sections: {
-        create: [
-          {
-            type: 'hero',
-            order: 0,
-            content: {
-              headlinePrefix: 'Woontegra ile ',
-              headlineGradient: 'Yazılım, Dijital Ticaret ve Teknoloji Çözümleri',
-              subtitle:
-                'Yazılım geliştirme, SaaS ürünleri, e-ticaret altyapıları, dijital hizmetler ve marka danışmanlığını tek çatı altında sunan modern teknoloji şirketi.',
-              primaryCta: { label: 'Hizmetleri İncele', href: '/hizmetler' },
-              secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-              showMockup: true,
-              badges: [
-                { label: 'Modern altyapı', icon: 'infra' },
-                { label: 'Çok yönlü dijital üretim', icon: 'multi' },
-                { label: 'Kurumsal çözüm ortağı', icon: 'partner' },
-              ],
-            },
-          },
-          {
-            type: 'trust_grid',
-            order: 1,
-            title: 'Güven ve yetkinlik',
-            content: { subtitle: 'Teknolojide çok yönlü üretim, tek sorumlu çözüm ortağı.' },
-            items: {
-              create: [
-                {
-                  title: 'Çok yönlü dijital yapı',
-                  description: 'Yazılımdan e-ticarete, marka vekilliğinden oyun geliştirmeye tek ekosistem.',
-                  order: 0,
-                },
-                {
-                  title: 'Farklı sektörlerde üretim',
-                  description: 'Kurumsal, startup ve bireysel müşterilere özelleştirilmiş çözümler.',
-                  order: 1,
-                },
-                {
-                  title: 'Modern altyapı',
-                  description: 'Güncel teknolojiler, güvenli ve ölçeklenebilir mimari.',
-                  order: 2,
-                },
-              ],
-            },
-          },
-          {
-            type: 'card_grid',
-            order: 2,
-            title: 'Hizmetlerimiz',
-            content: {
-              subtitle: 'Yazılımdan marka vekilliğine, e-ticaretten oyun geliştirmeye geniş bir hizmet yelpazesi.',
-              footerCta: { label: 'Tüm hizmetleri görüntüle', href: '/hizmetler' },
-            },
-            items: {
-              create: [
-                { title: 'Yazılım Geliştirme', description: 'Kurumsal yazılım, masaüstü ve web uygulamaları.', icon: 'code', extraData: { href: '/hizmetler/yazilim-gelistirme' }, order: 0 },
-                { title: 'Web Tasarım', description: 'Modern, hızlı ve dönüşüm odaklı kurumsal web siteleri.', icon: 'globe', extraData: { href: '/hizmetler/web-tasarim' }, order: 1 },
-                { title: 'E-Ticaret', description: 'WooCommerce ve ödeme entegrasyonları.', icon: 'cart', extraData: { href: '/hizmetler/e-ticaret' }, order: 2 },
-                { title: 'SaaS', description: 'Abonelik tabanlı ürünler ve bulut uygulamaları.', icon: 'cloud', extraData: { href: '/hizmetler/saas' }, order: 3 },
-                { title: 'Marka & Patent', description: 'Marka başvurusu ve fikri mülkiyet danışmanlığı.', icon: 'scale', extraData: { href: '/hizmetler/marka-patent-vekilligi' }, order: 4 },
-                { title: 'Dijital Danışmanlık', description: 'Dijital dönüşüm ve teknoloji stratejisi.', icon: 'lightbulb', extraData: { href: '/hizmetler/dijital-danismanlik' }, order: 5 },
-                { title: 'Oyun Geliştirme', description: 'Mobil ve web oyun projeleri.', icon: 'gamepad', extraData: { href: '/hizmetler/oyun-gelistirme' }, order: 6 },
-                { title: 'Dijital Altyapı', description: 'API, entegrasyon ve sistem mimarileri.', icon: 'server', extraData: { href: '/hizmetler/dijital-altyapi' }, order: 7 },
-              ],
-            },
-          },
-          {
-            type: 'sub_brands',
-            order: 3,
-            title: 'Çözümler ve alt markalar',
-            content: {
-              subtitle: 'Woontegra çatısı altında ürünler ve markalar.',
-              footerCta: { label: 'Tüm çözümleri görüntüle', href: '/cozumler' },
-            },
-            items: {
-              create: [
-                { title: 'Bilirkişi Hesaplama Programı', description: 'Bilirkişi raporları için hesaplama süreçlerini dakikalar içinde tamamlayan profesyonel yazılım.', extraData: { href: '/cozumler/bilirkisi-hesaplama' }, order: 0 },
-                { title: 'Datça Topikal', description: 'Doğal ve topikal ürünler e-ticaret markası.', extraData: { href: '/cozumler/datca-topikal' }, order: 1 },
-                { title: 'Dijital Ürünler & Oyun Projeleri', description: 'Geliştirmekte olduğumuz oyun ve dijital ürün projeleri.', extraData: { href: '/hizmetler/oyun-gelistirme' }, order: 2 },
-              ],
-            },
-          },
-          {
-            type: 'why_grid',
-            order: 4,
-            title: 'Neden Woontegra?',
-            content: { subtitle: 'Teknolojide çok yönlü yetkinlik ve kurumsal güveni bir arada sunuyoruz.' },
-            items: {
-              create: [
-                { title: 'Tek çatı, çok alan', description: 'Yazılım, e-ticaret, marka ve dijital ürün ihtiyaçlarınızı tek adreste topluyoruz.', icon: 'layers', order: 0 },
-                { title: 'Teknoloji odaklı üretim', description: 'Güncel stack, temiz kod ve sürdürülebilir altyapı ile projeler üretiyoruz.', icon: 'code', order: 1 },
-                { title: 'Kurumsal güven', description: 'Süreçler şeffaf, iletişim düzenli; teslimatta tutarlılık önceliğimiz.', icon: 'shield', order: 2 },
-                { title: 'Büyüme odaklı yaklaşım', description: 'Projelerinizi sadece teslim etmiyoruz; ölçeklenebilir büyüme için tasarlıyoruz.', icon: 'growth', order: 3 },
-              ],
-            },
-          },
-          {
-            type: 'process_steps',
-            order: 5,
-            title: 'Süreç nasıl işliyor?',
-            content: { subtitle: 'Şeffaf ve düzenli bir iş birliği süreciyle projelerinizi hayata geçiriyoruz.' },
-            items: {
-              create: [
-                { title: 'İhtiyaç analizi', description: 'Hedeflerinizi ve gereksinimlerinizi birlikte netleştiriyoruz.', icon: '01', order: 0 },
-                { title: 'Teklif ve planlama', description: 'Kapsam, süre ve bütçe çerçevesinde teklif sunuyoruz.', icon: '02', order: 1 },
-                { title: 'Geliştirme ve tasarım', description: 'Süreç boyunca düzenli paylaşım ve revizyon imkânı.', icon: '03', order: 2 },
-                { title: 'Teslim ve destek', description: 'Teslim sonrası eğitim, bakım ve destek sunuyoruz.', icon: '04', order: 3 },
-              ],
-            },
-          },
-          {
-            type: 'stats_row',
-            order: 6,
-            items: {
-              create: [
-                { title: '50+', description: 'Tamamlanan proje', order: 0 },
-                { title: '8+', description: 'Hizmet alanı', order: 1 },
-                { title: '100%', description: 'Müşteri odaklı süreç', order: 2 },
-              ],
-            },
-          },
-          {
-            type: 'cta',
-            order: 7,
-            content: {
-              title: 'Projenizi birlikte hayata geçirelim',
-              subtitle: 'Hangi alanda destek almak istediğinizi söyleyin, size özel teklif hazırlayalım.',
-              primaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-              secondaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-            },
-          },
-        ],
+  await prisma.service.createMany({
+    data: [
+      {
+        title: 'Web Geliştirme',
+        description: 'Modern ve responsive web siteleri geliştiriyoruz. React, Vue, Angular gibi güncel teknolojilerle profesyonel çözümler sunuyoruz.',
+        icon: 'Code',
       },
+      {
+        title: 'Mobil Uygulama',
+        description: 'iOS ve Android platformları için native ve cross-platform mobil uygulamalar geliştiriyoruz.',
+        icon: 'Smartphone',
+      },
+      {
+        title: 'E-Ticaret',
+        description: 'Güçlü e-ticaret platformları ile online satış yapmanızı sağlıyoruz. Ödeme entegrasyonları ve stok yönetimi dahil.',
+        icon: 'ShoppingCart',
+      },
+      {
+        title: 'SaaS Çözümleri',
+        description: 'Bulut tabanlı yazılım hizmetleri geliştiriyoruz. Ölçeklenebilir ve güvenli SaaS ürünleri.',
+        icon: 'Cloud',
+      },
+      {
+        title: 'Dijital Danışmanlık',
+        description: 'Dijital dönüşüm süreçlerinizde yanınızdayız. Strateji belirleme ve uygulama desteği.',
+        icon: 'Lightbulb',
+      },
+      {
+        title: 'Marka & Patent',
+        description: 'Marka tescil ve patent başvuru süreçlerinizi yönetiyoruz. Fikri mülkiyet haklarınızı koruyoruz.',
+        icon: 'Shield',
+      },
+    ],
+  })
+
+  await prisma.brand.createMany({
+    data: [
+      {
+        name: 'Bilirkişi Hesaplama',
+        description: 'Aktüerya ve bilirkişi hesaplama platformu. Fazla mesai, kıdem tazminatı ve ihbar tazminatı hesaplamaları.',
+        image: '/images/brand-bilirkisi.jpg',
+        url: 'https://bilirkisihesap.com',
+      },
+      {
+        name: 'Optimoon',
+        description: 'Dijital pazarlama ve SEO optimizasyon platformu. Web sitenizi arama motorlarında üst sıralara taşıyın.',
+        image: '/images/brand-optimoon.jpg',
+        url: 'https://optimoon.com',
+      },
+      {
+        name: 'Datça Tropikal',
+        description: 'Datça bölgesine özel turizm ve konaklama rezervasyon sistemi. Tatil villaları ve oteller.',
+        image: '/images/brand-datca.jpg',
+        url: 'https://datcatropikal.com',
+      },
+    ],
+  })
+
+  const pageSeeds: { slug: string; title: string; content: string }[] = [
+    { 
+      slug: 'home', 
+      title: 'Ana Sayfa', 
+      content: getBuilderContent(
+        'Woontegra',
+        'Yazılım, SaaS ve e-ticaret çözümleri ile dijital dönüşümünüzü gerçekleştirin',
+        'Hizmetlerimiz',
+        '/hizmetler'
+      )
     },
-  })
-
-  /* ——— HİZMETLER ——— */
-  await prisma.page.create({
-    data: {
-      slug: 'hizmetler',
-      title: 'Hizmetlerimiz',
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: {
-              title: 'İşinizi Büyüten Teknoloji Hizmetleri',
-              subtitle:
-                'Yazılım geliştirmeden e-ticarete, SaaS ürünlerden marka danışmanlığına kadar tüm dijital süreçlerinizi tek çatı altında yönetiyoruz.',
-              badges: ['Tek ekip', 'Uçtan uca çözüm', 'Modern altyapı'],
-            },
-          },
-          {
-            type: 'service_cards',
-            order: 1,
-            content: { filterCategories: ['tumu', 'yazilim', 'e-ticaret', 'danismanlik', 'marka-patent'] },
-            items: {
-              create: [
-                { title: 'Yazılım Geliştirme', description: 'Kurumsal yazılım, masaüstü ve web uygulamaları ile ölçeklenebilir altyapılar.', icon: 'code', extraData: { category: 'yazilim', features: ['Ölçeklenebilir altyapı', 'Modern teknoloji stack', 'Performans odaklı yapı'], href: '/hizmetler/yazilim-gelistirme' }, order: 0 },
-                { title: 'Web Tasarım', description: 'Modern, hızlı ve dönüşüm odaklı kurumsal web siteleri ve dijital çözümler.', icon: 'globe', extraData: { category: 'yazilim', features: ['Responsive ve SEO uyumlu', 'Hızlı ve güvenli altyapı', 'Kullanıcı odaklı arayüz'], href: '/hizmetler/web-tasarim' }, order: 1 },
-                { title: 'E-Ticaret Çözümleri', description: 'WooCommerce altyapıları, ödeme sistemleri ve dijital ticaret altyapıları.', icon: 'cart', extraData: { category: 'e-ticaret', features: ['Ödeme ve kargo entegrasyonu', 'Stok ve sipariş yönetimi', 'Dönüşüm odaklı mağaza'], href: '/hizmetler/e-ticaret' }, order: 2 },
-                { title: 'SaaS Ürün Geliştirme', description: 'Abonelik tabanlı yazılım ürünleri ve bulut tabanlı iş uygulamaları.', icon: 'cloud', extraData: { category: 'yazilim', features: ['Çok kiracılı mimari', 'Abonelik ve faturalandırma', 'Bulut tabanlı altyapı'], href: '/hizmetler/saas' }, order: 3 },
-                { title: 'Marka & Patent Vekilliği', description: 'Marka başvurusu, takip, itiraz süreçleri ve fikri mülkiyet danışmanlığı.', icon: 'scale', extraData: { category: 'marka-patent', features: ['Resmi marka vekili desteği', 'Başvuru ve süreç takibi', 'Fikri mülkiyet danışmanlığı'], href: '/hizmetler/marka-patent-vekilligi' }, order: 4 },
-                { title: 'Dijital Danışmanlık', description: 'Dijital dönüşüm, süreç iyileştirme ve teknoloji stratejisi danışmanlığı.', icon: 'lightbulb', extraData: { category: 'danismanlik', features: ['Süreç analizi ve strateji', 'Teknoloji seçimi', 'Roadmap ve uygulama desteği'], href: '/hizmetler/dijital-danismanlik' }, order: 5 },
-                { title: 'Oyun Geliştirme', description: 'Mobil ve web tabanlı oyun projeleri ile dijital ürün geliştirme.', icon: 'gamepad', extraData: { category: 'diger', features: ['Mobil ve web oyun', 'Prototip ve MVP', 'Yayın ve monetizasyon'], href: '/hizmetler/oyun-gelistirme' }, order: 6 },
-                { title: 'Dijital Ürün ve Sistem Altyapıları', description: 'API, entegrasyon ve ölçeklenebilir sistem mimarileri.', icon: 'server', extraData: { category: 'yazilim', features: ['API ve entegrasyon', 'Mikroservis mimarisi', 'Güvenlik ve performans'], href: '/hizmetler/dijital-altyapi' }, order: 7 },
-              ],
-            },
-          },
-          {
-            type: 'cta',
-            order: 2,
-            content: {
-              title: 'Projenizi birlikte hayata geçirelim',
-              subtitle: 'Kısa bir brief ile size en uygun çözümü sunalım.',
-              primaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-              secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-              variant: 'gradient_blue',
-            },
-          },
-        ],
-      },
+    { 
+      slug: 'hakkimizda', 
+      title: 'Hakkımızda', 
+      content: getBuilderContent(
+        'Hakkımızda',
+        'Dijital çözümler ve yazılım geliştirme konusunda uzman ekibimizle yanınızdayız',
+        'İletişime Geç',
+        '/iletisim'
+      )
     },
-  })
-
-  /* ——— YAZILIM GELİŞTİRME ——— */
-  await prisma.page.create({
-    data: {
-      slug: 'yazilim-gelistirme',
-      title: 'Yazılım Geliştirme',
-      faqs: {
-        create: [
-          { question: 'Hangi teknolojiler kullanılıyor?', answer: 'Proje ihtiyacına göre React, Node.js, .NET, Python ve uygun veritabanları kullanıyoruz.', order: 0 },
-          { question: 'Teslim süresi ne kadar?', answer: 'Kapsam ve karmaşıklığa göre değişir; net süre teklif aşamasında belirlenir.', order: 1 },
-        ],
-      },
-      sections: {
-        create: [
-          {
-            type: 'service_hero',
-            order: 0,
-            content: {
-              title: 'Ölçeklenebilir ve Güçlü Yazılım Çözümleri',
-              subtitle: 'Kurumunuza özel, modern teknolojilerle geliştirilen, performans ve sürdürülebilirlik odaklı yazılım çözümleri sunuyoruz.',
-              showMockup: true,
-              primaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-              secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-            },
-          },
-          {
-            type: 'overview',
-            order: 1,
-            title: 'Genel Bakış',
-            content: {
-              body: 'Kurumsal yazılım, masaüstü ve web uygulamaları ile ölçeklenebilir altyapılar geliştiriyoruz. Modern teknolojiler ve temiz kod prensipleriyle sürdürülebilir projeler üretiyoruz.',
-            },
-          },
-          {
-            type: 'target_audience',
-            order: 2,
-            title: 'Kimler için uygun?',
-            items: {
-              create: [
-                { title: 'Kurumsal firmalar', description: 'Büyük ölçekli projeler için özelleştirilmiş yazılım çözümleri.', icon: 'building', order: 0 },
-                { title: "Startup'lar", description: 'Hızlı büyüme ve MVP’den ürün ölçeklemeye teknik ortaklık.', icon: 'rocket', order: 1 },
-                { title: "KOBİ'ler", description: 'İş süreçlerinize uygun, uygun maliyetli yazılım geliştirme.', icon: 'kobi', order: 2 },
-                { title: 'Kamu ve özel sektör', description: 'Kamu ve özel sektör projeleri için güvenilir altyapı.', icon: 'gov', order: 3 },
-              ],
-            },
-          },
-          {
-            type: 'features_list',
-            order: 3,
-            title: 'Neler sunuyoruz?',
-            items: {
-              create: [
-                { title: 'Özelleştirilmiş yazılım geliştirme', order: 0 },
-                { title: 'API ve entegrasyon', order: 1 },
-                { title: 'Bakım ve destek', order: 2 },
-                { title: 'Teknik danışmanlık', order: 3 },
-              ],
-            },
-          },
-          {
-            type: 'process_timeline',
-            order: 4,
-            title: 'Süreç',
-            items: {
-              create: [
-                { title: 'İhtiyaç analizi', order: 0 },
-                { title: 'Mimari ve planlama', order: 1 },
-                { title: 'Geliştirme', order: 2 },
-                { title: 'Test & teslim', order: 3 },
-              ],
-            },
-          },
-          { type: 'faq_block', order: 5, title: 'Sık sorulan sorular', content: {} },
-          {
-            type: 'cta',
-            order: 6,
-            content: {
-              title: 'Projenizi birlikte hayata geçirelim',
-              subtitle: 'Kısa bir görüşme ile ihtiyacınızı analiz edelim ve size en doğru çözümü sunalım.',
-              primaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-              secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-              variant: 'gradient_blue',
-            },
-          },
-        ],
-      },
+    { 
+      slug: 'iletisim', 
+      title: 'İletişim', 
+      content: getBuilderContent(
+        'İletişim',
+        'Projeleriniz için bizimle iletişime geçin',
+        'Teklif Al',
+        '/teklif-al'
+      )
     },
-  })
-
-  /* ——— Diğer hizmet detayları (minimal: service_hero + overview + cta) ——— */
-  const otherServices: { slug: string; title: string; overview: string }[] = [
-    { slug: 'web-tasarim', title: 'Web Tasarım', overview: 'Modern, hızlı ve dönüşüm odaklı kurumsal web siteleri ve dijital çözümler tasarlıyoruz. Responsive, SEO uyumlu ve kullanıcı odaklı arayüzler sunuyoruz.' },
-    { slug: 'e-ticaret', title: 'E-Ticaret Çözümleri', overview: 'WooCommerce ve modern e-ticaret altyapıları ile mağaza kurulumu, ödeme sistemleri entegrasyonu ve ürün/kategori yönetimi sunuyoruz.' },
-    { slug: 'saas', title: 'SaaS Ürün Geliştirme', overview: 'Abonelik tabanlı yazılım ürünleri ve bulut tabanlı iş uygulamaları geliştiriyoruz.' },
-    { slug: 'marka-patent-vekilligi', title: 'Marka & Patent Vekilliği', overview: 'Resmi marka vekili desteğiyle marka başvurusu, takip, itiraz süreçleri ve fikri mülkiyet danışmanlığı sunuyoruz.' },
-    { slug: 'dijital-danismanlik', title: 'Dijital Danışmanlık', overview: 'Dijital dönüşüm, süreç iyileştirme ve teknoloji stratejisi danışmanlığı veriyoruz.' },
-    { slug: 'oyun-gelistirme', title: 'Oyun Geliştirme', overview: 'Mobil ve web tabanlı oyun projeleri ile dijital ürün geliştirme yapıyoruz.' },
-    { slug: 'dijital-altyapi', title: 'Dijital Ürün ve Sistem Altyapıları', overview: 'API, entegrasyon ve ölçeklenebilir sistem mimarileri kuruyoruz.' },
+    { slug: 'hizmetler', title: 'Hizmetlerimiz', content: stub('Hizmetlerimiz') },
+    { slug: 'yazilim-gelistirme', title: 'Yazılım Geliştirme', content: stub('Yazılım Geliştirme') },
+    { slug: 'web-tasarim', title: 'Web Tasarım', content: stub('Web Tasarım') },
+    { slug: 'e-ticaret', title: 'E-Ticaret Çözümleri', content: stub('E-Ticaret Çözümleri') },
+    { slug: 'saas', title: 'SaaS Ürün Geliştirme', content: stub('SaaS Ürün Geliştirme') },
+    { slug: 'marka-patent-vekilligi', title: 'Marka & Patent Vekilliği', content: stub('Marka & Patent Vekilliği') },
+    { slug: 'dijital-danismanlik', title: 'Dijital Danışmanlık', content: stub('Dijital Danışmanlık') },
+    { slug: 'oyun-gelistirme', title: 'Oyun Geliştirme', content: stub('Oyun Geliştirme') },
+    { slug: 'dijital-altyapi', title: 'Dijital Ürün ve Sistem Altyapıları', content: stub('Dijital Altyapı') },
+    { slug: 'cozumler', title: 'Çözümler', content: stub('Çözümler') },
+    { slug: 'bilirkisi-hesaplama', title: 'Bilirkişi Hesaplama', content: stub('Bilirkişi Hesaplama') },
+    { slug: 'marka-patent', title: 'Marka & Patent', content: stub('Marka & Patent') },
+    { slug: 'eticaret', title: 'E-Ticaret', content: stub('E-Ticaret') },
+    { slug: 'oyun-ve-dijital-urunler', title: 'Oyun ve Dijital Ürünler', content: stub('Oyun ve Dijital Ürünler') },
+    { slug: 'kvkk', title: 'KVKK', content: stub('KVKK') },
+    { slug: 'gizlilik', title: 'Gizlilik', content: stub('Gizlilik') },
+    { slug: 'cerez-politikasi', title: 'Çerez Politikası', content: stub('Çerez Politikası') },
+    { slug: 'kullanim-sartlari', title: 'Kullanım Şartları', content: stub('Kullanım Şartları') },
+    { slug: 'sss', title: 'Sık Sorulan Sorular', content: stub('Sık Sorulan Sorular') },
+    { slug: 'blog', title: 'Blog', content: stub('Blog') },
+    { slug: 'teklif-al', title: 'Teklif Al', content: stub('Teklif Al') },
+    { slug: 'datca-topikal', title: 'Datça Topikal', content: stub('Datça Topikal') },
   ]
-  for (const s of otherServices) {
+
+  for (const p of pageSeeds) {
     await prisma.page.create({
-      data: {
-        slug: s.slug,
-        title: s.title,
-        sections: {
-          create: [
-            {
-              type: 'service_hero',
-              order: 0,
-              content: {
-                title: s.title,
-                subtitle: s.overview.slice(0, 120) + '…',
-                showMockup: true,
-                primaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-                secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-              },
-            },
-            { type: 'overview', order: 1, title: 'Genel Bakış', content: { body: s.overview } },
-            {
-              type: 'cta',
-              order: 2,
-              content: {
-                title: 'Projenizi birlikte hayata geçirelim',
-                subtitle: 'Kısa bir görüşme ile ihtiyacınızı analiz edelim.',
-                primaryCta: { label: 'Teklif Al', href: '/teklif-al' },
-                secondaryCta: { label: 'İletişime Geç', href: '/iletisim' },
-                variant: 'gradient_blue',
-              },
-            },
-          ],
-        },
-      },
+      data: { ...p, status: 'published' },
     })
   }
 
-  /* ——— Hakkımızda ——— */
-  await prisma.page.create({
-    data: {
-      slug: 'hakkimizda',
-      title: 'Hakkımızda',
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: {
-              title: 'Hakkımızda',
-              subtitle: 'Woontegra; yazılım, dijital ticaret ve teknoloji çözümlerinde çok yönlü üretim yapan bir teknoloji şirketidir.',
-            },
-          },
-          {
-            type: 'rich_text',
-            order: 1,
-            content: {
-              html: `<p class="text-lg text-slate-600 mb-6">Vizyonumuz, farklı sektörlerdeki ihtiyaçları tek çatı altında karşılayan, güvenilir ve modern bir teknoloji ortağı olmaktır. Yazılım geliştirme, SaaS ürünleri, e-ticaret altyapıları, web tasarım, marka ve patent vekilliği, oyun ve dijital ürün geliştirme alanlarında hizmet veriyoruz.</p>
-<p class="text-slate-600">Teknoloji, üretim ve büyüme odaklı bir yaklaşımla projeleri sadece teslim etmiyor; ölçeklenebilir, sürdürülebilir ve müşteri odaklı çözümler sunuyoruz.</p>`,
-            },
-          },
-          {
-            type: 'trust_grid',
-            order: 2,
-            title: '',
-            content: { subtitle: '' },
-            items: {
-              create: [
-                { title: 'Misyon', description: 'Dijital dönüşüm ihtiyaçlarını tek adreste, güvenilir ve modern çözümlerle karşılamak.', order: 0 },
-                { title: 'Vizyon', description: "Türkiye'de çok yönlü teknoloji şirketi olarak tanınan, güven veren bir marka olmak.", order: 1 },
-                { title: 'Değerler', description: 'Şeffaflık, kalite, müşteri odaklılık ve sürekli gelişim.', order: 2 },
-              ],
-            },
-          },
-        ],
-      },
-    },
+  await prisma.postCategory.createMany({
+    data: [
+      { slug: 'yazilim', name: 'Yazılım' },
+      { slug: 'e-ticaret', name: 'E-Ticaret' },
+      { slug: 'genel', name: 'Genel' },
+    ],
+  })
+  await prisma.menu.createMany({
+    data: [
+      { name: 'Üst menü', location: 'header' },
+      { name: 'Alt menü', location: 'footer' },
+    ],
   })
 
-  const stubSlugs = [
-    { slug: 'cozumler', title: 'Çözümler' },
-    { slug: 'bilirkisi-hesaplama', title: 'Bilirkişi Hesaplama' },
-    { slug: 'marka-patent', title: 'Marka & Patent' },
-    { slug: 'eticaret', title: 'E-Ticaret' },
-    { slug: 'oyun-ve-dijital-urunler', title: 'Oyun ve Dijital Ürünler' },
-    { slug: 'kvkk', title: 'KVKK' },
-    { slug: 'gizlilik', title: 'Gizlilik' },
-    { slug: 'cerez-politikasi', title: 'Çerez Politikası' },
-    { slug: 'kullanim-sartlari', title: 'Kullanım Şartları' },
-  ]
-  for (const st of stubSlugs) {
-    await prisma.page.create({
-      data: {
-        slug: st.slug,
-        title: st.title,
-        sections: {
-          create: [
-            {
-              type: 'page_hero',
-              order: 0,
-              content: { title: st.title, subtitle: 'İçeriği yönetim panelinden düzenleyebilirsiniz.' },
-            },
-            {
-              type: 'rich_text',
-              order: 1,
-              content: {
-                html: `<p class="text-slate-600 max-w-3xl">Bu sayfa CMS ile yönetilmektedir. Admin panelinden <strong>Sayfalar</strong> bölümünden detaylı içerik ekleyin.</p>`,
-              },
-            },
-          ],
-        },
+  // PageContent - Mevcut sayfa içerikleri
+  await prisma.pageContent.deleteMany()
+  
+  await prisma.pageContent.createMany({
+    data: [
+      {
+        pageKey: 'home',
+        content: JSON.stringify({
+          heroTag: 'Teknoloji & Yazılım',
+          heroTitle: 'Woontegra ile Yazılım, Dijital Hizmetler ve Ticaret Tek Yapıda',
+          heroSubtitle: 'Woontegra, yazılım geliştirme, e-ticaret sistemleri ve SaaS ürünleri ile işletmeler için sürdürülebilir dijital altyapılar kurar.',
+          heroButton1Text: 'Çözümleri İncele',
+          heroButton2Text: 'İletişime Geç',
+          
+          introParagraph1: 'Modern işletmeler sadece bir web sitesine değil, doğru kurgulanmış bir dijital sisteme ihtiyaç duyar.',
+          introParagraph2: 'Woontegra, fikir aşamasından canlı yayına kadar tüm süreci planlar, geliştirir ve yönetir.',
+          
+          servicesTitle: 'İşinizi Büyüten Dijital Çözümler',
+          servicesSubtitle: 'Tam kapsamlı teknoloji hizmetleri',
+          service1Title: 'Yazılım Geliştirme',
+          service1Desc: 'İşletmenize özel, performans odaklı ve ölçeklenebilir yazılım sistemleri geliştiriyoruz.',
+          service2Title: 'Web Tasarım',
+          service2Desc: 'Modern, hızlı ve kullanıcı deneyimi yüksek web arayüzleri tasarımlıyoruz.',
+          service3Title: 'E-Ticaret',
+          service3Desc: 'Satış odaklı, yönetilebilir ve güçlü altyapılara sahip e-ticaret sistemleri kuruyoruz.',
+          service4Title: 'SaaS',
+          service4Desc: 'Kendi yazılım ürününüzü sıfırdan geliştirmeniz için altyapı sağlıyoruz.',
+          service5Title: 'Marka & Patent',
+          service5Desc: 'Marka tescil ve danışmanlık süreçlerini profesyonel şekilde yönetiyoruz.',
+          service6Title: 'Danışmanlık',
+          service6Desc: 'Dijital büyüme için doğru stratejileri birlikte oluşturuyoruz.',
+          
+          brandsTitle: 'Woontegra Çatısı Altında Geliştirilen Markalar',
+          brandsSubtitle: 'Gerçek projelerle kanıtlanmış deneyim',
+          brand1Name: 'Bilirkişi',
+          brand1Desc: 'Hukuk ve aktüerya alanında kullanılan profesyonel hesaplama yazılımıdır.',
+          brand2Name: 'Optimoon',
+          brand2Desc: 'Doğal taş ve özel tasarım ürünlerin yer aldığı e-ticaret markamızdır.',
+          brand3Name: 'Datça Tropikal',
+          brand3Desc: 'Yerel üretim ve doğal ürünlerin satışını gerçekleştiren markamızdır.',
+          brand4Name: 'Mercan Danışmanlık',
+          brand4Desc: 'Marka tescil ve patent danışmanlık süreçlerini yöneten markamızdır.',
+          
+          whyTitle: 'Neden Woontegra?',
+          whySubtitle: 'Gerçek projelerle kanıtlanmış uzmanlık',
+          why1Title: 'Gerçek Ürün Deneyimi',
+          why1Desc: 'Sadece hizmet sunmuyor, kendi ürünlerimizi de geliştiriyoruz.',
+          why2Title: 'Uçtan Uca Sistem',
+          why2Desc: 'Yazılım, satış ve operasyon süreçlerini tek yapı altında kuruyoruz.',
+          why3Title: 'Performans',
+          why3Desc: 'Hızlı, stabil ve sürdürülebilir sistemler geliştiriyoruz.',
+          why4Title: 'Modern Teknoloji',
+          why4Desc: 'Güncel yazılım teknolojileri ile çalışıyoruz.',
+          why5Title: 'Aktif Markalar',
+          why5Desc: 'Kendi markalarımızı aktif olarak yönetiyoruz.',
+          why6Title: 'Sürekli Gelişim',
+          why6Desc: 'Projeleri yayına almakla kalmıyor, sürekli geliştiriyoruz.',
+          
+          processTitle: 'Çalışma Sürecimiz',
+          processSubtitle: 'Profesyonel ve şeffaf süreç yönetimi',
+          process1Title: 'Analiz',
+          process1Desc: 'İhtiyaçları doğru şekilde belirliyoruz.',
+          process2Title: 'Planlama',
+          process2Desc: 'Proje yapısını ve stratejisini oluşturuyoruz.',
+          process3Title: 'Geliştirme',
+          process3Desc: 'Sistemi modern teknolojilerle inşa ediyoruz.',
+          process4Title: 'Yayın',
+          process4Desc: 'Test süreçlerinden sonra canlıya alıyoruz.',
+          
+          ctaTitle: 'Projenizi Hayata Geçirmeye Hazır mısınız?',
+          ctaSubtitle: 'İşinize en uygun dijital yapıyı birlikte kuralım.',
+          ctaButtonText: 'İletişime Geç',
+        }),
       },
-    })
-  }
-
-  await prisma.page.create({
-    data: {
-      slug: 'sss',
-      title: 'Sık Sorulan Sorular',
-      faqs: {
-        create: [
-          { question: 'Hangi hizmetleri sunuyorsunuz?', answer: 'Yazılım geliştirme, web tasarım, e-ticaret, SaaS, marka ve patent vekilliği, oyun geliştirme ve dijital danışmanlık hizmetleri sunuyoruz.', order: 0 },
-          { question: 'Proje süreci nasıl işliyor?', answer: 'İhtiyaç analizi, teklif ve planlama, geliştirme ve teslim aşamalarıyla ilerliyoruz.', order: 1 },
-          { question: 'Marka başvurusu ne kadar sürer?', answer: "Resmi süreç TPE'ye bağlıdır. Başvuru hazırlığı ve takip hizmetimizle süreci yönetiyoruz.", order: 2 },
-          { question: 'Yazılım projelerinde hangi teknolojiler kullanılıyor?', answer: 'Proje ihtiyacına göre React, Node.js, .NET, Python ve uygun veritabanları kullanıyoruz.', order: 3 },
-          { question: 'Teslim sonrası bakım ve destek var mı?', answer: 'Evet. Bakım, güncelleme ve teknik destek paketleri sunuyoruz.', order: 4 },
-        ],
+      {
+        pageKey: 'about',
+        content: JSON.stringify({
+          heroTitle: 'Woontegra\'yı Tanıyın',
+          heroSubtitle: 'Yazılım, e-ticaret ve dijital sistemler alanında ürün geliştiren ve markalar yöneten bir teknoloji şirketiyiz.',
+          
+          whatIsTitle: 'Woontegra Nedir?',
+          whatIsParagraph1: 'Woontegra, klasik bir ajans ya da yalnızca hizmet sunan bir yapı değildir.',
+          whatIsParagraph2: 'Kendi markalarını kuran, ürünler geliştiren ve bu ürünleri aktif olarak yöneten bir teknoloji şirketidir.',
+          whatIsParagraph3: 'Yazılım geliştirme, e-ticaret ve dijital sistemler alanında sadece müşteriler için değil, kendi projeleri için de üretim yapan bir yapı kurduk.',
+          whatIsParagraph4: 'Bu sayede teorik değil, gerçek kullanım üzerinden deneyim kazanan ve bunu projelere yansıtan bir sistem oluşturduk.',
+          whatIsParagraph5: 'Amacımız, işletmelere sadece bir hizmet sunmak değil, sürdürülebilir bir dijital yapı kurmalarını sağlamaktır.',
+          
+          storyTitle: 'Nasıl Başladık?',
+          storyParagraph1: 'Woontegra, piyasadaki klasik ajans modelinin eksikliklerini gözlemleyerek ortaya çıktı.',
+          storyParagraph2: 'Çoğu ajans, müşteri projeleri üzerinde çalışır ancak kendi ürünlerini geliştirmez. Bu durum, gerçek kullanıcı deneyimi ve operasyonel zorlukları anlamayı zorlaştırır.',
+          storyParagraph3: 'Biz ise farklı bir yol seçtik: Kendi ürünlerimizi geliştiren, markalarımızı yöneten ve bu süreçte edindiğimiz deneyimi müşteri projelerine aktaran bir yapı kurmak.',
+          storyParagraph4: 'Bugün, yazılım geliştirme, e-ticaret ve dijital sistemler alanında hem kendi markalarını yöneten hem de işletmelere çözümler sunan bir teknoloji yapısına dönüştük.',
+          storyParagraph5: 'Farkımız şu: Sadece kod yazmıyoruz, sistem kuruyoruz. Sadece tasarım yapmıyoruz, marka oluşturuyoruz. Sadece danışmanlık vermiyor, gerçek projeler yönetiyoruz.',
+          
+          differenceTitle: 'Bizi Farklı Yapan Ne?',
+          diff1Title: 'Sadece Hizmet Değil, Ürün',
+          diff1Desc: 'Klasik ajanslar müşteri projeleri üzerinde çalışır. Biz ise kendi ürünlerimizi geliştiriyor, gerçek kullanıcılarla test ediyor ve piyasaya sunuyoruz. Bu deneyim, müşteri projelerinde de fark yaratıyor.',
+          diff2Title: 'Gerçek Deneyim',
+          diff2Desc: 'Kendi markalarımızı aktif olarak yönetiyoruz. E-ticaret, SaaS yazılım, danışmanlık gibi farklı sektörlerde operasyonel deneyime sahibiz. Teorik bilgi değil, gerçek iş deneyimi sunuyoruz.',
+          diff3Title: 'Tek Yapı',
+          diff3Desc: 'Yazılım geliştirme, satış süreçleri ve operasyonel yönetimi tek çatı altında birleştiriyoruz. Bu entegre yapı sayesinde projeler daha hızlı, daha verimli ve daha sürdürülebilir şekilde hayata geçiyor.',
+          
+          brandsIntro1: 'Woontegra, sadece hizmet sunan bir yapı değil, aynı zamanda kendi markalarını oluşturan ve yöneten bir sistemdir.',
+          brandsIntro2: 'Aşağıdaki markalar aktif olarak geliştirilen ve yönetilen projelerdir.',
+          brandsTitle: 'Aktif Olarak Yönettiğimiz Markalar',
+          
+          brand1Name: 'Bilirkişi',
+          brand1Desc1: 'Hukuk ve aktüerya alanında kullanılan profesyonel hesaplama yazılımı. İşçi alacakları, kıdem-ihbar tazminatı, fazla mesai ve yıllık izin hesaplamalarını otomatik olarak gerçekleştirir.',
+          brand1Desc2: 'Kullanım Alanı: İş hukuku davaları, bilirkişi raporları, tazminat hesaplamaları',
+          brand1Desc3: 'Hedef Kullanıcı: Bilirkişiler, avukatlar, mahkemeler, hukuk büroları',
+          
+          brand2Name: 'Optimoon',
+          brand2Desc1: 'Doğal taş takılar, kristaller ve özel tasarım ürünlerin satışını gerçekleştiren e-ticaret markası. Özgün tasarımlar, kaliteli malzemeler ve güvenilir teslimat ile müşterilerine ulaşıyor.',
+          brand2Desc2: 'Kullanım Alanı: Online satış, doğal taş koleksiyonları, hediye ürünleri',
+          brand2Desc3: 'Hedef Kullanıcı: Doğal taş severler, koleksiyonerler, hediye arayanlar',
+          
+          brand3Name: 'Datça Tropikal',
+          brand3Desc1: 'Datça\'nın yerel üretim ve doğal ürünlerini satışa sunan e-ticaret markası. Organik zeytinyağı, badem, bal ve tropikal meyveler gibi bölgeye özgü ürünleri müşterilere ulaştırıyor.',
+          brand3Desc2: 'Kullanım Alanı: Yerel ürün satışı, organik gıda, doğal ürünler',
+          brand3Desc3: 'Hedef Kullanıcı: Organik ürün tüketicileri, sağlıklı yaşam severler',
+          
+          brand4Name: 'Mercan Danışmanlık',
+          brand4Desc1: 'Marka tescil, patent başvuruları ve fikri mülkiyet haklarını profesyonel şekilde yöneten danışmanlık markası. İşletmelerin marka koruma süreçlerinde baştan sona rehberlik ediyor.',
+          brand4Desc2: 'Kullanım Alanı: Marka tescil, patent başvuruları, fikri mülkiyet danışmanlığı',
+          brand4Desc3: 'Hedef Kullanıcı: Girişimciler, işletmeler, marka sahipleri, patent başvuru sahipleri',
+        }),
       },
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: { title: 'Sık Sorulan Sorular', subtitle: 'Merak ettiklerinize kısa yanıtlar.' },
-          },
-          { type: 'faq_block', order: 1, title: 'Sorular', content: {} },
-        ],
+      {
+        pageKey: 'contact',
+        content: JSON.stringify({
+          heroTitle: 'İletişim',
+          heroSubtitle: 'Projeleriniz için bizimle iletişime geçin. Size en kısa sürede dönüş yapacağız.',
+          emailLabel: 'E-posta',
+          email: 'info@woontegra.com',
+          phoneLabel: 'Telefon',
+          phone: '0532 317 17 55',
+          addressLabel: 'Adres',
+          address: 'İskele Mahallesi Bademli Caddesi 43/6 Datça-Muğla',
+          formTitle: 'Mesaj Gönderin',
+        }),
       },
-    },
+      {
+        pageKey: 'software-development',
+        content: JSON.stringify({
+          heroTitle: 'Yazılım Geliştirme',
+          heroSubtitle: 'Modern teknolojilerle özel yazılım çözümleri',
+          introText: 'İşletmenize özel, ölçeklenebilir ve güvenli yazılım çözümleri geliştiriyoruz. Web uygulamalarından mobil uygulamalara, kurumsal sistemlerden API entegrasyonlarına kadar geniş yelpazede hizmet sunuyoruz.',
+          featuresTitle: 'Neler Sunuyoruz?',
+          ctaTitle: 'Yazılım Projeniz İçin Teklif Alın',
+          ctaSubtitle: 'Size özel çözümler geliştirmek için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'web-design',
+        content: JSON.stringify({
+          heroTitle: 'Web Tasarım',
+          heroSubtitle: 'Kullanıcı deneyimi odaklı modern web siteleri',
+          introText: 'Responsive, hızlı ve SEO uyumlu web siteleri tasarlıyoruz. Modern tasarım trendleri ve kullanıcı deneyimi prensipleriyle markanızı dijitalde en iyi şekilde temsil ediyoruz.',
+          featuresTitle: 'Web Tasarım Hizmetlerimiz',
+          ctaTitle: 'Web Sitenizi Yenileyin',
+          ctaSubtitle: 'Modern ve etkili bir web sitesi için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'ecommerce',
+        content: JSON.stringify({
+          heroTitle: 'E-Ticaret Çözümleri',
+          heroSubtitle: 'Online satış için güçlü e-ticaret platformları',
+          introText: 'Ödeme entegrasyonları, stok yönetimi ve raporlama özellikleri ile tam donanımlı e-ticaret sistemleri kuruyoruz. Satışlarınızı artıracak, yönetimi kolaylaştıracak çözümler sunuyoruz.',
+          featuresTitle: 'E-Ticaret Özelliklerimiz',
+          ctaTitle: 'E-Ticaret Sitenizi Kurun',
+          ctaSubtitle: 'Online satışa başlamak için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'saas',
+        content: JSON.stringify({
+          heroTitle: 'Kendi Yazılım Ürününüzü Geliştirin',
+          heroSubtitle: 'SaaS (Software as a Service) modeli ile çalışan, ölçeklenebilir ve sürdürülebilir yazılım ürünleri geliştiriyoruz.',
+          heroButton1Text: 'Projeni Anlat',
+          heroButton2Text: 'Teklif Al',
+          
+          problemTitle: 'Bir Fikriniz Var Ama Nasıl Ürüne Döneceğini Bilmiyor musunuz?',
+          problemIntro: 'Birçok girişim:',
+          problem1: 'Fikrini ürüne dönüştüremez',
+          problem2: 'Teknik altyapı kuramaz',
+          problem3: 'Yanlış sistemlerle başlar',
+          problem4: 'Ölçeklenemez',
+          problemConclusion: 'Bu yüzden doğru başlangıç kritik.',
+          
+          solutionTitle: 'Fikri Ürüne Dönüştürüyoruz',
+          solutionIntro: 'Woontegra olarak SaaS projelerini sıfırdan ele alıyoruz.',
+          solution1: 'Ürün planlama',
+          solution2: 'Sistem mimarisi',
+          solution3: 'Geliştirme',
+          solution4: 'Yayına alma',
+          solutionConclusion: 'Tüm süreci tek yapı içinde yönetiyoruz.',
+          
+          systemsTitle: 'Geliştirdiğimiz SaaS Sistemleri',
+          system1Title: 'Üyelik Sistemleri',
+          system1Desc: 'Çok kullanıcılı yapılar',
+          system2Title: 'Yönetim Panelleri',
+          system2Desc: 'Admin & dashboard sistemleri',
+          system3Title: 'Çok Kullanıcılı Sistemler',
+          system3Desc: 'Multi-tenant mimariler',
+          system4Title: 'Abonelik Altyapıları',
+          system4Desc: 'Ödeme & fatura sistemleri',
+          system5Title: 'API Tabanlı Sistemler',
+          system5Desc: 'RESTful & GraphQL',
+          system6Title: 'Dashboard & Analiz Panelleri',
+          system6Desc: 'Veri görselleştirme',
+          
+          techTitle: 'Nasıl Bir Sistem Kuruyoruz?',
+          tech1Title: 'Multi-tenant yapı',
+          tech1Desc: 'Her müşteri için izole veri yapısı',
+          tech2Title: 'Güvenli veri yönetimi',
+          tech2Desc: 'Şifreleme ve erişim kontrolü',
+          tech3Title: 'Hızlı ve ölçeklenebilir backend',
+          tech3Desc: 'Yüksek performans ve büyümeye hazır altyapı',
+          tech4Title: 'Modern frontend mimarisi',
+          tech4Desc: 'React, Vue veya Next.js tabanlı',
+          tech5Title: 'API-first yaklaşım',
+          tech5Desc: 'Entegrasyon odaklı mimari',
+          
+          whyTitle: 'Neden Woontegra?',
+          why1: 'Kendi SaaS projelerimizi geliştiriyoruz',
+          why2: 'Sadece kod değil, ürün geliştiriyoruz',
+          why3: 'Ölçeklenebilir mimari kuruyoruz',
+          why4: 'Uzun vadeli düşünerek geliştiriyoruz',
+          
+          ctaTitle: 'Fikrinizi Bir Ürüne Dönüştürelim',
+          ctaSubtitle: 'Doğru altyapı ile güçlü bir SaaS ürünü oluşturalım.',
+          ctaButtonText: 'Projeni Anlat',
+        }),
+      },
+      {
+        pageKey: 'trademark-patent',
+        content: JSON.stringify({
+          heroTitle: 'Marka & Patent Vekilliği',
+          heroSubtitle: 'Fikri mülkiyet haklarınızı koruyun',
+          introText: 'Marka tescil, patent başvuru ve fikri mülkiyet danışmanlığı hizmetleri sunuyoruz. Markanızı ve buluşlarınızı yasal olarak koruma altına alıyoruz.',
+          featuresTitle: 'Hizmetlerimiz',
+          ctaTitle: 'Markanızı Tescil Ettirin',
+          ctaSubtitle: 'Fikri mülkiyet haklarınız için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'game-development',
+        content: JSON.stringify({
+          heroTitle: 'Oyun Geliştirme',
+          heroSubtitle: 'Eğlenceli ve bağımlılık yapan oyunlar',
+          introText: 'Mobil ve web platformları için oyun geliştirme hizmetleri sunuyoruz. Casual oyunlardan karmaşık multiplayer sistemlere kadar geniş yelpazede deneyimimiz var.',
+          featuresTitle: 'Oyun Geliştirme Hizmetlerimiz',
+          ctaTitle: 'Oyun Projenizi Başlatın',
+          ctaSubtitle: 'Oyun fikrinizi gerçeğe dönüştürmek için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'digital-consulting',
+        content: JSON.stringify({
+          heroTitle: 'Dijital Danışmanlık',
+          heroSubtitle: 'Dijital dönüşüm yolculuğunuzda yanınızdayız',
+          introText: 'Strateji belirleme, teknoloji seçimi ve uygulama desteği sunuyoruz. İşletmenizin dijital dönüşüm sürecinde doğru kararlar almanıza yardımcı oluyoruz.',
+          featuresTitle: 'Danışmanlık Hizmetlerimiz',
+          ctaTitle: 'Dijital Stratejinizi Oluşturun',
+          ctaSubtitle: 'Dijital dönüşüm için iletişime geçin',
+        }),
+      },
+      {
+        pageKey: 'solutions',
+        content: JSON.stringify({
+          heroTitle: 'Geliştirdiğimiz Dijital Yapılar',
+          heroSubtitle: 'Woontegra sadece hizmet sunmaz, kendi ürünlerini geliştirir ve markalarını aktif olarak yönetir.',
+          introParagraph1: 'Woontegra, yazılım geliştirme ve dijital sistem kurmanın ötesinde, kendi markalarını oluşturan ve yöneten bir yapı kurmuştur.',
+          introParagraph2: 'Aşağıda yer alan projeler, aktif olarak geliştirilen ve yönetilen sistemlerdir.',
+          
+          bilirkisiTitle: 'Bilirkişi Hesaplama Programı',
+          bilirkisiDesc1: 'Hukuk ve aktüerya alanında kullanılan profesyonel bir hesaplama yazılımıdır.',
+          bilirkisiDesc2: 'İşçilik alacakları, tazminat hesaplamaları ve detaylı analiz süreçlerini hızlı ve doğru şekilde gerçekleştirmenizi sağlar.',
+          bilirkisiDesc3: 'Hazır Excel çözümleri yerine, sistematik ve hatasız bir yapı sunar.',
+          bilirkisiButtonText: 'Ürünü İncele',
+          
+          optimoonTitle: 'Optimoon',
+          optimoonDesc1: 'Doğal taş ve özel tasarım ürünlerin yer aldığı e-ticaret markamızdır.',
+          optimoonDesc2: 'Ürün yönetimi, satış süreçleri ve altyapı tamamen Woontegra tarafından geliştirilen sistemler ile yürütülmektedir.',
+          optimoonButtonText: 'Mağazayı İncele',
+          
+          datcaTitle: 'Datça Tropikal',
+          datcaDesc1: 'Datça bölgesine ait doğal ve yerel ürünlerin satışını gerçekleştiren e-ticaret markasıdır.',
+          datcaDesc2: 'Üretimden satışa kadar tüm süreçler dijital altyapı ile desteklenmektedir.',
+          datcaButtonText: 'Ürünleri İncele',
+          
+          mercanTitle: 'Mercan Danışmanlık',
+          mercanDesc1: 'Marka tescil ve patent başvurularını profesyonel şekilde yöneten danışmanlık markasıdır.',
+          mercanDesc2: 'Başvuru süreçleri ve takip işlemleri dijital sistemler ile desteklenmektedir.',
+          mercanButtonText: 'Hizmetleri İncele',
+          
+          ctaTitle: 'Kendi Dijital Yapınızı Kurmak İster misiniz?',
+          ctaSubtitle: 'Sizin için de özel çözümler geliştirebiliriz.',
+          ctaButtonText: 'İletişime Geç',
+        }),
+      },
+      {
+        pageKey: 'blog',
+        content: JSON.stringify({
+          heroTitle: 'Bilgi, Deneyim ve Dijital İçerikler',
+          heroSubtitle: 'Yazılım, e-ticaret ve dijital sistemler hakkında güncel içerikler ve rehberler.',
+          categoriesTitle: 'Kategoriler',
+          featuredTitle: 'Öne Çıkan Yazı',
+          allPostsTitle: 'Tüm Yazılar',
+        }),
+      },
+      {
+        pageKey: 'faq',
+        content: JSON.stringify({
+          heroTitle: 'Sık Sorulan Sorular',
+          heroSubtitle: 'Hizmetlerimiz ve süreçlerimiz hakkında en çok merak edilen sorular.',
+          ctaTitle: 'Aklınıza Takılan Başka Bir Şey Mi Var?',
+          ctaSubtitle: 'Sorularınız için bizimle iletişime geçebilirsiniz.',
+          ctaButtonText: 'İletişime Geç',
+        }),
+      },
+    ],
   })
 
-  await prisma.page.create({
-    data: {
-      slug: 'blog',
-      title: 'Blog',
-      sections: {
-        create: [
-          { type: 'page_hero', order: 0, content: { title: 'Blog', subtitle: 'Teknoloji ve dijital üretim üzerine notlar.' } },
-          { type: 'blog_api', order: 1, title: 'Yazılar', content: { emptyMessage: 'Henüz yayınlanmış yazı yok.' } },
-        ],
-      },
-    },
-  })
-
-  await prisma.page.create({
-    data: {
-      slug: 'iletisim',
-      title: 'İletişim',
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: { title: 'İletişim', subtitle: 'Sorularınız veya proje talepleriniz için bize ulaşın.' },
-          },
-          {
-            type: 'contact_form',
-            order: 1,
-            content: {
-              nameLabel: 'Ad Soyad',
-              emailLabel: 'E-posta',
-              messageLabel: 'Mesaj',
-              namePlaceholder: 'Adınız Soyadınız',
-              emailPlaceholder: 'ornek@email.com',
-              messagePlaceholder: 'Mesajınız...',
-              submitLabel: 'Gönder',
-              successMessage: 'Mesajınız alındı. En kısa sürede dönüş yapacağız.',
-              sidebarTitleWhatsapp: 'WhatsApp',
-              sidebarWhatsapp: '+90 XXX XXX XX XX',
-              sidebarWhatsappHref: 'https://wa.me/90XXXXXXXXXX',
-              sidebarTitleEmail: 'E-posta',
-              sidebarEmail: 'info@woontegra.com',
-              sidebarTitlePhone: 'Telefon',
-              sidebarPhone: '+90 XXX XXX XX XX',
-              sidebarTitleAddress: 'Adres',
-              sidebarAddress: 'Örnek Mah. Örnek Sok. No: X, İstanbul',
-              mapCaption: 'Harita alanı',
-            },
-          },
-        ],
-      },
-    },
-  })
-
-  await prisma.page.create({
-    data: {
-      slug: 'teklif-al',
-      title: 'Teklif Al',
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: {
-              title: 'Teklif Al',
-              subtitle: 'Proje türü ve hizmet seçiminizi yapın, kısa brief ve iletişim bilgilerinizi paylaşın.',
-            },
-          },
-          {
-            type: 'quote_form',
-            order: 1,
-            content: {
-              projectTypes: ['Web sitesi', 'E-ticaret', 'Yazılım / SaaS', 'Marka tescil', 'Oyun / Dijital ürün', 'Danışmanlık', 'Diğer'],
-              serviceOptions: ['Yazılım Geliştirme', 'Web Tasarım', 'E-Ticaret', 'SaaS', 'Marka & Patent', 'Oyun Geliştirme', 'Dijital Danışmanlık'],
-              projectTypeLabel: 'Proje türü',
-              serviceLabel: 'Hizmet',
-              servicePlaceholder: 'Seçin',
-              briefLabel: 'Kısa brief / ihtiyaç',
-              briefPlaceholder: 'Projenizi kısaca anlatın...',
-              nameLabel: 'Ad Soyad',
-              emailLabel: 'E-posta',
-              phoneLabel: 'Telefon',
-              nextLabel: 'İleri',
-              backLabel: 'Geri',
-              submitLabel: 'Gönder',
-              successTitle: 'Talebiniz alındı',
-              successMessage: 'En kısa sürede sizinle iletişime geçeceğiz.',
-            },
-          },
-        ],
-      },
-    },
-  })
-
-  await prisma.page.create({
-    data: {
-      slug: 'datca-topikal',
-      title: 'Datça Topikal',
-      sections: {
-        create: [
-          {
-            type: 'page_hero',
-            order: 0,
-            content: { title: 'Datça Topikal', subtitle: 'Doğal ve topikal ürünler.' },
-          },
-          {
-            type: 'rich_text',
-            order: 1,
-            content: { html: '<p class="text-slate-600">Çözüm detayı CMS üzerinden düzenlenebilir.</p>' },
-          },
-        ],
-      },
-    },
-  })
-
-  console.log('Seed OK. Admin: admin@woontegra.com / Admin123!')
-  console.log('Pages:', await prisma.page.count())
+  console.log('✅ Seed tamamlandı!')
+  console.log('👤 Yönetici: info@woontegra.com / Şifre: Admin123!')
+  console.log('📄 Sayfalar:', await prisma.page.count())
+  console.log('🛠️  Hizmetler:', await prisma.service.count())
+  console.log('🏢 Markalar:', await prisma.brand.count())
+  console.log('📝 Kategoriler:', await prisma.postCategory.count())
+  console.log('📝 Sayfa İçerikleri:', await prisma.pageContent.count())
 }
 
 main()
