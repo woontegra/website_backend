@@ -25,6 +25,7 @@ import { brandsRoutes } from './routes/brands.routes'
 import { contactMessagesRoutes } from './routes/contact-messages.routes'
 import pageContentRoutes from './routes/page-content.routes'
 import mailRoutes from './routes/mail.routes'
+import { downloadsPublicRoutes } from './routes/downloads.public.routes'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
@@ -60,6 +61,7 @@ app.use('/api/brands', brandsRoutes)
 app.use('/api/contact-messages', contactMessagesRoutes)
 app.use('/api/page-content', pageContentRoutes)
 app.use('/api/mail', mailRoutes)
+app.use('/api/public/downloads', downloadsPublicRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'Woontegra API' })

@@ -137,3 +137,17 @@ model SiteSetting {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// Ürün indirme sayaçları — productKey + variant başına tek kayıt
+model DownloadStat {
+  id         String   @id @default(uuid())
+  productKey String
+  /// setup | portable
+  variant    String
+  count      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([productKey, variant])
+  @@index([productKey])
+}
