@@ -2,20 +2,14 @@ import { prisma } from '../lib/prisma'
 
 const PRODUCT_KEY = 'sifre-kasasi'
 
-const FILE_PATHS = {
-  setup: '/downloads/woontegra-sifre-kasasi-setup-1.0.0.exe',
-  portable: '/downloads/woontegra-sifre-kasasi-portable-1.0.0.exe',
+const RELEASE_URLS = {
+  setup:
+    'https://github.com/woontegra/website_frontend/releases/download/sifre-kasasi-v1.0.0/woontegra-sifre-kasasi-setup-1.0.0.exe',
+  portable:
+    'https://github.com/woontegra/website_frontend/releases/download/sifre-kasasi-v1.0.0/woontegra-sifre-kasasi-portable-1.0.0.exe',
 } as const
 
-type DownloadVariant = keyof typeof FILE_PATHS
-
-function getPublicSiteUrl(): string {
-  const base =
-    process.env.PUBLIC_SITE_URL ||
-    process.env.CORS_ORIGIN ||
-    (process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : '')
-  return base.replace(/\/$/, '')
-}
+type DownloadVariant = keyof typeof RELEASE_URLS
 
 export const downloadsService = {
   async incrementDownload(productKey: string, variant: DownloadVariant) {
@@ -51,10 +45,8 @@ export const downloadsService = {
   },
 
   getRedirectUrl(variant: DownloadVariant): string {
-    const filePath = FILE_PATHS[variant]
-    const siteUrl = getPublicSiteUrl()
-    return siteUrl ? `${siteUrl}${filePath}` : filePath
+    return RELEASE_URLS[variant]
   },
 }
 
-export { PRODUCT_KEY, FILE_PATHS }
+export { PRODUCT_KEY, RELEASE_URLS }
