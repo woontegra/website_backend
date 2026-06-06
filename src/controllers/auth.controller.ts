@@ -57,4 +57,19 @@ export const authController = {
     const profile = await authService.getProfile(req.user.userId)
     return res.json(profile)
   },
+
+  async changePassword(req: Request & { user?: JwtPayload }, res: Response) {
+    try {
+      if (!req.user) return res.status(401).json({ success: false, message: 'Yetkisiz' })
+      const { currentPassword, newPassword } = req.body
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: 'Mevcut ve yeni şifre gerekli' })
+      }
+      const result = await authService.changePassword(req.user.userId, currentPassword, newPassword)
+      return res.json(result)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Şifre güncellenemedi'
+      return res.status(400).json({ success: false, message })
+    }
+  },
 }

@@ -110,4 +110,35 @@ export const authService = {
     if (!user) throw new Error('Kullanıcı bulunamadı')
     return { id: user.id, email: user.email, role: user.role }
   },
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('Yeni şifre en az 8 karakter olmalıdır')
+    }
+
+    try {
+      const rows = await prisma.$queryRaw<UserRow[]>(
+        Prisma.sql`SELECT id, email, "passwordHash", role FROM "User" WHERE id = ${userId} LIMIT 1`
+      )
+      const dbUser = rows[0]
+      if (dbUser && (await bcrypt.compare(currentPassword, dbUser.passwordHash))) {
+        const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS)
+        await prisma.$executeRaw(
+          Prisma.sql`UPDATE "User" SET "passwordHash" = ${passwordHash}, "updatedAt" = NOW() WHERE id = ${userId}`
+        )
+        return { success: true, message: 'Şifre güncellendi' }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('en az 8')) throw err
+      /* DB yoksa bellek deposuna düş */
+    }
+
+    const user = usersStore.get(userId)
+    if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new Error('Mevcut şifre hatalı')
+    }
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS)
+    usersStore.set(userId, user)
+    return { success: true, message: 'Şifre güncellendi' }
+  },
 }
