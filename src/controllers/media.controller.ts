@@ -1,9 +1,6 @@
 import type { Request, Response } from 'express'
 import * as media from '../services/media.service'
-import {
-  InvalidPersistentMediaUrlError,
-  PersistentMediaNotConfiguredError,
-} from '../services/media.service'
+import { MediaUploadDisabledError } from '../services/media.service'
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',
@@ -36,20 +33,12 @@ export async function adminUploadMedia(req: Request, res: Response) {
       return res.status(400).json({ success: false, message: 'Desteklenmeyen dosya türü' })
     }
 
-    const row = await media.persistUploadedImage(file)
-    res.status(201).json({ success: true, data: row })
+    await media.persistUploadedImage(file)
   } catch (e) {
-    if (e instanceof PersistentMediaNotConfiguredError) {
+    if (e instanceof MediaUploadDisabledError) {
       return res.status(503).json({
         success: false,
         code: e.code,
-        message: e.message,
-      })
-    }
-    if (e instanceof InvalidPersistentMediaUrlError) {
-      return res.status(500).json({
-        success: false,
-        code: 'INVALID_MEDIA_URL',
         message: e.message,
       })
     }

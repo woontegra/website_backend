@@ -1,56 +1,29 @@
-import path from 'path'
 import { prisma } from '../lib/prisma'
-import { deleteByUrl, isCloudinaryConfigured, uploadImageBuffer } from './cloudinary.service'
+import { deleteByUrl } from './cloudinary.service'
+import { normalizePublicImagePath } from './imagePathAliases'
 
-export class PersistentMediaNotConfiguredError extends Error {
-  readonly code = 'CLOUDINARY_NOT_CONFIGURED'
+export class MediaUploadDisabledError extends Error {
+  readonly code = 'UPLOAD_DISABLED'
 
   constructor() {
     super(
-      'Kalıcı medya depolama yapılandırılmamış. Railway ortam değişkenlerine CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY ve CLOUDINARY_API_SECRET ekleyin.',
+      'Bilgisayardan görsel yükleme devre dışı. Woontegra kurumsal site görselleri frontend/public/images altındadır; panelden /images/... yolu seçin.',
     )
-    this.name = 'PersistentMediaNotConfiguredError'
+    this.name = 'MediaUploadDisabledError'
   }
 }
 
-export class InvalidPersistentMediaUrlError extends Error {
-  constructor(url: string) {
-    super(`Cloudinary secure_url bekleniyordu; geçersiz yanıt: ${url}`)
-    this.name = 'InvalidPersistentMediaUrlError'
-  }
-}
-
-function assertCloudinarySecureUrl(url: string): string {
-  if (!/^https:\/\/res\.cloudinary\.com\//i.test(url)) {
-    throw new InvalidPersistentMediaUrlError(url)
-  }
-  return url
-}
-
-/**
- * Kurumsal site CMS görselleri — yalnızca Cloudinary (kalıcı).
- * Local /uploads fallback bilinçli olarak kaldırıldı (Railway/Vercel geçici disk).
- */
-export async function persistUploadedImage(file: Express.Multer.File) {
-  if (!isCloudinaryConfigured()) {
-    throw new PersistentMediaNotConfiguredError()
-  }
-
-  const { secureUrl } = await uploadImageBuffer(file.buffer, file.originalname)
-  const url = assertCloudinarySecureUrl(secureUrl)
-
-  return prisma.mediaAsset.create({
-    data: {
-      url,
-      filename: path.basename(file.originalname) || 'upload',
-      mimeType: file.mimetype ?? null,
-      size: file.size,
-    },
-  })
+/** Kurumsal site CMS — yükleme kapalı; yalnızca public/images path kullanılır */
+export async function persistUploadedImage(_file: Express.Multer.File): Promise<never> {
+  throw new MediaUploadDisabledError()
 }
 
 export async function listMediaAssets() {
-  return prisma.mediaAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 200 })
+  const rows = await prisma.mediaAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 200 })
+  return rows.map((row) => ({
+    ...row,
+    url: normalizePublicImagePath(row.url) || row.url,
+  }))
 }
 
 export async function deleteMediaAsset(id: string) {
@@ -67,9 +40,9 @@ export async function deleteMediaAsset(id: string) {
 
 export function getMediaStorageInfo() {
   return {
-    provider: 'cloudinary' as const,
-    configured: isCloudinaryConfigured(),
-    folder: process.env.CLOUDINARY_FOLDER?.trim() || 'woontegra',
-    requiredEnv: ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'],
+    provider: 'public-images' as const,
+    uploadEnabled: false,
+    basePath: '/images/',
+    message: 'Görseller frontend/public/images klasöründen servis edilir.',
   }
 }

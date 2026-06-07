@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma'
+import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 
 export const brandsService = {
   async getAll() {
@@ -15,14 +16,19 @@ export const brandsService = {
 
   async create(data: { name: string; description?: string; image: string; url?: string }) {
     return await prisma.brand.create({
-      data,
+      data: {
+        ...data,
+        image: sanitizeImageUrl(data.image),
+      },
     })
   },
 
   async update(id: string, data: { name?: string; description?: string; image?: string; url?: string }) {
+    const patch = { ...data }
+    if (data.image !== undefined) patch.image = sanitizeImageUrl(data.image)
     return await prisma.brand.update({
       where: { id },
-      data,
+      data: patch,
     })
   },
 

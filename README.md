@@ -96,7 +96,7 @@ Sayfa içeriği `PageContent.content` içinde JSON olarak saklanır:
         "margin": "",
         "textAlign": "center"
       },
-      "content": { "title": "...", "subtitle": "...", "buttonText": "...", "buttonLink": "/", "image": "/uploads/..." }
+      "content": { "title": "...", "subtitle": "...", "buttonText": "...", "buttonLink": "/", "image": "/images/yazilim.png" }
     }
   ]
 }
@@ -106,8 +106,10 @@ Eski kayıtlar yalnızca `props` kullanıyorsa API bunları `content` olarak oku
 
 Şema değişikliği sonrası: `npx prisma db push` (yeni `MediaAsset` tablosu).
 
-- Görseller: `POST /api/admin/cms/media/upload` (multipart `file`), `GET /api/admin/cms/media`, `DELETE /api/admin/cms/media/:id`
-- Statik dosyalar: `GET /uploads/*` → `backend/public/uploads/`
+- Kurumsal site görselleri: `frontend/public/images` → Vercel `/images/...` (Git ile kalıcı)
+- Panel upload: **devre dışı** (`POST /api/admin/cms/media/upload` → 503 `UPLOAD_DISABLED`)
+- Denetim: `npm run audit:images` — veritabanındaki `/uploads/` kayıtlarını listeler
+- Düzeltme: `npm run fix:images` — bilinen sayfa hero'larını `/images/...` path'lerine taşır
 
 ## API özeti
 

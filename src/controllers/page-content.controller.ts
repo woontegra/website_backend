@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
+import { sanitizeImageFields } from '../utils/sanitizeImageFields'
 
 export const pageContentController = {
   async getContent(req: Request, res: Response) {
@@ -31,16 +32,18 @@ export const pageContentController = {
       if (!content) {
         return res.status(400).json({ success: false, message: 'İçerik gerekli' })
       }
+
+      const sanitized = sanitizeImageFields(content)
       
       const pageContent = await prisma.pageContent.upsert({
         where: { pageKey },
         update: { 
-          content: JSON.stringify(content),
+          content: JSON.stringify(sanitized),
           updatedAt: new Date(),
         },
         create: {
           pageKey,
-          content: JSON.stringify(content),
+          content: JSON.stringify(sanitized),
         },
       })
       

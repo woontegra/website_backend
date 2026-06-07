@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 
 export async function listCategoriesPublic() {
   return prisma.postCategory.findMany({ orderBy: { name: 'asc' } })
@@ -82,7 +83,7 @@ export async function createPost(data: {
       title: data.title,
       excerpt: data.excerpt ?? undefined,
       bodyHtml: data.bodyHtml ?? undefined,
-      featuredImage: data.featuredImage ?? undefined,
+      featuredImage: data.featuredImage ? sanitizeImageUrl(data.featuredImage) : undefined,
       categoryId: data.categoryId || undefined,
       status,
       publishedAt: status === 'published' ? new Date() : undefined,
@@ -107,7 +108,9 @@ export async function updatePost(
   if (data.title !== undefined) d.title = data.title
   if (data.excerpt !== undefined) d.excerpt = data.excerpt
   if (data.bodyHtml !== undefined) d.bodyHtml = data.bodyHtml
-  if (data.featuredImage !== undefined) d.featuredImage = data.featuredImage
+  if (data.featuredImage !== undefined) {
+    d.featuredImage = data.featuredImage ? sanitizeImageUrl(data.featuredImage) : null
+  }
   if (data.categoryId !== undefined) d.category = data.categoryId ? { connect: { id: data.categoryId } } : { disconnect: true }
   if (data.status !== undefined) {
     d.status = data.status

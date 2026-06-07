@@ -10,6 +10,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "admin:ensure": "tsx scripts/ensure-admin.ts",
+    "audit:images": "tsx scripts/audit-image-paths.ts",
+    "fix:images": "tsx scripts/fix-upload-image-paths.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },
   "prisma": {
