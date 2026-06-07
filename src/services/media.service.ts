@@ -1,54 +1,51 @@
-import fs from 'fs'
 import path from 'path'
-import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma'
 import { deleteByUrl, isCloudinaryConfigured, uploadImageBuffer } from './cloudinary.service'
 
-const UPLOAD_SUBDIR = 'uploads'
+export class PersistentMediaNotConfiguredError extends Error {
+  readonly code = 'CLOUDINARY_NOT_CONFIGURED'
 
-export function getUploadsDir(): string {
-  return path.join(process.cwd(), 'public', UPLOAD_SUBDIR)
+  constructor() {
+    super(
+      'Kalıcı medya depolama yapılandırılmamış. Railway ortam değişkenlerine CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY ve CLOUDINARY_API_SECRET ekleyin.',
+    )
+    this.name = 'PersistentMediaNotConfiguredError'
+  }
 }
 
-export function ensureUploadsDir() {
-  const dir = getUploadsDir()
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+export class InvalidPersistentMediaUrlError extends Error {
+  constructor(url: string) {
+    super(`Cloudinary secure_url bekleniyordu; geçersiz yanıt: ${url}`)
+    this.name = 'InvalidPersistentMediaUrlError'
+  }
 }
 
-/** Yerel disk için public URL (Railway'de geçici — yeni yüklemeler Cloudinary kullanmalı) */
-export function publicUrlForFilename(filename: string): string {
-  return `/${UPLOAD_SUBDIR}/${filename}`
+function assertCloudinarySecureUrl(url: string): string {
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(url)) {
+    throw new InvalidPersistentMediaUrlError(url)
+  }
+  return url
 }
 
+/**
+ * Kurumsal site CMS görselleri — yalnızca Cloudinary (kalıcı).
+ * Local /uploads fallback bilinçli olarak kaldırıldı (Railway/Vercel geçici disk).
+ */
 export async function persistUploadedImage(file: Express.Multer.File) {
-  if (isCloudinaryConfigured()) {
-    const { secureUrl } = await uploadImageBuffer(file.buffer, file.originalname)
-    return prisma.mediaAsset.create({
-      data: {
-        url: secureUrl,
-        filename: file.originalname,
-        mimeType: file.mimetype ?? null,
-        size: file.size,
-      },
-    })
+  if (!isCloudinaryConfigured()) {
+    throw new PersistentMediaNotConfiguredError()
   }
 
-  ensureUploadsDir()
-  const ext = path.extname(file.originalname) || '.bin'
-  const filename = `${randomUUID()}${ext}`
-  const filePath = path.join(getUploadsDir(), filename)
-  fs.writeFileSync(filePath, file.buffer)
+  const { secureUrl } = await uploadImageBuffer(file.buffer, file.originalname)
+  const url = assertCloudinarySecureUrl(secureUrl)
 
-  const url = publicUrlForFilename(filename)
   return prisma.mediaAsset.create({
-    data: { url, filename, mimeType: file.mimetype ?? null, size: file.size },
-  })
-}
-
-export async function createMediaRecord(filename: string, mimeType: string | undefined, size: number) {
-  const url = publicUrlForFilename(filename)
-  return prisma.mediaAsset.create({
-    data: { url, filename, mimeType: mimeType ?? null, size },
+    data: {
+      url,
+      filename: path.basename(file.originalname) || 'upload',
+      mimeType: file.mimetype ?? null,
+      size: file.size,
+    },
   })
 }
 
@@ -62,15 +59,17 @@ export async function deleteMediaAsset(id: string) {
 
   if (row.url.includes('cloudinary.com')) {
     await deleteByUrl(row.url)
-  } else {
-    const filePath = path.join(getUploadsDir(), row.filename)
-    try {
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-    } catch {
-      /* ignore */
-    }
   }
 
   await prisma.mediaAsset.delete({ where: { id } })
   return row
+}
+
+export function getMediaStorageInfo() {
+  return {
+    provider: 'cloudinary' as const,
+    configured: isCloudinaryConfigured(),
+    folder: process.env.CLOUDINARY_FOLDER?.trim() || 'woontegra',
+    requiredEnv: ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'],
+  }
 }

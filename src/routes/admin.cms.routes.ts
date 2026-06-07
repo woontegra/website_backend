@@ -10,6 +10,7 @@ const r = Router()
 r.use(authMiddleware, adminOnly)
 
 r.get('/media', media.adminListMedia)
+r.get('/media/storage-status', media.adminMediaStorageStatus)
 r.post('/media/upload', uploadImage.single('file'), media.adminUploadMedia)
 r.delete('/media/:id', media.adminDeleteMedia)
 
