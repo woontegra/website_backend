@@ -30,12 +30,48 @@ import { downloadsPublicRoutes } from './routes/downloads.public.routes'
 const app = express()
 const PORT = process.env.PORT ?? 4000
 
-app.use(helmet())
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173', credentials: true }))
+function parseCorsOrigins(): string[] {
+  const raw = process.env.CORS_ORIGIN ?? 'http://localhost:5173'
+  return raw
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+}
+
+const corsOrigins = parseCorsOrigins()
+
+app.use(
+  helmet({
+    // Logo/favicon gibi public upload'lar frontend (Vercel) üzerinden <img> ile yüklenebilsin
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+)
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || corsOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(null, false)
+    },
+    credentials: true,
+  }),
+)
+
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')))
+app.use(
+  '/uploads',
+  (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    next()
+  },
+  express.static(path.join(process.cwd(), 'public', 'uploads')),
+)
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
