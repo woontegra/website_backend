@@ -3,6 +3,7 @@ import { authMiddleware, adminOnly } from '../middleware/auth.middleware'
 import { uploadImage } from '../middleware/upload.middleware'
 import * as cms from '../controllers/cms.controller'
 import * as media from '../controllers/media.controller'
+import * as siteAsset from '../controllers/siteAsset.controller'
 import * as menu from '../controllers/menu.controller'
 import * as adminPost from '../controllers/adminPost.controller'
 
@@ -12,6 +13,7 @@ r.use(authMiddleware, adminOnly)
 r.get('/media', media.adminListMedia)
 r.get('/media/storage-status', media.adminMediaStorageStatus)
 r.post('/media/upload', uploadImage.single('file'), media.adminUploadMedia)
+r.post('/site-assets/upload', uploadImage.single('file'), siteAsset.adminUploadSiteAsset)
 r.delete('/media/:id', media.adminDeleteMedia)
 
 r.get('/pages', cms.adminListPages)

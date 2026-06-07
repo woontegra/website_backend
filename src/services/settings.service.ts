@@ -5,8 +5,8 @@ const prisma = new PrismaClient()
 const DEFAULT_SETTINGS = {
   siteName: 'Woontegra',
   siteDescription: 'Yazılım, e-ticaret ve dijital sistemler',
-  logo: '',
-  favicon: '',
+  logo: '/logo.svg',
+  favicon: '/favicon.svg',
   darkModeLogo: '',
   language: 'tr',
   currency: 'TRY',
@@ -121,6 +121,7 @@ export const settingsService = {
       contactPhone: settings.contactPhone,
       contactAddress: settings.contactAddress,
       logo: settings.logo,
+      favicon: settings.favicon,
       primaryColor: settings.primaryColor,
       secondaryColor: settings.secondaryColor,
     }
