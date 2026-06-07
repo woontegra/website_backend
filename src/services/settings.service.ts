@@ -194,6 +194,9 @@ export const settingsService = {
     for (const [key, value] of Object.entries(payload)) {
       if (value === undefined) continue
 
+      if (key === 'metaConversionsAccessToken' && !String(value).trim()) continue
+      if (key === 'smtpPassword' && !String(value).trim()) continue
+
       let stringValue: string
 
       if (Array.isArray(value)) {

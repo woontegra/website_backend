@@ -20,7 +20,7 @@ export async function adminUploadMedia(req: Request, res: Response) {
     if (file.mimetype && !ALLOWED_MIME.has(file.mimetype)) {
       return res.status(400).json({ success: false, message: 'Desteklenmeyen dosya türü' })
     }
-    const row = await media.createMediaRecord(file.filename, file.mimetype, file.size)
+    const row = await media.persistUploadedImage(file)
     res.status(201).json({ success: true, data: row })
   } catch (e) {
     console.error(e)
