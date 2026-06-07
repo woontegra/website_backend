@@ -14,10 +14,19 @@ export const settingsController = {
 
   async getAll(_req: Request, res: Response) {
     try {
-      const data = await settingsService.getAll()
+      const data = await settingsService.getAdmin()
       return res.json(data)
     } catch (error) {
       return res.status(500).json({ error: 'Failed to fetch settings' })
+    }
+  },
+
+  async getTracking(_req: Request, res: Response) {
+    try {
+      const data = await settingsService.getPublicTracking()
+      return res.json(data)
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch tracking settings' })
     }
   },
 
