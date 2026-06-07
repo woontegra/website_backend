@@ -13,10 +13,11 @@ export const pageContentController = {
       if (!pageContent) {
         return res.json({ success: true, data: null })
       }
-      
-      return res.json({ 
-        success: true, 
-        data: JSON.parse(pageContent.content) 
+
+      const parsed = sanitizeImageFields(JSON.parse(pageContent.content))
+      return res.json({
+        success: true,
+        data: parsed,
       })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'İçerik yüklenemedi'
