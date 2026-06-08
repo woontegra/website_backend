@@ -138,6 +138,49 @@ model SiteSetting {
   updatedAt DateTime @updatedAt
 }
 
+/// Çerez tarama çalıştırma kaydı
+model CookieScanRun {
+  id           String   @id @default(uuid())
+  scannedAt    DateTime @default(now())
+  baseUrl      String
+  status       String   @default("completed")
+  pagesTotal   Int      @default(0)
+  pagesOk      Int      @default(0)
+  pagesFailed  Int      @default(0)
+  pageResults  String?  @db.Text
+  errorMessage String?
+}
+
+/// Tespit edilen çerez / depolama kayıtları (admin düzenlemeleri dahil)
+model CookieInventoryItem {
+  id                 String   @id @default(uuid())
+  uniqueKey          String   @unique
+  name               String
+  domain             String
+  path               String   @default("/")
+  provider           String   @default("")
+  category           String   @default("unknown")
+  purpose            String   @default("")
+  duration           String   @default("")
+  expiresAt          String?
+  maxAgeSeconds      Int?
+  source             String
+  firstSeenUrl       String
+  httpOnly           Boolean  @default(false)
+  secure             Boolean  @default(false)
+  sameSite           String?
+  adminProvider      String?
+  adminCategory      String?
+  adminPurpose       String?
+  adminDurationLabel String?
+  lastSeenAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([category])
+  @@index([source])
+}
+
 /// Ürün indirme sayaçları — productKey + variant başına tek kayıt
 model DownloadStat {
   id         String   @id @default(uuid())

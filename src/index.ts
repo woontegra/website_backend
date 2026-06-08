@@ -7,7 +7,7 @@ import path from 'path'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
+import { createGlobalRateLimiter } from './middleware/rateLimit.middleware'
 import { authRoutes } from './routes/auth.routes'
 import { usersRoutes } from './routes/users.routes'
 import { contactsRoutes } from './routes/contacts.routes'
@@ -26,16 +26,33 @@ import { contactMessagesRoutes } from './routes/contact-messages.routes'
 import pageContentRoutes from './routes/page-content.routes'
 import mailRoutes from './routes/mail.routes'
 import { downloadsPublicRoutes } from './routes/downloads.public.routes'
+import { cookiesPublicRoutes, cookiesAdminRoutes } from './routes/cookies.routes'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
 
 function parseCorsOrigins(): string[] {
   const raw = process.env.CORS_ORIGIN ?? 'http://localhost:5173'
-  return raw
+  const origins = raw
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean)
+
+  if (process.env.NODE_ENV !== 'production') {
+    const localPreviewOrigins = [
+      'http://127.0.0.1:4173',
+      'http://localhost:4173',
+      'http://127.0.0.1:4174',
+      'http://localhost:4174',
+      'http://127.0.0.1:5173',
+      'http://localhost:5173',
+    ]
+    for (const origin of localPreviewOrigins) {
+      if (!origins.includes(origin)) origins.push(origin)
+    }
+  }
+
+  return origins
 }
 
 const corsOrigins = parseCorsOrigins()
@@ -73,12 +90,7 @@ app.use(
   express.static(path.join(process.cwd(), 'public', 'uploads')),
 )
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { success: false, message: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' },
-})
-app.use(limiter)
+app.use(createGlobalRateLimiter())
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
@@ -98,6 +110,8 @@ app.use('/api/contact-messages', contactMessagesRoutes)
 app.use('/api/page-content', pageContentRoutes)
 app.use('/api/mail', mailRoutes)
 app.use('/api/public/downloads', downloadsPublicRoutes)
+app.use('/api/public', cookiesPublicRoutes)
+app.use('/api/admin', cookiesAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'Woontegra API' })

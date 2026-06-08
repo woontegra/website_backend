@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { persistSiteAsset, type SiteAssetKind } from '../services/siteAsset.service'
+import { settingsService } from '../services/settings.service'
 
 function parseKind(value: unknown): SiteAssetKind {
   if (value === 'logo' || value === 'favicon' || value === 'general') return value
@@ -15,6 +16,10 @@ export async function adminUploadSiteAsset(req: Request, res: Response) {
 
     const kind = parseKind(req.body?.kind)
     const result = await persistSiteAsset(file, kind)
+
+    if (kind === 'logo') {
+      await settingsService.touchLogo(result.path)
+    }
 
     return res.json({
       success: true,

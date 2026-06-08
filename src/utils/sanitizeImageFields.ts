@@ -12,6 +12,7 @@ const IMAGE_FIELD_KEYS = new Set([
   'ogImage',
   'twitterImage',
   'organizationLogo',
+  'heroImageUrl',
 ])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

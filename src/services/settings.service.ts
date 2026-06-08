@@ -6,6 +6,9 @@ const DEFAULT_SETTINGS = {
   siteName: 'Woontegra',
   siteDescription: 'Yazılım, e-ticaret ve dijital sistemler',
   logo: '/logo.svg',
+  navbarLogoHeight: '42',
+  footerLogoHeight: '28',
+  mobileLogoHeight: '34',
   favicon: '/favicon.svg',
   darkModeLogo: '',
   language: 'tr',
@@ -112,19 +115,50 @@ function sanitizeForAdmin(settings: Record<string, any>) {
   }
 }
 
+const LOGO_HEIGHT_MIN = 24
+const LOGO_HEIGHT_MAX = 90
+
+function parseLogoHeight(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? '').trim(), 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(LOGO_HEIGHT_MAX, Math.max(LOGO_HEIGHT_MIN, parsed))
+}
+
+async function getSettingUpdatedAt(key: string): Promise<string> {
+  const row = await prisma.siteSetting.findUnique({
+    where: { key },
+    select: { updatedAt: true },
+  })
+  return row?.updatedAt?.toISOString() ?? ''
+}
+
 export const settingsService = {
   async getPublic() {
     const settings = await this.getAll()
+    const logoUpdatedAt = await getSettingUpdatedAt('logo')
     return {
       siteName: settings.siteName,
       contactEmail: settings.contactEmail,
       contactPhone: settings.contactPhone,
       contactAddress: settings.contactAddress,
       logo: settings.logo,
+      logoUpdatedAt,
+      navbarLogoHeight: parseLogoHeight(settings.navbarLogoHeight, 42),
+      footerLogoHeight: parseLogoHeight(settings.footerLogoHeight, 28),
+      mobileLogoHeight: parseLogoHeight(settings.mobileLogoHeight, 34),
       favicon: settings.favicon,
       primaryColor: settings.primaryColor,
       secondaryColor: settings.secondaryColor,
     }
+  },
+
+  async touchLogo(path: string) {
+    const logoPath = path.trim() || DEFAULT_SETTINGS.logo
+    await prisma.siteSetting.upsert({
+      where: { key: 'logo' },
+      update: { value: logoPath },
+      create: { key: 'logo', value: logoPath },
+    })
   },
 
   async getPublicTracking() {
@@ -154,7 +188,8 @@ export const settingsService = {
 
   async getAdmin() {
     const settings = await this.getAll()
-    return sanitizeForAdmin(settings)
+    const logoUpdatedAt = await getSettingUpdatedAt('logo')
+    return { ...sanitizeForAdmin(settings), logoUpdatedAt }
   },
 
   async update(data: Record<string, any>) {
