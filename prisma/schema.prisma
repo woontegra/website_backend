@@ -27,15 +27,16 @@ model PageContent {
 
 /// WordPress-benzeri tek alan: HTML içerik
 model Page {
-  id        String     @id @default(uuid())
-  slug      String     @unique
-  title     String
-  content   String     @default("") @db.Text
+  id               String                 @id @default(uuid())
+  slug             String                 @unique
+  title            String
+  content          String                 @default("") @db.Text
   /// draft | published
-  status    String     @default("published")
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  menuItems MenuItem[]
+  status           String                 @default("published")
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  menuItems        MenuItem[]
+  navigationItems  NavigationMenuItem[]
 }
 
 model MediaAsset {
@@ -179,6 +180,346 @@ model CookieInventoryItem {
 
   @@index([category])
   @@index([source])
+}
+
+enum ProductType {
+  DOWNLOAD
+  SAAS
+  SERVICE
+}
+
+/// Mağaza medya kütüphanesi (CMS MediaAsset’tan ayrı)
+enum CatalogMediaFileType {
+  IMAGE
+  DOWNLOAD
+  DOCUMENT
+}
+
+model CatalogMedia {
+  id             String               @id @default(uuid())
+  fileName       String
+  originalName   String
+  mimeType       String
+  fileType       CatalogMediaFileType
+  fileSize      Int
+  url            String
+  storageKey     String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  coverProducts  Product[]          @relation("ProductCoverMedia")
+  downloadProducts Product[]        @relation("ProductDownloadMedia")
+  productGalleryImages ProductGalleryImage[]
+
+  @@index([fileType, createdAt])
+}
+
+model ProductCategory {
+  id          String              @id @default(uuid())
+  name        String
+  slug        String              @unique
+  description String?             @db.Text
+  parentId    String?
+  parent      ProductCategory?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    ProductCategory[]   @relation("CategoryTree")
+  isActive    Boolean             @default(true)
+  sortOrder   Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  products    Product[]
+  navItems    NavigationMenuItem[]
+
+  @@index([parentId, sortOrder])
+  @@index([isActive, sortOrder])
+}
+
+enum NavigationMenuItemType {
+  CUSTOM_URL
+  PRODUCT
+  CATEGORY
+  PAGE
+}
+
+/// Mağaza üst menü (CMS / builder menüsünden bağımsız)
+model NavigationMenuItem {
+  id           String                   @id @default(uuid())
+  label        String
+  type         NavigationMenuItemType
+  url          String?
+  productId    String?
+  product      Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categoryId   String?
+  category     ProductCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  pageId       String?
+  page         Page?                    @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  parentId     String?
+  parent       NavigationMenuItem?      @relation("NavMenuTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     NavigationMenuItem[]     @relation("NavMenuTree")
+  sortOrder    Int                      @default(0)
+  isActive     Boolean                  @default(true)
+  openInNewTab Boolean                  @default(false)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([parentId, sortOrder])
+  @@index([isActive, sortOrder])
+}
+
+/// Mağaza / indirilebilir ürün (ödeme bu fazda yok)
+/// Mağaza müşteri hesabı (panel girişi; admin User ile karışmaz)
+model Customer {
+  id           String             @id @default(uuid())
+  name         String
+  email        String             @unique
+  passwordHash String
+  phone        String?
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  addresses    CustomerAddress[]
+  favorites    CustomerFavorite[]
+  orders       Order[]
+}
+
+model CustomerAddress {
+  id          String   @id @default(uuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  title       String
+  fullName    String
+  phone       String?
+  city        String
+  district    String?
+  addressLine String   @db.Text
+  postalCode  String?
+  taxOffice   String?
+  taxNumber   String?
+  companyName String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+model CustomerFavorite {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([customerId, productId])
+  @@index([customerId])
+}
+
+model Product {
+  id                  String           @id @default(uuid())
+  name                String
+  slug                String           @unique
+  productType         ProductType      @default(DOWNLOAD)
+  shortDescription    String           @default("") @db.Text
+  description         String           @default("") @db.Text
+  price               Decimal          @db.Decimal(12, 2)
+  compareAtPrice      Decimal?         @db.Decimal(12, 2)
+  currency            String           @default("TRY")
+  isActive            Boolean          @default(true)
+  isFeatured          Boolean          @default(false)
+  sortOrder           Int              @default(0)
+  version             String?
+  coverImage          String?
+  downloadUrl         String?
+  categoryId          String?
+  category            ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  seoTitle            String?
+  seoDescription      String?          @db.Text
+  coverImageMediaId   String?
+  coverImageMedia     CatalogMedia?    @relation("ProductCoverMedia", fields: [coverImageMediaId], references: [id], onDelete: SetNull)
+  downloadMediaId     String?
+  downloadMedia       CatalogMedia?    @relation("ProductDownloadMedia", fields: [downloadMediaId], references: [id], onDelete: SetNull)
+  galleryImages       ProductGalleryImage[]
+  orderItems          OrderItem[]
+  favoritedBy         CustomerFavorite[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  navigationItems     NavigationMenuItem[]
+
+  @@index([isActive, sortOrder])
+  @@index([slug])
+  @@index([categoryId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  PAYTR
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum LegalDocumentType {
+  PRE_INFORMATION
+  DISTANCE_SALES
+  KVKK_CLARIFICATION
+  EXPLICIT_CONSENT
+  COMMERCIAL_ELECTRONIC_MESSAGE
+  TERMS_OF_USE
+  PRIVACY_POLICY
+}
+
+/// PayTR mağaza ayarları (tek satır PAYTR)
+model PaymentSettings {
+  id                    String          @id @default(uuid())
+  provider              PaymentProvider @unique
+  isActive              Boolean         @default(false)
+  testMode              Boolean         @default(true)
+  merchantId            String          @default("")
+  merchantKeyEncrypted  String          @default("")
+  merchantSaltEncrypted String          @default("")
+  callbackUrl           String?
+  successUrl            String?
+  failUrl               String?
+  debugOn               Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+/// CMS yasal metinler (ön bilgilendirme, mesafeli satış, KVKK vb.)
+model LegalDocument {
+  id        String            @id @default(uuid())
+  type      LegalDocumentType
+  title     String
+  content   String            @db.Text
+  version   Int               @default(1)
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([type, isActive])
+}
+
+model Order {
+  id                        String        @id @default(uuid())
+  customerId                String?
+  customer                  Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderNo                   String        @unique
+  customerName              String
+  customerEmail             String
+  customerPhone             String?
+  billingType               String?
+  taxOffice                 String?
+  taxNumber                 String?
+  companyName               String?
+  status                    OrderStatus   @default(PENDING)
+  paymentProvider           PaymentProvider @default(PAYTR)
+  subtotal                  Decimal       @db.Decimal(12, 2)
+  total                     Decimal       @db.Decimal(12, 2)
+  currency                  String        @default("TRY")
+  paidAt                    DateTime?
+  downloadEmailSentAt       DateTime?
+  preInfoAcceptedAt         DateTime?
+  distanceSalesAcceptedAt   DateTime?
+  kvkkReadAt                DateTime?
+  marketingConsentAt        DateTime?
+  explicitConsentAt         DateTime?
+  acceptedIp                String?
+  acceptedUserAgent         String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+  items                     OrderItem[]
+  paymentTransactions       PaymentTransaction[]
+  legalSnapshots            OrderLegalSnapshot[]
+
+  @@index([status, createdAt])
+  @@index([customerEmail])
+  @@index([customerId])
+}
+
+/// Sipariş anında kabul edilen yasal metin anlık görüntüsü
+model OrderLegalSnapshot {
+  id           String            @id @default(uuid())
+  orderId      String
+  order        Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  documentType LegalDocumentType
+  title        String
+  content      String             @db.Text
+  version      Int
+  acceptedAt   DateTime          @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  @@index([orderId])
+  @@index([documentType])
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName  String
+  productSlug  String?
+  unitPrice    Decimal  @db.Decimal(12, 2)
+  quantity     Int      @default(1)
+  total        Decimal  @db.Decimal(12, 2)
+  downloadUrl  String?
+
+  @@index([orderId])
+}
+
+model PaymentTransaction {
+  id                  String                   @id @default(uuid())
+  orderId             String
+  order               Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider            PaymentProvider          @default(PAYTR)
+  merchantOid         String                   @unique
+  status              PaymentTransactionStatus @default(PENDING)
+  amount              Decimal                  @db.Decimal(12, 2)
+  currency            String                   @default("TRY")
+  providerRawPayload  Json?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model DownloadLog {
+  id             String   @id @default(uuid())
+  orderId        String?
+  productId      String?
+  customerEmail  String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+/// Ürün vitrin galerisi (yalnızca IMAGE medya; kapak ayrı alanda kalır)
+model ProductGalleryImage {
+  id         String       @id @default(uuid())
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  mediaId    String
+  media      CatalogMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  sortOrder  Int          @default(0)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([productId, mediaId])
+  @@index([productId, sortOrder])
 }
 
 /// Ürün indirme sayaçları — productKey + variant başına tek kayıt

@@ -16,7 +16,10 @@ export function authMiddleware(req: Request & { user?: JwtPayload }, res: Respon
   }
   const token = authHeader.slice(7)
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & { aud?: string }
+    if (decoded.aud === 'customer') {
+      return res.status(401).json({ success: false, message: 'Bu endpoint için admin oturumu gerekli' })
+    }
     req.user = decoded
     next()
   } catch {

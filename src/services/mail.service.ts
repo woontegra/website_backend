@@ -37,5 +37,46 @@ export const mailService = {
         <p><b>Not:</b> ${data.note || 'Yok'}</p>
       `
     })
-  }
+  },
+
+  async sendPaidDownloadOrder(data: {
+    customerName: string
+    customerEmail: string
+    orderNo: string
+    lines: { productName: string; downloadUrl: string }[]
+  }) {
+    const support = 'info@woontegra.com'
+    const safeName = escapeHtml(data.customerName)
+    const safeOrder = escapeHtml(data.orderNo)
+    const links = data.lines
+      .filter((l) => l.downloadUrl)
+      .map((l) => {
+        const name = escapeHtml(l.productName)
+        const href = encodeURI(l.downloadUrl)
+        return `<li><strong>${name}</strong> — <a href="${href}">İndir</a></li>`
+      })
+      .join('')
+
+    await transporter.sendMail({
+      from: '"Woontegra" <info@woontegra.com>',
+      to: data.customerEmail,
+      subject: `Siparişiniz onaylandı — ${data.orderNo}`,
+      html: `
+        <p>Merhaba ${safeName},</p>
+        <p>Ödemeniz alındı. Sipariş numaranız: <b>${safeOrder}</b></p>
+        <p><b>İndirme bağlantıları:</b></p>
+        <ul>${links}</ul>
+        <p>Sorularınız için: <a href="mailto:${support}">${support}</a></p>
+        <p>İyi çalışmalar,<br/>Woontegra</p>
+      `,
+    })
+  },
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }

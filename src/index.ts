@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './types/express-request-customer'
 // Railway: DATABASE_URL referansı yoksa PGHOST/PGUSER/… ile URL üret (scripts/resolve-database-url.cjs)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
@@ -27,9 +28,26 @@ import pageContentRoutes from './routes/page-content.routes'
 import mailRoutes from './routes/mail.routes'
 import { downloadsPublicRoutes } from './routes/downloads.public.routes'
 import { cookiesPublicRoutes, cookiesAdminRoutes } from './routes/cookies.routes'
+import { productsAdminRoutes } from './routes/products.admin.routes'
+import { productsPublicRoutes } from './routes/products.public.routes'
+import { catalogMediaAdminRoutes } from './routes/catalogMedia.admin.routes'
+import { productCategoriesAdminRoutes } from './routes/productCategories.admin.routes'
+import { productCategoriesPublicRoutes } from './routes/productCategories.public.routes'
+import { navigationMenuAdminRoutes } from './routes/navigationMenu.admin.routes'
+import { ordersPublicRoutes } from './routes/orders.public.routes'
+import { ordersAdminRoutes } from './routes/orders.admin.routes'
+import { paymentsPublicRoutes } from './routes/payments.public.routes'
+import { navigationMenuPublicRoutes } from './routes/navigationMenu.public.routes'
+import { legalDocumentsPublicRoutes } from './routes/legalDocuments.public.routes'
+import { legalDocumentsAdminRoutes } from './routes/legalDocuments.admin.routes'
+import { paymentSettingsAdminRoutes } from './routes/paymentSettings.admin.routes'
+import { customersPublicRoutes } from './routes/customers.public.routes'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
+
+/** Railway / reverse proxy: X-Forwarded-For için (express-rate-limit ERR_ERL_UNEXPECTED_X_FORWARDED_FOR) */
+app.set('trust proxy', 1)
 
 function parseCorsOrigins(): string[] {
   const raw = process.env.CORS_ORIGIN ?? 'http://localhost:5173'
@@ -61,6 +79,12 @@ app.use(
   helmet({
     // Logo/favicon gibi public upload'lar frontend (Vercel) üzerinden <img> ile yüklenebilsin
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'frame-src': ["'self'", 'https://www.paytr.com'],
+      },
+    },
   }),
 )
 
@@ -111,7 +135,21 @@ app.use('/api/page-content', pageContentRoutes)
 app.use('/api/mail', mailRoutes)
 app.use('/api/public/downloads', downloadsPublicRoutes)
 app.use('/api/public', cookiesPublicRoutes)
+app.use('/api/products', productsPublicRoutes)
+app.use('/api/legal-documents', legalDocumentsPublicRoutes)
+app.use('/api/orders', ordersPublicRoutes)
+app.use('/api/customers', customersPublicRoutes)
+app.use('/api/payments', paymentsPublicRoutes)
+app.use('/api/product-categories', productCategoriesPublicRoutes)
+app.use('/api/navigation-menu', navigationMenuPublicRoutes)
 app.use('/api/admin', cookiesAdminRoutes)
+app.use('/api/admin', productsAdminRoutes)
+app.use('/api/admin', catalogMediaAdminRoutes)
+app.use('/api/admin', productCategoriesAdminRoutes)
+app.use('/api/admin', navigationMenuAdminRoutes)
+app.use('/api/admin', ordersAdminRoutes)
+app.use('/api/admin', paymentSettingsAdminRoutes)
+app.use('/api/admin', legalDocumentsAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'Woontegra API' })
