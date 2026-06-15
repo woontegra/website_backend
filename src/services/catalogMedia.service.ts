@@ -3,6 +3,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import { CatalogMediaFileType, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { buildSafeCatalogStorageFilename, maybeFixMojibakeFilename } from '../utils/uploadFilename'
 
 const UPLOAD_SUBDIR = 'catalog'
 
@@ -66,7 +67,7 @@ function mapRow(row: {
   return {
     id: row.id,
     fileName: row.fileName,
-    originalName: row.originalName,
+    originalName: maybeFixMojibakeFilename(row.originalName),
     mimeType: row.mimeType,
     fileType: row.fileType,
     fileSize: row.fileSize,
@@ -95,10 +96,12 @@ export const catalogMediaService = {
   },
 
   async persistUpload(file: Express.Multer.File): Promise<CatalogMediaDto> {
-    const fileType = classifyCatalogFileType(file.mimetype, file.originalname)
-    const ext = safeExt(file.originalname, file.mimetype)
+    const rawOriginal = maybeFixMojibakeFilename(file.originalname || '')
+    const fileType = classifyCatalogFileType(file.mimetype, rawOriginal)
+    const ext = safeExt(rawOriginal, file.mimetype)
     const id = randomUUID()
-    const fileName = `${id}.${ext}`
+    const { storageFileName, displayOriginalName } = buildSafeCatalogStorageFilename(rawOriginal, ext)
+    const fileName = storageFileName
     const dir = resolveCatalogUploadDir()
     const absolutePath = path.join(dir, fileName)
     fs.writeFileSync(absolutePath, file.buffer)
@@ -108,7 +111,7 @@ export const catalogMediaService = {
       data: {
         id,
         fileName,
-        originalName: file.originalname || fileName,
+        originalName: displayOriginalName,
         mimeType: file.mimetype,
         fileType,
         fileSize: file.size,

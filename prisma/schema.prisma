@@ -278,6 +278,7 @@ model Customer {
   addresses    CustomerAddress[]
   favorites    CustomerFavorite[]
   orders       Order[]
+  licenses     License[]
 }
 
 model CustomerAddress {
@@ -324,6 +325,12 @@ model Product {
   compareAtPrice      Decimal?         @db.Decimal(12, 2)
   currency            String           @default("TRY")
   isActive            Boolean          @default(true)
+  /// SAAS vb.: false iken sepete eklenemez; DOWNLOAD için varsayılan true
+  purchaseEnabled     Boolean          @default(true)
+  /// Yıllık lisans ay sayısı (SaaS); masaüstü ürünlerde bilgi amaçlı
+  licenseMonths       Int              @default(12)
+  /// Her satır bir madde; public ürün detayında listelenir
+  featureBullets      String           @default("") @db.Text
   isFeatured          Boolean          @default(false)
   sortOrder           Int              @default(0)
   version             String?
@@ -340,6 +347,7 @@ model Product {
   galleryImages       ProductGalleryImage[]
   orderItems          OrderItem[]
   favoritedBy         CustomerFavorite[]
+  licenses            License[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   navigationItems     NavigationMenuItem[]
@@ -351,6 +359,8 @@ model Product {
 
 enum OrderStatus {
   PENDING
+  /// Havale/EFT admin onayı sonrası; ödeme alındı, teslimat süreci
+  PROCESSING
   PAID
   FAILED
   CANCELLED
@@ -358,12 +368,24 @@ enum OrderStatus {
 
 enum PaymentProvider {
   PAYTR
+  BANK_TRANSFER
 }
 
 enum PaymentTransactionStatus {
   PENDING
   SUCCESS
   FAILED
+}
+
+enum LicenseLifecycleStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum LicenseActivationStatus {
+  ACTIVE
+  REVOKED
 }
 
 enum LegalDocumentType {
@@ -374,6 +396,21 @@ enum LegalDocumentType {
   COMMERCIAL_ELECTRONIC_MESSAGE
   TERMS_OF_USE
   PRIVACY_POLICY
+}
+
+/// Havale/EFT — vitrinde gösterilecek banka bilgisi (tek satır; admin CRUD sonrası genişletilebilir)
+model BankTransferSettings {
+  id            String   @id
+  isPublished   Boolean  @default(false)
+  bankName      String   @default("")
+  branchName    String   @default("")
+  accountNumber String   @default("")
+  accountHolder String   @default("")
+  iban          String   @default("")
+  currency      String   @default("TRY")
+  referenceNote String   @default("") @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 /// PayTR mağaza ayarları (tek satır PAYTR)
@@ -425,6 +462,12 @@ model Order {
   total                     Decimal       @db.Decimal(12, 2)
   currency                  String        @default("TRY")
   paidAt                    DateTime?
+  /// Havale/EFT: bankaya geçen ödeme tarihi (admin girişi)
+  bankTransferPaymentDate   DateTime?
+  bankTransferAdminNote     String?       @db.Text
+  bankTransferReference     String?       @db.VarChar(500)
+  paymentConfirmedAt        DateTime?
+  paymentConfirmedById      String?
   downloadEmailSentAt       DateTime?
   preInfoAcceptedAt         DateTime?
   distanceSalesAcceptedAt   DateTime?
@@ -433,15 +476,24 @@ model Order {
   explicitConsentAt         DateTime?
   acceptedIp                String?
   acceptedUserAgent         String?
+  /// Admin iç notu (müşteri görmez)
+  adminNote                 String?       @db.Text
+  shippingCarrier           String?       @db.VarChar(200)
+  shippingTrackingNumber    String?       @db.VarChar(200)
+  shippingStatus            String?       @db.VarChar(120)
+  /// Soft delete: arşivlenmiş siparişler listede gösterilmez
+  archivedAt                DateTime?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
   items                     OrderItem[]
   paymentTransactions       PaymentTransaction[]
   legalSnapshots            OrderLegalSnapshot[]
+  licenses                  License[]
 
   @@index([status, createdAt])
   @@index([customerEmail])
   @@index([customerId])
+  @@index([archivedAt])
 }
 
 /// Sipariş anında kabul edilen yasal metin anlık görüntüsü
@@ -473,8 +525,56 @@ model OrderItem {
   quantity     Int      @default(1)
   total        Decimal  @db.Decimal(12, 2)
   downloadUrl  String?
+  licenses     License[]
 
   @@index([orderId])
+}
+
+/// Sipariş satırı başına (adet kadar) masaüstü / indirilebilir ürün lisansı
+model License {
+  id            String                 @id @default(uuid())
+  licenseKey    String                 @unique
+  orderId       String
+  order         Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderNo       String
+  orderItemId   String
+  orderItem     OrderItem              @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  unitIndex     Int
+  customerId    String?
+  customer      Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerEmail String
+  productId     String?
+  product       Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName   String
+  status        LicenseLifecycleStatus @default(ACTIVE)
+  maxDevices    Int                    @default(1)
+  expiresAt     DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  activations   LicenseActivation[]
+
+  @@unique([orderItemId, unitIndex])
+  @@index([orderId])
+  @@index([orderNo])
+  @@index([customerEmail])
+}
+
+model LicenseActivation {
+  id               String                 @id @default(uuid())
+  licenseId        String
+  license          License                @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  deviceHash       String
+  deviceName       String?
+  platform         String?
+  appVersion       String?
+  firstActivatedAt DateTime               @default(now())
+  lastValidatedAt  DateTime?
+  status           LicenseActivationStatus @default(ACTIVE)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([licenseId, deviceHash])
+  @@index([licenseId])
 }
 
 model PaymentTransaction {

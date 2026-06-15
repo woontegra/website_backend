@@ -154,13 +154,13 @@ async function assertNavTargetsValid(m: CreateNav): Promise<void> {
   if (t === 'PRODUCT') {
     if (!m.productId?.trim()) throw new Error('Ürün seçimi zorunludur')
     const p = await prisma.product.findUnique({ where: { id: m.productId } })
-    if (!p?.isActive) throw new Error('Geçerli ve aktif bir ürün seçin')
+    if (!p) throw new Error('Ürün bulunamadı')
     return
   }
   if (t === 'CATEGORY') {
     if (!m.categoryId?.trim()) throw new Error('Kategori seçimi zorunludur')
     const c = await prisma.productCategory.findUnique({ where: { id: m.categoryId } })
-    if (!c?.isActive) throw new Error('Geçerli ve aktif bir kategori seçin')
+    if (!c) throw new Error('Kategori bulunamadı')
     return
   }
   if (t === 'PAGE') {

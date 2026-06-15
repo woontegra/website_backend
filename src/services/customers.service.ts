@@ -1,7 +1,10 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { Prisma } from '@prisma/client'
+import { PaymentProvider, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { maskLicenseKeyForDisplay } from '../lib/licenseKey'
+import { getBankTransferCustomerInfo } from './bankTransferSettings.service'
+import { resolveOrderPaymentRowStatus } from './orders.service'
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
 const SALT_ROUNDS = 10
@@ -242,25 +245,51 @@ export const customersService = {
 
   async listOrders(customerId: string) {
     const rows = await prisma.order.findMany({
-      where: { customerId },
+      where: { customerId, archivedAt: null },
       orderBy: { createdAt: 'desc' },
-      include: { paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } } },
+      include: {
+        paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
+        items: {
+          orderBy: { id: 'asc' },
+          select: {
+            productName: true,
+            product: { select: { productType: true } },
+          },
+        },
+      },
     })
-    return rows.map((o) => ({
-      orderNo: o.orderNo,
-      status: o.status,
-      total: Number(o.total),
-      currency: o.currency,
-      createdAt: o.createdAt.toISOString(),
-      paymentStatus: o.paymentTransactions[0]?.status ?? null,
-    }))
+    return rows.map((o) => {
+      const names = o.items.map((i) => i.productName).filter(Boolean)
+      const first = names[0]?.trim() ?? 'Ürün'
+      const extra = names.length > 1 ? names.length - 1 : 0
+      const productSummary = extra > 0 ? `${first} ve ${extra} ürün daha` : first
+      const types = o.items.map((i) => i.product?.productType ?? null).filter(Boolean) as string[]
+      return {
+        orderNo: o.orderNo,
+        status: o.status,
+        total: Number(o.total),
+        currency: o.currency,
+        createdAt: o.createdAt.toISOString(),
+        paymentStatus: resolveOrderPaymentRowStatus(o),
+        paymentProvider: o.paymentProvider,
+        productSummary,
+        itemCount: o.items.length,
+        shippingCarrier: o.shippingCarrier,
+        shippingTrackingNumber: o.shippingTrackingNumber,
+        shippingStatus: o.shippingStatus,
+        lineProductTypes: types,
+      }
+    })
   },
 
   async getMyOrder(customerId: string, orderNo: string) {
     const order = await prisma.order.findFirst({
       where: { orderNo: orderNo.trim(), customerId },
       include: {
-        items: { orderBy: { id: 'asc' } },
+        items: {
+          orderBy: { id: 'asc' },
+          include: { product: { select: { productType: true } } },
+        },
         paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     })
@@ -269,24 +298,61 @@ export const customersService = {
       err.status = 404
       throw err
     }
-    const pay = order.paymentTransactions[0]
+    const bankPending =
+      order.paymentProvider === PaymentProvider.BANK_TRANSFER && order.status === 'PENDING'
+    const bankTransferInfo = bankPending
+      ? await getBankTransferCustomerInfo({
+          orderNo: order.orderNo,
+          total: Number(order.total),
+          currency: order.currency,
+        })
+      : null
+
+    const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
+    let licenseCodesMasked: string[] | undefined
+    if (paidLike) {
+      const licenseRows = await prisma.license.findMany({
+        where: { orderId: order.id },
+        orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+        select: { licenseKey: true },
+      })
+      if (licenseRows.length > 0) {
+        licenseCodesMasked = licenseRows.map((r) => maskLicenseKeyForDisplay(r.licenseKey))
+      }
+    }
+
     return {
       orderNo: order.orderNo,
       status: order.status,
       total: Number(order.total),
+      subtotal: Number(order.subtotal),
       currency: order.currency,
       customerName: order.customerName,
       customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      billingType: order.billingType,
+      companyName: order.companyName,
+      taxOffice: order.taxOffice,
+      taxNumber: order.taxNumber,
       paidAt: order.paidAt?.toISOString() ?? null,
       createdAt: order.createdAt.toISOString(),
-      paymentTransactionStatus: pay?.status ?? null,
+      paymentStatus: resolveOrderPaymentRowStatus(order),
+      paymentProvider: order.paymentProvider,
+      paymentConfirmedAt: order.paymentConfirmedAt?.toISOString() ?? null,
+      bankTransferPaymentDate: order.bankTransferPaymentDate?.toISOString() ?? null,
+      shippingCarrier: order.shippingCarrier,
+      shippingTrackingNumber: order.shippingTrackingNumber,
+      shippingStatus: order.shippingStatus,
+      bankTransferInfo,
+      licenseCodesMasked,
       items: order.items.map((i) => ({
         productName: i.productName,
         productSlug: i.productSlug,
+        productType: i.product?.productType ?? null,
         quantity: i.quantity,
         unitPrice: Number(i.unitPrice),
         total: Number(i.total),
-        downloadUrl: order.status === 'PAID' ? i.downloadUrl : null,
+        downloadUrl: order.status === 'PAID' || order.status === 'PROCESSING' ? i.downloadUrl : null,
       })),
     }
   },
@@ -304,6 +370,7 @@ export const customersService = {
             price: true,
             currency: true,
             coverImage: true,
+            coverImageMedia: { select: { url: true } },
             isActive: true,
           },
         },
@@ -318,7 +385,7 @@ export const customersService = {
         slug: r.product.slug,
         price: Number(r.product.price),
         currency: r.product.currency,
-        coverImage: r.product.coverImage,
+        coverImage: r.product.coverImageMedia?.url?.trim() || r.product.coverImage?.trim() || null,
         createdAt: r.createdAt.toISOString(),
       }))
   },

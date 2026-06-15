@@ -28,7 +28,8 @@ export function authMiddleware(req: Request & { user?: JwtPayload }, res: Respon
 }
 
 export function adminOnly(req: Request & { user?: JwtPayload }, res: Response, next: NextFunction) {
-  if (!req.user || req.user.role !== 'admin') {
+  const r = req.user?.role
+  if (!req.user || (r !== 'admin' && r !== 'superadmin')) {
     return res.status(403).json({ success: false, message: 'Bu işlem için admin yetkisi gerekli' })
   }
   next()

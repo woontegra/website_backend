@@ -1,5 +1,8 @@
 import { Prisma, ProductType } from '@prisma/client'
+import { getProductOrderDenialReason, type ProductOrderCheckRow } from '../lib/productOrderValidation'
+import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { prisma } from '../lib/prisma'
+import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { slugifyName } from '../utils/slugify'
 
@@ -41,6 +44,9 @@ export type AdminProductDto = {
   compareAtPrice: number | null
   currency: string
   isActive: boolean
+  purchaseEnabled: boolean
+  licenseMonths: number
+  featureBullets: string
   isFeatured: boolean
   sortOrder: number
   version: string | null
@@ -57,6 +63,8 @@ export type AdminProductDto = {
   galleryImages: AdminProductGalleryImage[]
   createdAt: string
   updatedAt: string
+  /** DOWNLOAD + aktif + satın alınabilir; teslimat URL yok veya satın alma/mail için çözümlenemiyor */
+  deliveryLinkMissing: boolean
 }
 
 export type PublicProductGalleryImage = {
@@ -77,6 +85,8 @@ export type PublicProductListItem = {
   isFeatured: boolean
   sortOrder: number
   version: string | null
+  purchaseEnabled: boolean
+  licenseMonths: number
   coverImage: string | null
   category: ProductCategoryBrief | null
 }
@@ -86,6 +96,7 @@ export type PublicProductDetail = PublicProductListItem & {
   seoTitle: string | null
   seoDescription: string | null
   galleryImages: PublicProductGalleryImage[]
+  featureBullets: string
 }
 
 function toNumber(d: Prisma.Decimal | null | undefined): number | null {
@@ -104,6 +115,9 @@ type ProductRow = {
   compareAtPrice: Prisma.Decimal | null
   currency: string
   isActive: boolean
+  purchaseEnabled: boolean
+  licenseMonths: number
+  featureBullets: string
   isFeatured: boolean
   sortOrder: number
   version: string | null
@@ -138,6 +152,25 @@ type ProductRow = {
   }[]
 }
 
+function effectiveProductCoverImage(p: Pick<ProductRow, 'coverImage' | 'coverImageMedia'>): string | null {
+  const fromMedia = p.coverImageMedia?.url?.trim()
+  if (fromMedia) return fromMedia
+  return p.coverImage?.trim() || null
+}
+
+function effectiveDownloadUrlForProduct(p: Pick<ProductRow, 'downloadUrl' | 'downloadMedia'>): string {
+  return (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '') || ''
+}
+
+/** Admin listesi: satın alınabilir DOWNLOAD ürünlerinde teslimat linki eksik veya kullanılamıyor mu */
+function adminProductDeliveryLinkMissing(p: ProductRow): boolean {
+  if (p.productType !== ProductType.DOWNLOAD) return false
+  if (!p.isActive || !p.purchaseEnabled) return false
+  const u = effectiveDownloadUrlForProduct(p)
+  if (!u) return true
+  return !resolveMailDownloadHref(u)
+}
+
 function mapAdmin(p: ProductRow): AdminProductDto {
   return {
     id: p.id,
@@ -150,6 +183,9 @@ function mapAdmin(p: ProductRow): AdminProductDto {
     compareAtPrice: toNumber(p.compareAtPrice),
     currency: p.currency,
     isActive: p.isActive,
+    purchaseEnabled: p.purchaseEnabled,
+    licenseMonths: p.licenseMonths,
+    featureBullets: p.featureBullets ?? '',
     isFeatured: p.isFeatured,
     sortOrder: p.sortOrder,
     version: p.version,
@@ -184,6 +220,7 @@ function mapAdmin(p: ProductRow): AdminProductDto {
     })),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+    deliveryLinkMissing: adminProductDeliveryLinkMissing(p),
   }
 }
 
@@ -207,7 +244,9 @@ function mapPublicList(p: ProductRow): PublicProductListItem {
     isFeatured: p.isFeatured,
     sortOrder: p.sortOrder,
     version: p.version,
-    coverImage: p.coverImage,
+    purchaseEnabled: p.purchaseEnabled,
+    licenseMonths: p.licenseMonths,
+    coverImage: effectiveProductCoverImage(p),
     category: publicCategory(p.category ?? undefined),
   }
 }
@@ -226,6 +265,7 @@ function mapPublicDetail(p: ProductRow): PublicProductDetail {
     seoTitle: p.seoTitle,
     seoDescription: p.seoDescription,
     galleryImages: gallery,
+    featureBullets: p.featureBullets ?? '',
   }
 }
 
@@ -257,6 +297,9 @@ const productPublicSelect = {
   compareAtPrice: true,
   currency: true,
   isActive: true,
+  purchaseEnabled: true,
+  licenseMonths: true,
+  featureBullets: true,
   isFeatured: true,
   sortOrder: true,
   version: true,
@@ -289,6 +332,9 @@ type CreateInput = {
   compareAtPrice?: number | null
   currency?: string
   isActive?: boolean
+  purchaseEnabled?: boolean
+  licenseMonths?: number
+  featureBullets?: string
   isFeatured?: boolean
   sortOrder?: number
   version?: string | null
@@ -334,6 +380,25 @@ function normalizeUrl(url: string | null | undefined): string | null {
   if (url === undefined || url === null) return null
   const t = url.trim()
   return t === '' ? null : t
+}
+
+/** Aktif ve satın alınabilir DOWNLOAD ürünlerinde dosya veya URL zorunlu. */
+function assertActiveDownloadDeliverable(row: {
+  productType: ProductType
+  isActive: boolean
+  purchaseEnabled: boolean
+  downloadUrl: string | null
+  downloadMedia: { url: string } | null
+}): void {
+  if (row.productType !== ProductType.DOWNLOAD) return
+  if (!row.isActive || !row.purchaseEnabled) return
+  const u = (row.downloadUrl?.trim() || row.downloadMedia?.url?.trim() || '') || ''
+  if (!u) {
+    throw new Error('Dijital ürünlerde indirme/teslimat bağlantısı zorunludur.')
+  }
+  if (!resolveMailDownloadHref(u)) {
+    throw new Error('Dijital ürünlerde indirme/teslimat bağlantısı zorunludur.')
+  }
 }
 
 async function resolveMediaIds(data: {
@@ -479,6 +544,18 @@ export const productsService = {
     if (mediaPatch.downloadUrl !== undefined) downloadUrl = mediaPatch.downloadUrl
     else if (data.downloadUrl !== undefined) downloadUrl = normalizeUrl(data.downloadUrl)
 
+    const dmForAssert =
+      mediaPatch.downloadMediaId && mediaPatch.downloadUrl != null && String(mediaPatch.downloadUrl).trim() !== ''
+        ? { url: String(mediaPatch.downloadUrl).trim() }
+        : null
+    assertActiveDownloadDeliverable({
+      productType: parseProductType(data.productType),
+      isActive: data.isActive !== false,
+      purchaseEnabled: data.purchaseEnabled !== false,
+      downloadUrl,
+      downloadMedia: dmForAssert,
+    })
+
     const row = await prisma.product.create({
       data: {
         name: data.name.trim(),
@@ -493,6 +570,12 @@ export const productsService = {
             : new Prisma.Decimal(data.compareAtPrice),
         currency: (data.currency ?? 'TRY').trim() || 'TRY',
         isActive: data.isActive !== false,
+        purchaseEnabled: data.purchaseEnabled !== false,
+        licenseMonths:
+          typeof data.licenseMonths === 'number' && Number.isFinite(data.licenseMonths) && data.licenseMonths > 0
+            ? Math.min(120, Math.floor(data.licenseMonths))
+            : 12,
+        featureBullets: (data.featureBullets ?? '').trim(),
         isFeatured: data.isFeatured === true,
         sortOrder: typeof data.sortOrder === 'number' && Number.isFinite(data.sortOrder) ? data.sortOrder : 0,
         version: data.version?.trim() || null,
@@ -530,6 +613,13 @@ export const productsService = {
     }
     if (data.currency !== undefined) patch.currency = data.currency.trim() || 'TRY'
     if (data.isActive !== undefined) patch.isActive = data.isActive
+    if (data.purchaseEnabled !== undefined) patch.purchaseEnabled = data.purchaseEnabled
+    if (data.licenseMonths !== undefined) {
+      const m = typeof data.licenseMonths === 'number' ? data.licenseMonths : Number.parseInt(String(data.licenseMonths), 10)
+      patch.licenseMonths =
+        Number.isFinite(m) && m > 0 ? Math.min(120, Math.floor(m as number)) : 12
+    }
+    if (data.featureBullets !== undefined) patch.featureBullets = data.featureBullets.trim()
     if (data.isFeatured !== undefined) patch.isFeatured = data.isFeatured
     if (data.sortOrder !== undefined) patch.sortOrder = data.sortOrder
     if (data.version !== undefined) patch.version = data.version?.trim() || null
@@ -582,35 +672,89 @@ export const productsService = {
       where: { id },
       include: productInclude,
     })
+    assertActiveDownloadDeliverable(full)
     return mapAdmin(full as unknown as ProductRow)
   },
 
-  /** Sepet/checkout: aktif DOWNLOAD ürün özeti (indirme URL dönmez). */
+  /** Sepet/checkout: sipariş oluşturma ile aynı ürün çözümleme ve satın alınabilirlik kuralları */
   async cartPreview(productIds: string[]) {
-    const ids = [...new Set(productIds.map((id) => id.trim()).filter(Boolean))]
-    if (ids.length === 0) return []
+    const rawKeys = [...new Set(productIds.map((id) => id.trim()).filter(Boolean))]
+    if (rawKeys.length === 0) return []
+
+    const resolved = await resolveCartProductKeys(rawKeys)
+    const canonicalToRaw = new Map<string, string[]>()
+    for (const rk of rawKeys) {
+      const cid = resolved.get(rk)
+      if (!cid) continue
+      if (!canonicalToRaw.has(cid)) canonicalToRaw.set(cid, [])
+      canonicalToRaw.get(cid)!.push(rk)
+    }
+
+    const canonicalIds = [...canonicalToRaw.keys()]
+    if (canonicalIds.length === 0) return []
+
     const rows = await prisma.product.findMany({
-      where: { id: { in: ids }, isActive: true, productType: ProductType.DOWNLOAD },
+      where: { id: { in: canonicalIds } },
       select: {
         id: true,
         name: true,
         slug: true,
+        productType: true,
         price: true,
         currency: true,
+        isActive: true,
+        purchaseEnabled: true,
         coverImage: true,
+        coverImageMedia: { select: { url: true } },
         downloadUrl: true,
         downloadMedia: { select: { url: true } },
       },
     })
-    return rows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      price: toNumber(p.price)!,
-      currency: p.currency,
-      coverImage: p.coverImage,
-      hasDownload: !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim()),
-    }))
+
+    const out: {
+      id: string
+      name: string
+      slug: string
+      productType: ProductType
+      price: number
+      currency: string
+      coverImage: string | null
+      hasDownload: boolean
+      matchKeys: string[]
+    }[] = []
+
+    for (const p of rows) {
+      const row: ProductOrderCheckRow = {
+        id: p.id,
+        slug: p.slug,
+        name: p.name,
+        isActive: p.isActive,
+        productType: p.productType,
+        purchaseEnabled: p.purchaseEnabled,
+        downloadUrl: p.downloadUrl,
+        downloadMedia: p.downloadMedia,
+      }
+      if (getProductOrderDenialReason(row)) continue
+
+      const rawFor = canonicalToRaw.get(p.id) ?? []
+      const matchKeys = [...new Set([p.id, p.slug, ...rawFor].filter((k): k is string => !!k && String(k).trim() !== ''))]
+
+      out.push({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        productType: p.productType,
+        price: toNumber(p.price)!,
+        currency: p.currency,
+        coverImage: p.coverImageMedia?.url?.trim() || p.coverImage?.trim() || null,
+        hasDownload:
+          p.productType === ProductType.DOWNLOAD
+            ? !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim())
+            : true,
+        matchKeys,
+      })
+    }
+    return out
   },
 
   /** Ödeme sonrası uyumluluk için hard delete yok — ürün pasife alınır. */

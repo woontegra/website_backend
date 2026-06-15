@@ -1,20 +1,17 @@
 import crypto from 'crypto'
 import type { Request } from 'express'
 import { Prisma } from '@prisma/client'
+import { getClientIp } from '../lib/clientIp'
 import { paytrCallbackUrlLooksLocalOrPrivate } from '../lib/paytrCallbackUrl'
 import { buildPaytrMerchantReturnUrl } from '../lib/paytrReturnUrl'
 import { prisma } from '../lib/prisma'
-import { mailService } from './mail.service'
+import {
+  buildPaidDownloadMailLinesFromItems,
+  checkOrderDownloadLinesForPaidMail,
+  fulfillPaidOrderDelivery,
+  type OrderItemForDeliveryCheck,
+} from './orderFulfillment.service'
 import { getEffectivePaytrConfig, resolvePaytrCallbackUrlForLogging } from './paymentSettings.service'
-
-export function getClientIp(req: Request): string {
-  const xf = req.headers['x-forwarded-for']
-  if (typeof xf === 'string' && xf.length > 0) {
-    return xf.split(',')[0].trim().slice(0, 39)
-  }
-  const raw = req.socket.remoteAddress || '127.0.0.1'
-  return String(raw).replace(/^::ffff:/, '').slice(0, 39)
-}
 
 function paytrHmacBase64(secretKey: string, data: string): string {
   return crypto.createHmac('sha256', secretKey).update(data, 'utf8').digest('base64')
@@ -71,7 +68,20 @@ export const paytrService = {
 
     const order = await prisma.order.findUnique({
       where: { orderNo },
-      include: { items: { orderBy: { id: 'asc' } } },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+          include: {
+            product: {
+              select: {
+                productType: true,
+                downloadUrl: true,
+                downloadMedia: { select: { url: true } },
+              },
+            },
+          },
+        },
+      },
     })
 
     if (!order) {
@@ -82,6 +92,14 @@ export const paytrService = {
 
     if (order.status !== 'PENDING') {
       const err = new Error('Bu sipariş için ödeme başlatılamaz') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+
+    if (order.paymentProvider === 'BANK_TRANSFER') {
+      const err = new Error('Bu sipariş Havale/EFT ile oluşturulmuştur; kart ödemesi başlatılamaz') as Error & {
+        status: number
+      }
       err.status = 400
       throw err
     }
@@ -98,6 +116,17 @@ export const paytrService = {
     if (order.items.length === 0) {
       const err = new Error('Sipariş kalemi bulunamadı') as Error & { status: number }
       err.status = 400
+      throw err
+    }
+
+    const deliveryItems = order.items as unknown as OrderItemForDeliveryCheck[]
+    const mailLines = buildPaidDownloadMailLinesFromItems(deliveryItems)
+    if (mailLines.length > 0 && !checkOrderDownloadLinesForPaidMail(deliveryItems)) {
+      const msg =
+        'Bu ürün şu anda satın almaya uygun değil. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.'
+      const err = new Error(msg) as Error & { status: number; publicMessage?: string }
+      err.status = 400
+      err.publicMessage = msg
       throw err
     }
 
@@ -167,6 +196,17 @@ export const paytrService = {
       err.status = 500
       throw err
     }
+
+    console.info('[paytr] start (PayTR get-token)', {
+      orderNo: order.orderNo,
+      merchant_oid: paytrMerchantOid,
+      merchant_ok_url: merchantOkUrlFinal,
+      merchant_fail_url: merchantFailUrlFinal,
+      callback_url_for_panel_or_env: cbProbe || '(boş — Bildirim URL PayTR mağaza panelinde)',
+      payment_amount: String(paymentAmount),
+      user_ip: userIp,
+      email,
+    })
 
     await prisma.paymentTransaction.deleteMany({
       where: {
@@ -256,6 +296,8 @@ export const paytrService = {
       merchant_oid: merchantOid,
       status,
       total_amount: totalAmount,
+      failed_reason_code: payload.failed_reason_code ?? '',
+      failed_reason_msg: payload.failed_reason_msg ?? '',
     })
 
     if (!merchantOid || !status || !totalAmount || !hash) {
@@ -301,6 +343,8 @@ export const paytrService = {
       orderNo: order?.orderNo ?? null,
       orderId: order?.id ?? null,
       orderStatusBefore: order?.status ?? null,
+      failed_reason_code: payload.failed_reason_code ?? '',
+      failed_reason_msg: payload.failed_reason_msg ?? '',
     })
 
     if (!order) {
@@ -308,6 +352,11 @@ export const paytrService = {
       const err = new Error('Sipariş bulunamadı') as Error & { status: number }
       err.status = 404
       throw err
+    }
+
+    if (order.paymentProvider === 'BANK_TRANSFER') {
+      console.warn('[paytr] callback yok sayıldı (Havale/EFT siparişi)', { merchantOid, orderNo: order.orderNo })
+      return
     }
 
     const expectedKurus = paymentAmountKurus(order.total)
@@ -330,6 +379,7 @@ export const paytrService = {
         merchantOid,
         orderNo: order.orderNo,
         callbackStatus: status,
+        orderStatusAfter: order.status,
       })
       return
     }
@@ -376,48 +426,10 @@ export const paytrService = {
         merchantOid,
         orderNo: order.orderNo,
         previousOrderStatus: previousStatus,
+        orderStatusAfter: 'PAID',
       })
 
-      const fresh = await prisma.order.findUnique({
-        where: { id: order.id },
-        include: { items: { orderBy: { id: 'asc' } } },
-      })
-
-      if (fresh && !fresh.downloadEmailSentAt) {
-        const lines = fresh.items
-          .map((i) => ({ productName: i.productName, downloadUrl: i.downloadUrl ?? '' }))
-          .filter((l) => l.downloadUrl)
-        if (lines.length > 0) {
-          try {
-            await mailService.sendPaidDownloadOrder({
-              customerName: fresh.customerName,
-              customerEmail: fresh.customerEmail,
-              orderNo: fresh.orderNo,
-              lines,
-            })
-            await prisma.order.update({
-              where: { id: fresh.id },
-              data: { downloadEmailSentAt: new Date() },
-            })
-          } catch (e) {
-            console.error('[orders] paid mail send failed', e)
-          }
-        } else {
-          console.error('[orders] PAID siparişte indirme URL yok; e-posta gönderilmedi', fresh.orderNo)
-        }
-      }
-
-      const first = order.items[0]
-      const ua = req?.headers['user-agent']
-      await prisma.downloadLog.create({
-        data: {
-          orderId: order.id,
-          productId: first?.productId ?? null,
-          customerEmail: order.customerEmail,
-          ipAddress: req ? getClientIp(req) : null,
-          userAgent: typeof ua === 'string' ? ua.slice(0, 500) : null,
-        },
-      })
+      await fulfillPaidOrderDelivery(order.id, req)
 
       return
     }
@@ -438,7 +450,13 @@ export const paytrService = {
           })
         }
       })
-      console.info('[paytr] callback failed işlendi', { merchantOid, orderNo: order.orderNo, orderWas: order.status })
+      console.info('[paytr] callback failed işlendi', {
+        merchantOid,
+        orderNo: order.orderNo,
+        orderWas: order.status,
+        failed_reason_code: payload.failed_reason_code ?? '',
+        failed_reason_msg: payload.failed_reason_msg ?? '',
+      })
     }
   },
 }

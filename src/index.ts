@@ -35,6 +35,7 @@ import { productCategoriesAdminRoutes } from './routes/productCategories.admin.r
 import { productCategoriesPublicRoutes } from './routes/productCategories.public.routes'
 import { navigationMenuAdminRoutes } from './routes/navigationMenu.admin.routes'
 import { ordersPublicRoutes } from './routes/orders.public.routes'
+import { licensePublicRoutes } from './routes/license.public.routes'
 import { ordersAdminRoutes } from './routes/orders.admin.routes'
 import { paymentsPublicRoutes } from './routes/payments.public.routes'
 import { navigationMenuPublicRoutes } from './routes/navigationMenu.public.routes'
@@ -42,6 +43,8 @@ import { legalDocumentsPublicRoutes } from './routes/legalDocuments.public.route
 import { legalDocumentsAdminRoutes } from './routes/legalDocuments.admin.routes'
 import { paymentSettingsAdminRoutes } from './routes/paymentSettings.admin.routes'
 import { customersPublicRoutes } from './routes/customers.public.routes'
+import { authMiddleware, adminOnly } from './middleware/auth.middleware'
+import * as ordersAdminController from './controllers/orders.admin.controller'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
@@ -111,6 +114,7 @@ app.use(
     res.setHeader('Access-Control-Allow-Origin', '*')
     next()
   },
+  /** Katalog ZIP vb. — dosyalar `public/uploads/...` altında (mail href: BACKEND_PUBLIC_URL + /uploads/...) */
   express.static(path.join(process.cwd(), 'public', 'uploads')),
 )
 
@@ -138,10 +142,17 @@ app.use('/api/public', cookiesPublicRoutes)
 app.use('/api/products', productsPublicRoutes)
 app.use('/api/legal-documents', legalDocumentsPublicRoutes)
 app.use('/api/orders', ordersPublicRoutes)
+app.use('/api/license', licensePublicRoutes)
 app.use('/api/customers', customersPublicRoutes)
 app.use('/api/payments', paymentsPublicRoutes)
 app.use('/api/product-categories', productCategoriesPublicRoutes)
 app.use('/api/navigation-menu', navigationMenuPublicRoutes)
+/**
+ * Sipariş güncelleme / silme — doğrudan app seviyesinde kayıtlı.
+ * Bazı ortamlarda yalnızca `app.use('/api/admin', router)` zinciriyle tanımlanan PATCH/DELETE eşleşmeyebiliyor (404 "Endpoint bulunamadı").
+ */
+app.patch('/api/admin/orders/:id', authMiddleware, adminOnly, ordersAdminController.adminUpdateOrder)
+app.delete('/api/admin/orders/:id', authMiddleware, adminOnly, ordersAdminController.adminDeleteOrder)
 app.use('/api/admin', cookiesAdminRoutes)
 app.use('/api/admin', productsAdminRoutes)
 app.use('/api/admin', catalogMediaAdminRoutes)

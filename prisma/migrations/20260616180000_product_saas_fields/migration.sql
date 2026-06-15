@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN "purchaseEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "Product" ADD COLUMN "licenseMonths" INTEGER NOT NULL DEFAULT 12;
+ALTER TABLE "Product" ADD COLUMN "featureBullets" TEXT NOT NULL DEFAULT '';

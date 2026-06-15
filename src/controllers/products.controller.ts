@@ -126,6 +126,13 @@ export async function adminCreate(req: Request, res: Response) {
           : parsePrice(body.compareAtPrice),
       currency: String(body.currency ?? 'TRY'),
       isActive: body.isActive !== false,
+      purchaseEnabled: body.purchaseEnabled !== false,
+      licenseMonths: (() => {
+        const raw = body.licenseMonths
+        const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? '12'), 10)
+        return Number.isFinite(n) && n > 0 ? Math.min(120, Math.floor(n)) : 12
+      })(),
+      featureBullets: String(body.featureBullets ?? ''),
       isFeatured: body.isFeatured === true,
       sortOrder: (() => {
         const s =
@@ -165,7 +172,15 @@ export async function adminCreate(req: Request, res: Response) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return res.status(409).json({ success: false, message: 'Bu slug zaten kullanılıyor' })
     }
-    if (msg.includes('medya') || msg.includes('Kapak') || msg.includes('İndirme') || msg.includes('Galeri')) {
+    if (
+      msg.includes('medya') ||
+      msg.includes('Kapak') ||
+      msg.includes('İndirme') ||
+      msg.includes('İndirilebilir') ||
+      msg.includes('Dijital') ||
+      msg.includes('Galeri') ||
+      msg.includes('zorunludur')
+    ) {
       return res.status(400).json({ success: false, message: msg })
     }
     res.status(500).json({ success: false, message: 'Ürün oluşturulamadı' })
@@ -196,6 +211,13 @@ export async function adminPatch(req: Request, res: Response) {
   }
   if (body.currency !== undefined) patch.currency = String(body.currency ?? 'TRY')
   if (body.isActive !== undefined) patch.isActive = Boolean(body.isActive)
+  if (body.purchaseEnabled !== undefined) patch.purchaseEnabled = Boolean(body.purchaseEnabled)
+  if (body.licenseMonths !== undefined) {
+    const raw = body.licenseMonths
+    const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw), 10)
+    patch.licenseMonths = Number.isFinite(n) && n > 0 ? Math.min(120, Math.floor(n)) : 12
+  }
+  if (body.featureBullets !== undefined) patch.featureBullets = String(body.featureBullets ?? '')
   if (body.isFeatured !== undefined) patch.isFeatured = Boolean(body.isFeatured)
   if (body.sortOrder !== undefined) {
     const s = typeof body.sortOrder === 'number' ? body.sortOrder : Number.parseInt(String(body.sortOrder), 10)
@@ -237,7 +259,15 @@ export async function adminPatch(req: Request, res: Response) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return res.status(409).json({ success: false, message: 'Bu slug zaten kullanılıyor' })
     }
-    if (msg.includes('medya') || msg.includes('Kapak') || msg.includes('İndirme') || msg.includes('Galeri')) {
+    if (
+      msg.includes('medya') ||
+      msg.includes('Kapak') ||
+      msg.includes('İndirme') ||
+      msg.includes('İndirilebilir') ||
+      msg.includes('Dijital') ||
+      msg.includes('Galeri') ||
+      msg.includes('zorunludur')
+    ) {
       return res.status(400).json({ success: false, message: msg })
     }
     res.status(500).json({ success: false, message: 'Ürün güncellenemedi' })

@@ -15,7 +15,7 @@ function uuid() {
 }
 
 function signUser(user: { id: string; email: string; role: string }) {
-  const expiresIn = user.role === 'admin' ? '7d' : '1h'
+  const expiresIn = user.role === 'admin' || user.role === 'superadmin' ? '7d' : '1h'
   const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn })
   const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' })
   return { success: true, token, refreshToken, user: { id: user.id, email: user.email, role: user.role } }
@@ -84,7 +84,7 @@ export const authService = {
     try {
       const dbUser = await findUserById(decoded.userId)
       if (dbUser) {
-        const expiresIn = dbUser.role === 'admin' ? '7d' : '1h'
+        const expiresIn = dbUser.role === 'admin' || dbUser.role === 'superadmin' ? '7d' : '1h'
         const token = jwt.sign(
           { userId: dbUser.id, email: dbUser.email, role: dbUser.role },
           JWT_SECRET,
@@ -97,7 +97,7 @@ export const authService = {
     }
     const user = usersStore.get(decoded.userId)
     if (!user) throw new Error('Kullanıcı bulunamadı')
-    const expiresIn = user.role === 'admin' ? '7d' : '1h'
+    const expiresIn = user.role === 'admin' || user.role === 'superadmin' ? '7d' : '1h'
     const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn })
     return { success: true, token }
   },

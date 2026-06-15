@@ -14,7 +14,7 @@ function parseOrderItems(body: Record<string, unknown>): { productId: string; qu
     for (const it of raw) {
       if (!it || typeof it !== 'object') continue
       const o = it as Record<string, unknown>
-      const pid = readString(o, 'productId')
+      const pid = readString(o, 'productId') || readString(o, 'slug')
       if (!pid) continue
       const q = Number(o.quantity)
       out.push({ productId: pid, quantity: Number.isFinite(q) && q > 0 ? Math.floor(q) : 1 })
@@ -54,6 +54,18 @@ export async function createOrder(req: Request, res: Response) {
       : (req.socket.remoteAddress || '').replace(/^::ffff:/, '').slice(0, 45)
   const ua = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 500) : ''
 
+  const rawPm = readString(body, 'paymentMethod')?.toUpperCase().replace(/-/g, '_')
+  const rawPv = readString(body, 'paymentProvider')?.toUpperCase().replace(/-/g, '_')
+  const payToken = rawPm || rawPv || ''
+  const isBank =
+    payToken === 'BANK_TRANSFER' ||
+    payToken === 'BANK' ||
+    payToken === 'HAVALE' ||
+    payToken === 'EFT' ||
+    payToken === 'HAVALE_EFT' ||
+    payToken === 'WIRE'
+  const paymentProvider: 'PAYTR' | 'BANK_TRANSFER' = isBank ? 'BANK_TRANSFER' : 'PAYTR'
+
   try {
     const order = await ordersService.createOrder({
       items,
@@ -72,6 +84,7 @@ export async function createOrder(req: Request, res: Response) {
       explicitConsent,
       acceptedIp: ip || null,
       acceptedUserAgent: ua || null,
+      paymentProvider,
     })
     return res.status(201).json({
       success: true,
@@ -81,12 +94,23 @@ export async function createOrder(req: Request, res: Response) {
         status: order.status,
         total: Number(order.total),
         currency: order.currency,
+        paymentProvider: order.paymentProvider,
       },
     })
   } catch (e) {
-    const err = e as Error & { status?: number }
+    const err = e as Error & { status?: number; publicMessage?: string; invalidDetails?: unknown }
     const code = err.status ?? 500
-    return res.status(code).json({ success: false, message: err.message || 'Sipariş oluşturulamadı' })
+    const message =
+      err.publicMessage ||
+      (err.message === 'BANK_TRANSFER_UNAVAILABLE'
+        ? 'Havale/EFT ödeme yöntemi şu anda kullanılamıyor.'
+        : code === 400 && err.message === 'ORDER_ITEMS_INVALID'
+          ? 'Sepetinizdeki bazı ürünler artık satın alınamıyor. Lütfen sepetinizi güncelleyip tekrar deneyin.'
+          : err.message) ||
+      'Sipariş oluşturulamadı'
+    const payload: { success: false; message: string; details?: unknown } = { success: false, message }
+    if (err.invalidDetails !== undefined) payload.details = err.invalidDetails
+    return res.status(code).json(payload)
   }
 }
 
@@ -116,6 +140,10 @@ export async function orderSuccess(req: Request, res: Response) {
   }
   try {
     const data = await ordersService.getSuccessView(orderNo, customerEmail, req.customer?.id ?? null)
+    console.info('[orders] GET /api/orders/success', {
+      orderNo,
+      returnedStatus: (data as { status: string }).status,
+    })
     return res.json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import { getPublicBankTransferDisplay } from '../services/bankTransferSettings.service'
 import { paytrService } from '../services/paytr.service'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
@@ -17,9 +18,12 @@ export async function paytrStart(req: Request, res: Response) {
     const { iframeToken } = await paytrService.startIframePayment(orderNo, req)
     return res.json({ success: true, data: { iframe_token: iframeToken } })
   } catch (e) {
-    const err = e as Error & { status?: number }
+    const err = e as Error & { status?: number; publicMessage?: string }
     const code = err.status ?? 500
-    return res.status(code).json({ success: false, message: err.message || 'PayTR başlatılamadı' })
+    return res.status(code).json({
+      success: false,
+      message: err.publicMessage || err.message || 'PayTR başlatılamadı',
+    })
   }
 }
 
@@ -44,4 +48,9 @@ export async function paytrCallback(req: Request, res: Response) {
     const code = err.status ?? 500
     res.status(code).type('text/plain').send(err.message || 'Hata')
   }
+}
+
+export async function getBankTransferDisplay(_req: Request, res: Response) {
+  const data = await getPublicBankTransferDisplay()
+  return res.json({ success: true, data })
 }

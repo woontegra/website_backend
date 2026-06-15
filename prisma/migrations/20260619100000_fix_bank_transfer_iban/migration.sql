@@ -1,0 +1,8 @@
+-- Doğru İş Bankası IBAN (TR90 0006 4000 0013 6600 4874 51)
+UPDATE "BankTransferSettings"
+SET
+  "iban" = 'TR900006400000136600487451',
+  "updatedAt" = CURRENT_TIMESTAMP
+WHERE
+  "id" = 'default'
+  AND "iban" = 'TR90000640000136600487451';
