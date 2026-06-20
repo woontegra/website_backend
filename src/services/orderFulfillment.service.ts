@@ -4,12 +4,13 @@ import { prisma } from '../lib/prisma'
 import { getClientIp } from '../lib/clientIp'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { mailService } from './mail.service'
-import { ensurePaidOrderLicenses, getLicenseKeysByOrderItemIds } from './license.service'
+import { ensureExternalLicenseServerOrders, ensurePaidOrderLicenses, getLicenseMailEntriesByOrderItemIds } from './license.service'
 
 const paidOrderDeliveryItemInclude = {
   product: {
     select: {
       productType: true,
+      licenseRequired: true,
       downloadUrl: true,
       downloadMedia: { select: { url: true } },
     },
@@ -22,6 +23,7 @@ export type OrderItemForDeliveryCheck = {
   downloadUrl: string | null
   product: {
     productType: ProductType
+    licenseRequired: boolean
     downloadUrl: string | null
     downloadMedia: { url: string } | null
   } | null
@@ -104,20 +106,33 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
+  const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
+  if (externalResult.errors.length > 0) {
+    console.error('[orders] external license server errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: externalResult.errors,
+    })
+  }
+
+  /** Merkezi lisans sunucusu mail gönderir; website mailinde bu satırlar yer almaz */
+  const itemsForWebsiteMail = items.filter((i) => !i.product?.licenseRequired)
+
   if (!fresh.downloadEmailSentAt) {
-    await ensurePaidOrderLicenses(fresh.id)
-    const linesRaw = buildPaidDownloadMailLinesFromItems(items)
+    const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
+    const linesRaw = buildPaidDownloadMailLinesFromItems(itemsForWebsiteMail)
     if (linesRaw.length > 0) {
-      if (!checkOrderDownloadLinesForPaidMail(items)) {
+      if (!checkOrderDownloadLinesForPaidMail(itemsForWebsiteMail)) {
         return
       }
-      const keyMap = await getLicenseKeysByOrderItemIds(
+      const licenseMap = await getLicenseMailEntriesByOrderItemIds(
         fresh.id,
         linesRaw.map((l) => l.id),
+        freshPasswords,
       )
       const lines = linesRaw.map((l) => ({
         ...l,
-        licenseKeys: keyMap.get(l.id) ?? [],
+        licenses: licenseMap.get(l.id) ?? [],
       }))
       try {
         await mailService.sendPaidDownloadOrder({
@@ -133,6 +148,11 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       } catch (e) {
         console.error('[orders] paid mail send failed', e)
       }
+    } else if (itemsForWebsiteMail.length === 0 && items.some((i) => i.product?.licenseRequired)) {
+      console.info('[orders] paid download mail skipped — license server handles delivery', {
+        orderNo: fresh.orderNo,
+        orderId: fresh.id,
+      })
     } else {
       console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
         orderNo: fresh.orderNo,

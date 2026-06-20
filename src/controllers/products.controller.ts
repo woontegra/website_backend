@@ -132,6 +132,27 @@ export async function adminCreate(req: Request, res: Response) {
         const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? '12'), 10)
         return Number.isFinite(n) && n > 0 ? Math.min(120, Math.floor(n)) : 12
       })(),
+      licenseRequired: body.licenseRequired === true,
+      licenseAppCode:
+        body.licenseRequired === true && body.licenseAppCode
+          ? String(body.licenseAppCode).trim()
+          : null,
+      licenseDays:
+        body.licenseRequired === true
+          ? (() => {
+              const raw = body.licenseDays
+              const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? '365'), 10)
+              return Number.isFinite(n) && n > 0 ? Math.min(3650, Math.floor(n)) : 365
+            })()
+          : null,
+      licenseMaxDevices:
+        body.licenseRequired === true
+          ? (() => {
+              const raw = body.licenseMaxDevices
+              const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? '1'), 10)
+              return Number.isFinite(n) && n > 0 ? Math.min(50, Math.floor(n)) : 1
+            })()
+          : null,
       featureBullets: String(body.featureBullets ?? ''),
       isFeatured: body.isFeatured === true,
       sortOrder: (() => {
@@ -216,6 +237,28 @@ export async function adminPatch(req: Request, res: Response) {
     const raw = body.licenseMonths
     const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw), 10)
     patch.licenseMonths = Number.isFinite(n) && n > 0 ? Math.min(120, Math.floor(n)) : 12
+  }
+  if (body.licenseRequired !== undefined) patch.licenseRequired = body.licenseRequired === true
+  if (body.licenseAppCode !== undefined) {
+    patch.licenseAppCode =
+      body.licenseAppCode === null || body.licenseAppCode === '' ? null : String(body.licenseAppCode).trim()
+  }
+  if (body.licenseDays !== undefined) {
+    if (body.licenseDays === null || body.licenseDays === '') patch.licenseDays = null
+    else {
+      const n = typeof body.licenseDays === 'number' ? body.licenseDays : Number.parseInt(String(body.licenseDays), 10)
+      patch.licenseDays = Number.isFinite(n) && n > 0 ? Math.min(3650, Math.floor(n)) : 365
+    }
+  }
+  if (body.licenseMaxDevices !== undefined) {
+    if (body.licenseMaxDevices === null || body.licenseMaxDevices === '') patch.licenseMaxDevices = null
+    else {
+      const n =
+        typeof body.licenseMaxDevices === 'number'
+          ? body.licenseMaxDevices
+          : Number.parseInt(String(body.licenseMaxDevices), 10)
+      patch.licenseMaxDevices = Number.isFinite(n) && n > 0 ? Math.min(50, Math.floor(n)) : 1
+    }
   }
   if (body.featureBullets !== undefined) patch.featureBullets = String(body.featureBullets ?? '')
   if (body.isFeatured !== undefined) patch.isFeatured = Boolean(body.isFeatured)

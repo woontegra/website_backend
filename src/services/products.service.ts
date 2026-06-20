@@ -46,6 +46,10 @@ export type AdminProductDto = {
   isActive: boolean
   purchaseEnabled: boolean
   licenseMonths: number
+  licenseRequired: boolean
+  licenseAppCode: string | null
+  licenseDays: number | null
+  licenseMaxDevices: number | null
   featureBullets: string
   isFeatured: boolean
   sortOrder: number
@@ -117,6 +121,10 @@ type ProductRow = {
   isActive: boolean
   purchaseEnabled: boolean
   licenseMonths: number
+  licenseRequired: boolean
+  licenseAppCode: string | null
+  licenseDays: number | null
+  licenseMaxDevices: number | null
   featureBullets: string
   isFeatured: boolean
   sortOrder: number
@@ -185,6 +193,10 @@ function mapAdmin(p: ProductRow): AdminProductDto {
     isActive: p.isActive,
     purchaseEnabled: p.purchaseEnabled,
     licenseMonths: p.licenseMonths,
+    licenseRequired: p.licenseRequired,
+    licenseAppCode: p.licenseAppCode,
+    licenseDays: p.licenseDays,
+    licenseMaxDevices: p.licenseMaxDevices,
     featureBullets: p.featureBullets ?? '',
     isFeatured: p.isFeatured,
     sortOrder: p.sortOrder,
@@ -334,6 +346,10 @@ type CreateInput = {
   isActive?: boolean
   purchaseEnabled?: boolean
   licenseMonths?: number
+  licenseRequired?: boolean
+  licenseAppCode?: string | null
+  licenseDays?: number | null
+  licenseMaxDevices?: number | null
   featureBullets?: string
   isFeatured?: boolean
   sortOrder?: number
@@ -575,6 +591,19 @@ export const productsService = {
           typeof data.licenseMonths === 'number' && Number.isFinite(data.licenseMonths) && data.licenseMonths > 0
             ? Math.min(120, Math.floor(data.licenseMonths))
             : 12,
+        licenseRequired: data.licenseRequired === true,
+        licenseAppCode:
+          data.licenseRequired === true && data.licenseAppCode?.trim()
+            ? data.licenseAppCode.trim()
+            : null,
+        licenseDays:
+          data.licenseRequired === true && typeof data.licenseDays === 'number' && data.licenseDays > 0
+            ? Math.min(3650, Math.floor(data.licenseDays))
+            : 365,
+        licenseMaxDevices:
+          data.licenseRequired === true && typeof data.licenseMaxDevices === 'number' && data.licenseMaxDevices > 0
+            ? Math.min(50, Math.floor(data.licenseMaxDevices))
+            : 1,
         featureBullets: (data.featureBullets ?? '').trim(),
         isFeatured: data.isFeatured === true,
         sortOrder: typeof data.sortOrder === 'number' && Number.isFinite(data.sortOrder) ? data.sortOrder : 0,
@@ -618,6 +647,29 @@ export const productsService = {
       const m = typeof data.licenseMonths === 'number' ? data.licenseMonths : Number.parseInt(String(data.licenseMonths), 10)
       patch.licenseMonths =
         Number.isFinite(m) && m > 0 ? Math.min(120, Math.floor(m as number)) : 12
+    }
+    if (data.licenseRequired !== undefined) {
+      patch.licenseRequired = data.licenseRequired === true
+      if (!data.licenseRequired) {
+        patch.licenseAppCode = null
+        patch.licenseDays = 365
+        patch.licenseMaxDevices = 1
+      }
+    }
+    if (data.licenseAppCode !== undefined) {
+      patch.licenseAppCode = data.licenseAppCode?.trim() || null
+    }
+    if (data.licenseDays !== undefined) {
+      patch.licenseDays =
+        data.licenseDays === null
+          ? 365
+          : Math.min(3650, Math.max(1, Math.floor(Number(data.licenseDays))))
+    }
+    if (data.licenseMaxDevices !== undefined) {
+      patch.licenseMaxDevices =
+        data.licenseMaxDevices === null
+          ? 1
+          : Math.min(50, Math.max(1, Math.floor(Number(data.licenseMaxDevices))))
     }
     if (data.featureBullets !== undefined) patch.featureBullets = data.featureBullets.trim()
     if (data.isFeatured !== undefined) patch.isFeatured = data.isFeatured

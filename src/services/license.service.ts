@@ -1,13 +1,33 @@
 import {
   LicenseActivationStatus,
   LicenseLifecycleStatus,
+  LicenseSource,
   ProductType,
 } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import {
+  generateActivationPassword,
+  hashActivationPassword,
+  verifyActivationPassword,
+} from '../lib/activationPassword'
 import { generateLicenseKey, normalizeLicenseKeyInput } from '../lib/licenseKey'
+import {
+  isValidDesktopAppCode,
+  PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP,
+  resolveProductCodeFromProduct,
+} from '../lib/productCode'
+import { isKnownDesktopLicenseAppCode } from '../lib/desktopLicensePrograms'
+import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
+import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 
 function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + Math.max(1, months))
+  return d
 }
 
 /** orderFulfillment.mergeOrderItemDownloadUrl ile aynı mantık (döngüsel import yok). */
@@ -29,10 +49,12 @@ export function isOrderItemEligibleForDesktopLicense(item: {
   downloadUrl: string | null
   product: {
     productType: ProductType
+    licenseRequired?: boolean
     downloadUrl: string | null
     downloadMedia: { url: string } | null
   } | null
 }): boolean {
+  if (item.product?.licenseRequired) return false
   if (item.product?.productType === ProductType.SAAS) return false
   const url = effectiveItemDownloadUrl(item)
   if (!url || url.startsWith('saas:')) return false
@@ -42,8 +64,51 @@ export function isOrderItemEligibleForDesktopLicense(item: {
   return false
 }
 
-/** PAID / PROCESSING siparişte indirilebilir satırlar için lisans üretir (idempotent). */
-export async function ensurePaidOrderLicenses(orderId: string): Promise<void> {
+export type CreatedLicensePassword = {
+  orderItemId: string
+  licenseKey: string
+  activationPassword: string
+}
+
+async function uniqueLicenseKey(): Promise<string> {
+  let key = generateLicenseKey()
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const clash = await prisma.license.findUnique({ where: { licenseKey: key } })
+    if (!clash) return key
+    key = generateLicenseKey()
+  }
+  return key
+}
+
+export type ExternalLicenseProvisionError = {
+  orderItemId: string
+  productName: string
+  error: string
+}
+
+function resolveItemDownloadUrlForLicenseServer(item: {
+  downloadUrl: string | null
+  product: {
+    downloadUrl: string | null
+    downloadMedia: { url: string } | null
+  } | null
+}): string | null {
+  const fromLine = (item.downloadUrl ?? '').trim()
+  const fromProduct =
+    (item.product?.downloadUrl?.trim() || item.product?.downloadMedia?.url?.trim() || '').trim() || ''
+  const raw = fromLine || fromProduct
+  if (!raw || raw.startsWith('saas:')) return null
+  return resolveMailDownloadHref(raw) ?? raw
+}
+
+/**
+ * licenseRequired=true ürünler için Woontegra-Lisans-Server'a lisans üretimi bildirir.
+ * Website iç License tablosuna yazmaz. Idempotent: orderItem.licenseServerUnitsNotified.
+ */
+export async function ensureExternalLicenseServerOrders(orderId: string): Promise<{
+  errors: ExternalLicenseProvisionError[]
+}> {
+  const errors: ExternalLicenseProvisionError[] = []
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -51,7 +116,10 @@ export async function ensurePaidOrderLicenses(orderId: string): Promise<void> {
         include: {
           product: {
             select: {
-              productType: true,
+              licenseRequired: true,
+              licenseAppCode: true,
+              licenseDays: true,
+              licenseMaxDevices: true,
               downloadUrl: true,
               downloadMedia: { select: { url: true } },
             },
@@ -60,42 +128,200 @@ export async function ensurePaidOrderLicenses(orderId: string): Promise<void> {
       },
     },
   })
-  if (!order) return
-  if (order.status !== 'PAID' && order.status !== 'PROCESSING') return
+  if (!order) return { errors }
+  if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors }
+
+  for (const item of order.items) {
+    const product = item.product
+    if (!product?.licenseRequired) continue
+    const appCode = (product.licenseAppCode ?? '').trim()
+    if (!appCode || !isKnownDesktopLicenseAppCode(appCode)) {
+      const err = 'Geçersiz veya eksik lisans program kodu (licenseAppCode).'
+      errors.push({ orderItemId: item.id, productName: item.productName, error: err })
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: { licenseServerLastError: err },
+      })
+      continue
+    }
+
+    const qty = Math.max(1, Math.min(99, item.quantity))
+    const already = item.licenseServerUnitsNotified ?? 0
+    if (already >= qty) continue
+
+    const downloadUrl = resolveItemDownloadUrlForLicenseServer(item)
+    const licenseDays = Math.max(1, product.licenseDays ?? 365)
+    const maxDevices = Math.max(1, product.licenseMaxDevices ?? 1)
+
+    for (let u = already; u < qty; u++) {
+      const externalOrderNo = `${order.orderNo}:${item.id}:${u}`
+      const result = await requestWebsiteOrderLicense({
+        customerName: order.customerName.trim(),
+        customerEmail: order.customerEmail.trim().toLowerCase(),
+        customerPhone: order.customerPhone?.trim() || null,
+        appCode,
+        orderNo: externalOrderNo,
+        downloadUrl,
+        licenseDays,
+        maxDevices,
+      })
+
+      if (!result.success) {
+        const err = result.error ?? 'Lisans sunucusu isteği başarısız.'
+        errors.push({ orderItemId: item.id, productName: item.productName, error: err })
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { licenseServerLastError: err },
+        })
+        console.error('[license-server] provision failed', {
+          orderId,
+          orderNo: order.orderNo,
+          orderItemId: item.id,
+          unit: u,
+          appCode,
+          error: err,
+        })
+        break
+      }
+
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: {
+          licenseServerUnitsNotified: u + 1,
+          licenseServerLastError: result.mailError ?? null,
+          licenseServerLastNotifiedAt: new Date(),
+        },
+      })
+
+      console.info('[license-server] provision ok', {
+        orderNo: order.orderNo,
+        externalOrderNo,
+        appCode,
+        licenseKey: result.licenseKey,
+        mailSent: result.mailSent,
+      })
+    }
+  }
+
+  return { errors }
+}
+
+/** PAID / PROCESSING siparişte indirilebilir satırlar için lisans üretir (idempotent). */
+export async function ensurePaidOrderLicenses(orderId: string): Promise<{
+  freshPasswords: CreatedLicensePassword[]
+}> {
+  const freshPasswords: CreatedLicensePassword[] = []
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              productType: true,
+              slug: true,
+              licenseMonths: true,
+              licenseRequired: true,
+              downloadUrl: true,
+              downloadMedia: { select: { url: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!order) return { freshPasswords }
+  if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { freshPasswords }
+
+  const startsAt = new Date()
 
   for (const item of order.items) {
     if (!isOrderItemEligibleForDesktopLicense(item)) continue
+    if (item.product?.licenseRequired) continue
     const qty = Math.max(1, Math.min(99, item.quantity))
+    const licenseMonths = Math.max(1, item.product?.licenseMonths ?? 12)
+    const expiresAt = addMonths(startsAt, licenseMonths)
+    const productCode = item.product
+      ? resolveProductCodeFromProduct({ slug: item.product.slug, productType: item.product.productType })
+      : null
+
     for (let u = 0; u < qty; u++) {
       const exists = await prisma.license.findUnique({
         where: { orderItemId_unitIndex: { orderItemId: item.id, unitIndex: u } },
       })
       if (exists) continue
-      let key = generateLicenseKey()
-      for (let attempt = 0; attempt < 25; attempt++) {
-        const clash = await prisma.license.findUnique({ where: { licenseKey: key } })
-        if (!clash) break
-        key = generateLicenseKey()
-      }
+
+      const key = await uniqueLicenseKey()
+      const activationPassword = generateActivationPassword()
+      const activationPasswordHash = await hashActivationPassword(activationPassword)
+
       await prisma.license.create({
         data: {
           licenseKey: key,
+          activationPasswordHash,
           orderId: order.id,
           orderNo: order.orderNo,
           orderItemId: item.id,
           unitIndex: u,
           customerId: order.customerId,
+          customerName: order.customerName.trim(),
           customerEmail: order.customerEmail.trim().toLowerCase(),
+          customerPhone: order.customerPhone?.trim() || null,
           productId: item.productId,
           productName: item.productName,
+          productCode,
+          source: LicenseSource.WEBSITE_ORDER,
           status: LicenseLifecycleStatus.ACTIVE,
           maxDevices: 1,
+          startsAt,
+          expiresAt,
         },
       })
+
+      freshPasswords.push({ orderItemId: item.id, licenseKey: key, activationPassword })
     }
   }
+
+  return { freshPasswords }
 }
 
+export type LicenseMailEntry = {
+  licenseKey: string
+  activationPassword?: string
+}
+
+export async function getLicenseMailEntriesByOrderItemIds(
+  orderId: string,
+  orderItemIds: string[],
+  freshPasswords: CreatedLicensePassword[],
+): Promise<Map<string, LicenseMailEntry[]>> {
+  const m = new Map<string, LicenseMailEntry[]>()
+  if (orderItemIds.length === 0) return m
+
+  const passwordByKey = new Map<string, string>()
+  for (const fp of freshPasswords) {
+    passwordByKey.set(fp.licenseKey, fp.activationPassword)
+  }
+
+  const rows = await prisma.license.findMany({
+    where: { orderId, orderItemId: { in: orderItemIds } },
+    orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+    select: { orderItemId: true, licenseKey: true },
+  })
+
+  for (const r of rows) {
+    if (!r.orderItemId) continue
+    const arr = m.get(r.orderItemId) ?? []
+    arr.push({
+      licenseKey: r.licenseKey,
+      activationPassword: passwordByKey.get(r.licenseKey),
+    })
+    m.set(r.orderItemId, arr)
+  }
+  return m
+}
+
+/** @deprecated use getLicenseMailEntriesByOrderItemIds */
 export async function getLicenseKeysByOrderItemIds(
   orderId: string,
   orderItemIds: string[],
@@ -108,6 +334,7 @@ export async function getLicenseKeysByOrderItemIds(
     select: { orderItemId: true, licenseKey: true },
   })
   for (const r of rows) {
+    if (!r.orderItemId) continue
     const arr = m.get(r.orderItemId) ?? []
     arr.push(r.licenseKey)
     m.set(r.orderItemId, arr)
@@ -146,34 +373,66 @@ function okPayload(
   }
 }
 
+function licenseExpired(license: { expiresAt: Date | null }): boolean {
+  return Boolean(license.expiresAt && license.expiresAt.getTime() < Date.now())
+}
+
+async function verifyLicenseCredentials(
+  license: { activationPasswordHash: string | null; customerEmail: string },
+  activationPassword?: string | null,
+  customerEmail?: string | null,
+): Promise<boolean> {
+  if (license.activationPasswordHash) {
+    if (!activationPassword?.trim()) return false
+    return verifyActivationPassword(activationPassword, license.activationPasswordHash)
+  }
+  if (customerEmail?.trim()) {
+    return emailsMatch(license.customerEmail, customerEmail)
+  }
+  return false
+}
+
 export async function activateLicenseForDevice(input: {
   licenseKey: string
-  customerEmail: string
+  activationPassword?: string | null
+  customerEmail?: string | null
   deviceHash: string
+  appCode?: string | null
   deviceName?: string | null
   platform?: string | null
   appVersion?: string | null
 }): Promise<LicensePublicOk | LicensePublicErr> {
   const licenseKey = normalizeLicenseKeyInput(input.licenseKey)
-  const customerEmail = input.customerEmail.trim()
   const deviceHash = input.deviceHash.trim()
-  if (!licenseKey || !customerEmail || deviceHash.length < 16 || deviceHash.length > 256) {
+  if (!licenseKey || deviceHash.length < 16 || deviceHash.length > 256) {
     return { ok: false, message: 'Lisans kodu geçersiz.' }
   }
 
   const license = await prisma.license.findUnique({ where: { licenseKey } })
-  if (!license || !emailsMatch(license.customerEmail, customerEmail)) {
+  if (!license) {
     return { ok: false, message: 'Lisans kodu geçersiz.' }
+  }
+
+  if (license.productCode === PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP) {
+    if (!isValidDesktopAppCode(input.appCode)) {
+      return { ok: false, message: 'Lisans kodu geçersiz.' }
+    }
+  }
+
+  const credOk = await verifyLicenseCredentials(
+    license,
+    input.activationPassword,
+    input.customerEmail,
+  )
+  if (!credOk) {
+    return { ok: false, message: 'Lisans kodu veya aktivasyon şifresi geçersiz.' }
   }
 
   if (license.status === LicenseLifecycleStatus.DISABLED) {
     return { ok: false, message: 'Lisans pasif durumda. Destek ile iletişime geçin.' }
   }
-  if (license.status === LicenseLifecycleStatus.EXPIRED) {
-    return { ok: false, message: 'Lisans kodu geçersiz.' }
-  }
-  if (license.expiresAt && license.expiresAt.getTime() < Date.now()) {
-    return { ok: false, message: 'Lisans kodu geçersiz.' }
+  if (license.status === LicenseLifecycleStatus.EXPIRED || licenseExpired(license)) {
+    return { ok: false, message: 'Lisans süresi dolmuş. Yenileme için destek ile iletişime geçin.' }
   }
 
   const activeActs = await prisma.licenseActivation.findMany({
@@ -216,6 +475,7 @@ export async function activateLicenseForDevice(input: {
 export async function validateLicenseForDevice(input: {
   licenseKey: string
   deviceHash: string
+  appCode?: string | null
   appVersion?: string | null
 }): Promise<LicensePublicOk | LicensePublicErr> {
   const licenseKey = normalizeLicenseKeyInput(input.licenseKey)
@@ -228,11 +488,18 @@ export async function validateLicenseForDevice(input: {
   if (!license) {
     return { ok: false, message: 'Lisans kodu geçersiz.' }
   }
+
+  if (license.productCode === PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP) {
+    if (!isValidDesktopAppCode(input.appCode)) {
+      return { ok: false, message: 'Lisans kodu geçersiz.' }
+    }
+  }
+
   if (license.status !== LicenseLifecycleStatus.ACTIVE) {
     return { ok: false, message: 'Lisans pasif durumda. Destek ile iletişime geçin.' }
   }
-  if (license.expiresAt && license.expiresAt.getTime() < Date.now()) {
-    return { ok: false, message: 'Lisans kodu geçersiz.' }
+  if (licenseExpired(license)) {
+    return { ok: false, message: 'Lisans süresi dolmuş. Yenileme için destek ile iletişime geçin.' }
   }
 
   const act = await prisma.licenseActivation.findFirst({
@@ -281,4 +548,49 @@ export async function adminSetLicenseMaxDevices(licenseId: string, maxDevices: n
     where: { id: licenseId },
     data: { maxDevices: m },
   })
+}
+
+export async function adminExtendLicense(licenseId: string, expiresAt: Date): Promise<void> {
+  await prisma.license.update({
+    where: { id: licenseId },
+    data: { expiresAt, status: LicenseLifecycleStatus.ACTIVE },
+  })
+}
+
+export async function adminRegenerateActivationPassword(licenseId: string): Promise<{
+  activationPassword: string
+}> {
+  const activationPassword = generateActivationPassword()
+  const activationPasswordHash = await hashActivationPassword(activationPassword)
+  await prisma.license.update({
+    where: { id: licenseId },
+    data: { activationPasswordHash },
+  })
+  return { activationPassword }
+}
+
+export async function resolveLicenseDownloadUrl(license: {
+  productId: string | null
+  productCode: string | null
+}): Promise<string | null> {
+  if (license.productId) {
+    const p = await prisma.product.findUnique({
+      where: { id: license.productId },
+      select: { downloadUrl: true, downloadMedia: { select: { url: true } } },
+    })
+    if (p) {
+      const url = (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '').trim()
+      if (url) return url
+    }
+  }
+  if (license.productCode === PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP) {
+    const p = await prisma.product.findFirst({
+      where: { slug: 'muvekkil-kasa-defteri-desktop' },
+      select: { downloadUrl: true, downloadMedia: { select: { url: true } } },
+    })
+    if (p) {
+      return (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '').trim() || null
+    }
+  }
+  return process.env.DESKTOP_DOWNLOAD_URL?.trim() || null
 }

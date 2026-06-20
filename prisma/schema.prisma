@@ -329,6 +329,14 @@ model Product {
   purchaseEnabled     Boolean          @default(true)
   /// Yıllık lisans ay sayısı (SaaS); masaüstü ürünlerde bilgi amaçlı
   licenseMonths       Int              @default(12)
+  /// Merkezi Woontegra-Lisans-Server üzerinden lisans üretilsin mi
+  licenseRequired     Boolean          @default(false)
+  /// MUVEKKIL_KASA_DESKTOP vb. — Woontegra-Lisans-Server program kodu
+  licenseAppCode      String?
+  /// Lisans süresi (gün); licenseRequired=true iken kullanılır
+  licenseDays         Int              @default(365)
+  /// Maksimum cihaz; licenseRequired=true iken kullanılır
+  licenseMaxDevices   Int              @default(1)
   /// Her satır bir madde; public ürün detayında listelenir
   featureBullets      String           @default("") @db.Text
   isFeatured          Boolean          @default(false)
@@ -381,6 +389,11 @@ enum LicenseLifecycleStatus {
   ACTIVE
   DISABLED
   EXPIRED
+}
+
+enum LicenseSource {
+  MANUAL
+  WEBSITE_ORDER
 }
 
 enum LicenseActivationStatus {
@@ -526,37 +539,50 @@ model OrderItem {
   total        Decimal  @db.Decimal(12, 2)
   downloadUrl  String?
   licenses     License[]
+  /// Merkezi lisans sunucusuna bildirilen adet (idempotency)
+  licenseServerUnitsNotified Int      @default(0)
+  licenseServerLastError     String?  @db.Text
+  licenseServerLastNotifiedAt DateTime?
 
   @@index([orderId])
 }
 
-/// Sipariş satırı başına (adet kadar) masaüstü / indirilebilir ürün lisansı
+/// Sipariş satırı başına (adet kadar) veya admin manuel — masaüstü / indirilebilir ürün lisansı
 model License {
-  id            String                 @id @default(uuid())
-  licenseKey    String                 @unique
-  orderId       String
-  order         Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderNo       String
-  orderItemId   String
-  orderItem     OrderItem              @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  unitIndex     Int
-  customerId    String?
-  customer      Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerEmail String
-  productId     String?
-  product       Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productName   String
-  status        LicenseLifecycleStatus @default(ACTIVE)
-  maxDevices    Int                    @default(1)
-  expiresAt     DateTime?
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-  activations   LicenseActivation[]
+  id                     String                 @id @default(uuid())
+  licenseKey             String                 @unique
+  activationPasswordHash String?
+  orderId                String?
+  order                  Order?                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderNo                String?
+  orderItemId            String?
+  orderItem              OrderItem?             @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  unitIndex              Int?
+  customerId             String?
+  customer               Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName           String?
+  customerEmail          String
+  customerPhone          String?
+  productId              String?
+  product                Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName            String
+  productCode            String?
+  source                 LicenseSource          @default(WEBSITE_ORDER)
+  status                 LicenseLifecycleStatus @default(ACTIVE)
+  maxDevices             Int                    @default(1)
+  startsAt               DateTime?
+  expiresAt              DateTime?
+  notes                  String?                @db.Text
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  activations            LicenseActivation[]
 
   @@unique([orderItemId, unitIndex])
   @@index([orderId])
   @@index([orderNo])
   @@index([customerEmail])
+  @@index([source])
+  @@index([productCode])
 }
 
 model LicenseActivation {
