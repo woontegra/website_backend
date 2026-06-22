@@ -10,6 +10,9 @@ const TYPES: LegalDocumentType[] = [
   'COMMERCIAL_ELECTRONIC_MESSAGE',
   'TERMS_OF_USE',
   'PRIVACY_POLICY',
+  'SOFTWARE_LICENSE',
+  'SAAS_SUBSCRIPTION',
+  'DIGITAL_IMMEDIATE_DELIVERY_WAIVER',
 ]
 
 function parseType(s: string): LegalDocumentType | null {
@@ -39,7 +42,7 @@ export async function publicGetByType(req: Request, res: Response) {
 
 /** Checkout: şablon + sipariş öncesi değişkenlerle render (ham {{}} dönmez). */
 export async function publicPreview(req: Request, res: Response) {
-  const body = req.body as { type?: unknown; variables?: unknown }
+  const body = req.body as { type?: unknown; variables?: unknown; variant?: unknown }
   const t = parseType(String(body.type ?? ''))
   if (!t) return res.status(400).json({ success: false, message: 'Geçersiz belge tipi' })
   try {
@@ -47,7 +50,9 @@ export async function publicPreview(req: Request, res: Response) {
       body.variables && typeof body.variables === 'object' && !Array.isArray(body.variables)
         ? (body.variables as Record<string, unknown>)
         : {}
-    const data = await legalDocumentsService.getRenderedPreview(t, vars)
+    const variantRaw = String(body.variant ?? '').trim().toUpperCase()
+    const variant = variantRaw === 'DOWNLOAD' || variantRaw === 'SAAS' ? variantRaw : undefined
+    const data = await legalDocumentsService.getRenderedPreview(t, vars, variant)
     res.json({ success: true, data })
   } catch {
     res.status(500).json({ success: false, message: 'Yüklenemedi' })

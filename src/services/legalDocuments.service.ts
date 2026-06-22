@@ -1,6 +1,7 @@
 import { LegalDocumentType, Prisma } from '@prisma/client'
-import { getDefaultLegalDocument } from '../data/defaultLegalContents'
-import { buildSellerVars, escapeHtml } from '../lib/legalSeller'
+import { getDefaultLegalDocument, type LegalDocumentVariant } from '../data/defaultLegalContents'
+import { buildSellerVars, escapeHtml, formatLegalCurrencyDisplay } from '../lib/legalSeller'
+import { buildLegalBuyerVariables, type LegalBuyerInput } from '../lib/legalBuyerInfo'
 import { prisma } from '../lib/prisma'
 import { renderLegalTemplate } from './legalTemplate.service'
 
@@ -90,12 +91,16 @@ export const legalDocumentsService = {
   },
 
   /** Checkout önizlemesi: aktif belge + değişkenlerle render; ham {{}} kalmaz. */
-  async getRenderedPreview(type: LegalDocumentType, variables: Record<string, unknown>) {
+  async getRenderedPreview(
+    type: LegalDocumentType,
+    variables: Record<string, unknown>,
+    variant?: LegalDocumentVariant,
+  ) {
     const seller = buildSellerVars()
     const sellerEscaped: Record<string, string> = Object.fromEntries(
       Object.entries(seller).map(([k, v]) => [k, escapeHtml(v)]),
     )
-    const client = sanitizePreviewVariables(variables)
+    const client = prepareLegalRenderVariables(variables)
     const merged: Record<string, string> = { ...client, ...sellerEscaped }
 
     const doc = await prisma.legalDocument.findFirst({
@@ -103,15 +108,21 @@ export const legalDocumentsService = {
       orderBy: { updatedAt: 'desc' },
     })
 
-    const useDefault = !doc?.content?.trim()
-    if (useDefault && doc?.title) {
-      console.warn(`[legal] Active ${type} document has empty content; using built-in default body.`)
-    }
+    const fallback = getDefaultLegalDocument(type, variant)
+    const isVariantWaiver = type === 'DIGITAL_IMMEDIATE_DELIVERY_WAIVER' && variant
 
-    const fallback = getDefaultLegalDocument(type)
-    const base = useDefault
-      ? { title: doc?.title?.trim() ? doc!.title : fallback.title, content: fallback.content }
-      : { title: doc!.title, content: doc!.content }
+    let base: { title: string; content: string }
+    if (isVariantWaiver) {
+      base = { title: fallback.title, content: fallback.content }
+    } else {
+      const useDefault = !doc?.content?.trim()
+      if (useDefault && doc?.title) {
+        console.warn(`[legal] Active ${type} document has empty content; using built-in default body.`)
+      }
+      base = useDefault
+        ? { title: doc?.title?.trim() ? doc!.title : fallback.title, content: fallback.content }
+        : { title: doc!.title, content: doc!.content }
+    }
     const version = doc?.version ?? 0
 
     return {
@@ -131,14 +142,47 @@ function sanitizeProductListHtml(html: string): string {
   return s
 }
 
-function sanitizePreviewVariables(variables: unknown): Record<string, string> {
+function extractClientVariables(variables: unknown): Record<string, string> {
   if (!variables || typeof variables !== 'object') return {}
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(variables as Record<string, unknown>)) {
     if (typeof v !== 'string') continue
     if (k.startsWith('seller')) continue
-    const raw = v.slice(0, 50_000)
-    out[k] = k === 'productList' ? sanitizeProductListHtml(raw) : escapeHtml(raw)
+    if (k === 'buyerInfoBlock') continue
+    out[k] = v.trim().slice(0, 50_000)
   }
+  return out
+}
+
+function prepareLegalRenderVariables(variables: unknown): Record<string, string> {
+  const raw = extractClientVariables(variables)
+  const buyerInput: LegalBuyerInput = {
+    customerName: raw.customerName || raw.buyerName,
+    customerEmail: raw.customerEmail || raw.email,
+    customerPhone: raw.customerPhone || raw.phone,
+    billingType: raw.billingType || raw.invoiceType,
+    companyName: raw.companyName,
+    taxOffice: raw.taxOffice,
+    taxNumber: raw.taxNumber || raw.identityNumber,
+    city: raw.city,
+    district: raw.district,
+    addressLine: raw.addressLine || raw.address,
+  }
+  const buyerVars = buildLegalBuyerVariables(buyerInput)
+
+  const out: Record<string, string> = {
+    buyerInfoBlock: buyerVars.buyerInfoBlock,
+    productList: raw.productList ? sanitizeProductListHtml(raw.productList) : '',
+  }
+
+  for (const [k, v] of Object.entries(buyerVars)) {
+    if (k === 'buyerInfoBlock') continue
+    out[k] = escapeHtml(v)
+  }
+
+  if (raw.orderNo) out.orderNo = escapeHtml(raw.orderNo)
+  if (raw.orderTotal) out.orderTotal = escapeHtml(raw.orderTotal)
+  if (raw.currency) out.currency = escapeHtml(formatLegalCurrencyDisplay(raw.currency))
+
   return out
 }

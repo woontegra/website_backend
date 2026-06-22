@@ -44,6 +44,10 @@ export async function createOrder(req: Request, res: Response) {
   const acceptPreInfo = body.acceptPreInfo === true
   const acceptDistanceSales = body.acceptDistanceSales === true
   const acceptKvkk = body.acceptKvkk === true
+  const acceptSoftwareLicense = body.acceptSoftwareLicense === true
+  const acceptSaasSubscription = body.acceptSaasSubscription === true
+  const acceptDigitalProductWaiver = body.acceptDigitalProductWaiver === true
+  const acceptDigitalServiceWaiver = body.acceptDigitalServiceWaiver === true
   const marketingConsent = body.marketingConsent === true
   const explicitConsent = body.explicitConsent === true
 
@@ -76,10 +80,17 @@ export async function createOrder(req: Request, res: Response) {
       taxOffice: readString(body, 'taxOffice'),
       taxNumber: readString(body, 'taxNumber'),
       companyName: readString(body, 'companyName'),
+      deliveryCity: readString(body, 'deliveryCity') || readString(body, 'city'),
+      deliveryDistrict: readString(body, 'deliveryDistrict') || readString(body, 'district'),
+      deliveryLine: readString(body, 'deliveryLine') || readString(body, 'addressLine') || readString(body, 'address'),
       customerId: req.customer?.id ?? null,
       acceptPreInfo,
       acceptDistanceSales,
       acceptKvkk,
+      acceptSoftwareLicense,
+      acceptSaasSubscription,
+      acceptDigitalProductWaiver,
+      acceptDigitalServiceWaiver,
       marketingConsent,
       explicitConsent,
       acceptedIp: ip || null,

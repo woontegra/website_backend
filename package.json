@@ -14,6 +14,7 @@
     "audit:images": "tsx scripts/audit-image-paths.ts",
     "fix:images": "tsx scripts/fix-upload-image-paths.ts",
     "report:download-delivery": "tsx scripts/report-download-delivery.ts",
+    "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },
   "prisma": {

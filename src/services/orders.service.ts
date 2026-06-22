@@ -1,6 +1,15 @@
 import { LegalDocumentType, LicenseLifecycleStatus, OrderStatus, PaymentProvider, PaymentTransactionStatus, Prisma, ProductType } from '@prisma/client'
-import { getDefaultLegalDocument } from '../data/defaultLegalContents'
-import { buildSellerVars, escapeHtml } from '../lib/legalSeller'
+import { getDefaultLegalDocument, type LegalDocumentVariant } from '../data/defaultLegalContents'
+import { buildSellerVars, escapeHtml, formatLegalCurrencyDisplay } from '../lib/legalSeller'
+import { buildLegalBuyerVariables, type LegalBuyerInput } from '../lib/legalBuyerInfo'
+import {
+  formatLegalCartProductTypes,
+  orderLegalConsentErrorMessage,
+  resolveOrderLegalConsentFlags,
+  uniqueCartProductTypes,
+  validateOrderLegalConsents,
+  type OrderLegalConsentFlags,
+} from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
 import { denialReasonLabel, getProductOrderDenialReason, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
@@ -36,9 +45,16 @@ export type CreateOrderInput = {
   taxNumber?: string | null
   companyName?: string | null
   customerId?: string | null
+  deliveryCity?: string | null
+  deliveryDistrict?: string | null
+  deliveryLine?: string | null
   acceptPreInfo: boolean
   acceptDistanceSales: boolean
   acceptKvkk: boolean
+  acceptSoftwareLicense?: boolean
+  acceptSaasSubscription?: boolean
+  acceptDigitalProductWaiver?: boolean
+  acceptDigitalServiceWaiver?: boolean
   marketingConsent?: boolean
   explicitConsent?: boolean
   acceptedIp?: string | null
@@ -104,7 +120,21 @@ async function findActiveLegal(type: LegalDocumentType) {
   })
 }
 
-async function resolveLegalContentForSnapshot(type: LegalDocumentType): Promise<{ title: string; content: string; version: number }> {
+async function resolveLegalContentForSnapshot(
+  type: LegalDocumentType,
+  variant?: LegalDocumentVariant,
+): Promise<{ title: string; content: string; version: number }> {
+  if (type === LegalDocumentType.DIGITAL_IMMEDIATE_DELIVERY_WAIVER && variant) {
+    const fallback = getDefaultLegalDocument(type, variant)
+    const doc = await findActiveLegal(type)
+    const title = fallback.title
+    const content = fallback.content
+    if (doc && doc.content?.trim()) {
+      console.warn(`[legal] Order snapshot: ${type} uses variant-specific default (${variant}); DB stores a single waiver body.`)
+    }
+    return { title, content, version: doc?.version ?? 1 }
+  }
+
   const doc = await findActiveLegal(type)
   if (doc?.content?.trim()) {
     return { title: doc.title, content: doc.content, version: doc.version }
@@ -114,7 +144,29 @@ async function resolveLegalContentForSnapshot(type: LegalDocumentType): Promise<
   if (doc && !doc.content?.trim()) {
     console.warn(`[legal] Order snapshot: active ${type} has empty content; using default body.`)
   }
-  return { title, content: fallback.content, version: doc?.version ?? 0 }
+  return { title, content: fallback.content, version: doc?.version ?? 1 }
+}
+
+type LegalSnapshotSpec = {
+  type: LegalDocumentType
+  variant?: LegalDocumentVariant
+}
+
+function buildLegalSnapshotSpecs(flags: OrderLegalConsentFlags): LegalSnapshotSpec[] {
+  const specs: LegalSnapshotSpec[] = [
+    { type: LegalDocumentType.PRE_INFORMATION },
+    { type: LegalDocumentType.DISTANCE_SALES },
+    { type: LegalDocumentType.KVKK_CLARIFICATION },
+  ]
+  if (flags.needsSoftwareLicense) specs.push({ type: LegalDocumentType.SOFTWARE_LICENSE })
+  if (flags.needsSaasSubscription) specs.push({ type: LegalDocumentType.SAAS_SUBSCRIPTION })
+  if (flags.needsDigitalProductWaiver) {
+    specs.push({ type: LegalDocumentType.DIGITAL_IMMEDIATE_DELIVERY_WAIVER, variant: 'DOWNLOAD' })
+  }
+  if (flags.needsDigitalServiceWaiver) {
+    specs.push({ type: LegalDocumentType.DIGITAL_IMMEDIATE_DELIVERY_WAIVER, variant: 'SAAS' })
+  }
+  return specs
 }
 
 async function createLegalSnapshotsForOrder(
@@ -122,6 +174,14 @@ async function createLegalSnapshotsForOrder(
   ctx: {
     customerName: string
     customerEmail: string
+    customerPhone?: string | null
+    billingType?: string | null
+    companyName?: string | null
+    taxOffice?: string | null
+    taxNumber?: string | null
+    city?: string | null
+    district?: string | null
+    addressLine?: string | null
     orderNo: string
     orderTotal: string
     currency: string
@@ -130,26 +190,40 @@ async function createLegalSnapshotsForOrder(
     ua: string | null
     marketingConsent: boolean
     explicitConsent: boolean
+    legalFlags: OrderLegalConsentFlags
   },
 ) {
   const existing = await prisma.orderLegalSnapshot.count({ where: { orderId } })
   if (existing > 0) return
 
+  const currencyDisplay = formatLegalCurrencyDisplay(ctx.currency)
+  const buyerInput: LegalBuyerInput = {
+    customerName: ctx.customerName,
+    customerEmail: ctx.customerEmail,
+    customerPhone: ctx.customerPhone,
+    billingType: ctx.billingType,
+    companyName: ctx.companyName,
+    taxOffice: ctx.taxOffice,
+    taxNumber: ctx.taxNumber,
+    city: ctx.city,
+    district: ctx.district,
+    addressLine: ctx.addressLine,
+  }
+  const buyerVars = buildLegalBuyerVariables(buyerInput)
   const vars: Record<string, string> = {
-    customerName: escapeHtml(ctx.customerName),
-    customerEmail: escapeHtml(ctx.customerEmail),
+    buyerInfoBlock: buyerVars.buyerInfoBlock,
+    productList: ctx.productListHtml,
     orderNo: escapeHtml(ctx.orderNo),
     orderTotal: escapeHtml(ctx.orderTotal),
-    currency: escapeHtml(ctx.currency),
-    productList: ctx.productListHtml,
+    currency: escapeHtml(currencyDisplay),
+    ...Object.fromEntries(
+      Object.entries(buyerVars)
+        .filter(([k]) => k !== 'buyerInfoBlock')
+        .map(([k, v]) => [k, escapeHtml(v)]),
+    ),
     ...Object.fromEntries(Object.entries(buildSellerVars()).map(([k, v]) => [k, escapeHtml(v)])),
   }
 
-  const mandatory: LegalDocumentType[] = [
-    LegalDocumentType.PRE_INFORMATION,
-    LegalDocumentType.DISTANCE_SALES,
-    LegalDocumentType.KVKK_CLARIFICATION,
-  ]
   const optional: LegalDocumentType[] = []
   if (ctx.marketingConsent) optional.push(LegalDocumentType.COMMERCIAL_ELECTRONIC_MESSAGE)
   if (ctx.explicitConsent) optional.push(LegalDocumentType.EXPLICIT_CONSENT)
@@ -157,7 +231,21 @@ async function createLegalSnapshotsForOrder(
   const rows: Prisma.OrderLegalSnapshotCreateManyInput[] = []
   const now = new Date()
 
-  for (const t of [...mandatory, ...optional]) {
+  for (const spec of buildLegalSnapshotSpecs(ctx.legalFlags)) {
+    const base = await resolveLegalContentForSnapshot(spec.type, spec.variant)
+    rows.push({
+      orderId,
+      documentType: spec.type,
+      title: base.title,
+      content: renderLegalTemplate(base.content, vars),
+      version: base.version,
+      acceptedAt: now,
+      ipAddress: ctx.ip,
+      userAgent: ctx.ua,
+    })
+  }
+
+  for (const t of optional) {
     const base = await resolveLegalContentForSnapshot(t)
     rows.push({
       orderId,
@@ -182,12 +270,6 @@ function emailsMatch(a: string, b: string): boolean {
 
 export const ordersService = {
   async createOrder(input: CreateOrderInput) {
-    if (!input.acceptPreInfo || !input.acceptDistanceSales || !input.acceptKvkk) {
-      const err = new Error('Yasal onaylar eksik') as Error & { status: number }
-      err.status = 400
-      throw err
-    }
-
     const lines = input.items.filter((l) => l.productId && l.quantity > 0)
     if (lines.length === 0) {
       const err = new Error('Sepet boş') as Error & { status: number }
@@ -290,6 +372,7 @@ export const ordersService = {
     }
 
     const currency = (products[0].currency || 'TRY').trim() || 'TRY'
+    const currencyDisplay = formatLegalCurrencyDisplay(currency)
     let subtotal = new Prisma.Decimal(0)
     const lineSnapshots: {
       productId: string
@@ -336,6 +419,24 @@ export const ordersService = {
       })
     }
 
+    const cartProductTypes = uniqueCartProductTypes(lineSnapshots.map((l) => l.productType))
+    const legalFlags = resolveOrderLegalConsentFlags(cartProductTypes)
+    if (
+      !validateOrderLegalConsents(legalFlags, {
+        acceptPreInfo: input.acceptPreInfo,
+        acceptDistanceSales: input.acceptDistanceSales,
+        acceptKvkk: input.acceptKvkk,
+        acceptSoftwareLicense: input.acceptSoftwareLicense,
+        acceptSaasSubscription: input.acceptSaasSubscription,
+        acceptDigitalProductWaiver: input.acceptDigitalProductWaiver,
+        acceptDigitalServiceWaiver: input.acceptDigitalServiceWaiver,
+      })
+    ) {
+      const err = new Error(orderLegalConsentErrorMessage(legalFlags)) as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+
     const total = subtotal
     const now = new Date()
     const paymentProvider =
@@ -355,7 +456,7 @@ export const ordersService = {
       .map((l) => {
         const web = l.productType === ProductType.SAAS || l.productType === ProductType.SERVICE
         const qtyText = web ? `${l.quantity} yıl` : `${l.quantity} adet`
-        return `<li>${escapeHtml(l.productName)} — ${escapeHtml(qtyText)} — ${Number(l.total).toFixed(2)} ${escapeHtml(currency)}</li>`
+        return `<li>${escapeHtml(l.productName)} — ${escapeHtml(qtyText)} — ${Number(l.total).toFixed(2)} ${escapeHtml(currencyDisplay)}</li>`
       })
       .join('')}</ul>`
 
@@ -380,6 +481,13 @@ export const ordersService = {
             preInfoAcceptedAt: now,
             distanceSalesAcceptedAt: now,
             kvkkReadAt: now,
+            softwareLicenseAcceptedAt: legalFlags.needsSoftwareLicense && input.acceptSoftwareLicense ? now : null,
+            saasSubscriptionAcceptedAt: legalFlags.needsSaasSubscription && input.acceptSaasSubscription ? now : null,
+            digitalProductWaiverAcceptedAt:
+              legalFlags.needsDigitalProductWaiver && input.acceptDigitalProductWaiver ? now : null,
+            digitalServiceWaiverAcceptedAt:
+              legalFlags.needsDigitalServiceWaiver && input.acceptDigitalServiceWaiver ? now : null,
+            legalCartProductTypes: formatLegalCartProductTypes(cartProductTypes),
             marketingConsentAt: input.marketingConsent ? now : null,
             explicitConsentAt: input.explicitConsent ? now : null,
             acceptedIp: input.acceptedIp?.trim() || null,
@@ -402,6 +510,14 @@ export const ordersService = {
         await createLegalSnapshotsForOrder(order.id, {
           customerName: input.customerName.trim(),
           customerEmail: input.customerEmail.trim().toLowerCase(),
+          customerPhone: input.customerPhone?.trim() || null,
+          billingType: input.billingType?.trim() || null,
+          companyName: input.companyName?.trim() || null,
+          taxOffice: input.taxOffice?.trim() || null,
+          taxNumber: input.taxNumber?.trim() || null,
+          city: input.deliveryCity?.trim() || null,
+          district: input.deliveryDistrict?.trim() || null,
+          addressLine: input.deliveryLine?.trim() || null,
           orderNo: order.orderNo,
           orderTotal: Number(total).toFixed(2),
           currency,
@@ -410,6 +526,7 @@ export const ordersService = {
           ua: input.acceptedUserAgent ?? null,
           marketingConsent: !!input.marketingConsent,
           explicitConsent: !!input.explicitConsent,
+          legalFlags,
         })
 
         if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
@@ -1163,6 +1280,11 @@ export const ordersAdminService = {
       preInfoAcceptedAt: order.preInfoAcceptedAt?.toISOString() ?? null,
       distanceSalesAcceptedAt: order.distanceSalesAcceptedAt?.toISOString() ?? null,
       kvkkReadAt: order.kvkkReadAt?.toISOString() ?? null,
+      softwareLicenseAcceptedAt: order.softwareLicenseAcceptedAt?.toISOString() ?? null,
+      saasSubscriptionAcceptedAt: order.saasSubscriptionAcceptedAt?.toISOString() ?? null,
+      digitalProductWaiverAcceptedAt: order.digitalProductWaiverAcceptedAt?.toISOString() ?? null,
+      digitalServiceWaiverAcceptedAt: order.digitalServiceWaiverAcceptedAt?.toISOString() ?? null,
+      legalCartProductTypes: order.legalCartProductTypes,
       marketingConsentAt: order.marketingConsentAt?.toISOString() ?? null,
       explicitConsentAt: order.explicitConsentAt?.toISOString() ?? null,
       acceptedIp: order.acceptedIp,

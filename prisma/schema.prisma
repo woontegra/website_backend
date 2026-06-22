@@ -409,6 +409,12 @@ enum LegalDocumentType {
   COMMERCIAL_ELECTRONIC_MESSAGE
   TERMS_OF_USE
   PRIVACY_POLICY
+  /// Masaüstü / DOWNLOAD ürün yazılım lisans sözleşmesi
+  SOFTWARE_LICENSE
+  /// SaaS abonelik ve kullanım sözleşmesi
+  SAAS_SUBSCRIPTION
+  /// Dijital teslim / hizmet başlangıcı ve cayma hakkı istisnası onayı
+  DIGITAL_IMMEDIATE_DELIVERY_WAIVER
 }
 
 /// Havale/EFT — vitrinde gösterilecek banka bilgisi (tek satır; admin CRUD sonrası genişletilebilir)
@@ -485,6 +491,12 @@ model Order {
   preInfoAcceptedAt         DateTime?
   distanceSalesAcceptedAt   DateTime?
   kvkkReadAt                DateTime?
+  softwareLicenseAcceptedAt DateTime?
+  saasSubscriptionAcceptedAt DateTime?
+  digitalProductWaiverAcceptedAt DateTime?
+  digitalServiceWaiverAcceptedAt DateTime?
+  /// Sipariş anındaki ürün tipleri (ör. DOWNLOAD,SAAS) — yasal onay kapsamı
+  legalCartProductTypes     String?
   marketingConsentAt        DateTime?
   explicitConsentAt         DateTime?
   acceptedIp                String?
