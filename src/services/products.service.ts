@@ -101,6 +101,12 @@ export type PublicProductDetail = PublicProductListItem & {
   seoDescription: string | null
   galleryImages: PublicProductGalleryImage[]
   featureBullets: string
+  /** Gösterim amaçlı; lisans üretim akışına dahil değil */
+  licenseRequired: boolean
+  licenseDays: number | null
+  licenseMaxDevices: number | null
+  /** İndirme URL’si public yanıtta yer almaz; yalnızca tanımlı olup olmadığı */
+  hasDownload: boolean
 }
 
 function toNumber(d: Prisma.Decimal | null | undefined): number | null {
@@ -278,6 +284,13 @@ function mapPublicDetail(p: ProductRow): PublicProductDetail {
     seoDescription: p.seoDescription,
     galleryImages: gallery,
     featureBullets: p.featureBullets ?? '',
+    licenseRequired: p.licenseRequired === true,
+    licenseDays: p.licenseRequired ? (p.licenseDays ?? null) : null,
+    licenseMaxDevices: p.licenseRequired ? (p.licenseMaxDevices ?? null) : null,
+    hasDownload:
+      p.productType === ProductType.DOWNLOAD
+        ? !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim())
+        : p.productType === ProductType.SAAS || p.productType === ProductType.SERVICE,
   }
 }
 
@@ -311,6 +324,10 @@ const productPublicSelect = {
   isActive: true,
   purchaseEnabled: true,
   licenseMonths: true,
+  licenseRequired: true,
+  licenseDays: true,
+  licenseMaxDevices: true,
+  downloadUrl: true,
   featureBullets: true,
   isFeatured: true,
   sortOrder: true,
@@ -324,6 +341,7 @@ const productPublicSelect = {
   updatedAt: true,
   category: { select: categorySelect },
   coverImageMedia: { select: { id: true, url: true, fileType: true } },
+  downloadMedia: { select: { url: true } },
   galleryImages: galleryArgs,
 } as const satisfies Prisma.ProductSelect
 
