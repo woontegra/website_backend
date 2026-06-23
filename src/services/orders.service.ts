@@ -1191,6 +1191,7 @@ export const ordersAdminService = {
         },
         paymentTransactions: { orderBy: { createdAt: 'desc' } },
         legalSnapshots: { orderBy: { documentType: 'asc' } },
+        legalArchiveFiles: { orderBy: [{ generatedAt: 'asc' }, { fileName: 'asc' }] },
         customer: { select: { id: true, name: true, email: true, phone: true } },
         licenses: {
           orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
@@ -1375,6 +1376,20 @@ export const ordersAdminService = {
         acceptedAt: s.acceptedAt.toISOString(),
         ipAddress: s.ipAddress,
         userAgent: s.userAgent,
+      })),
+      legalArchiveFiles: order.legalArchiveFiles.map((f) => ({
+        id: f.id,
+        packageNo: f.packageNo,
+        documentType: f.documentType,
+        fileCategory: f.fileCategory,
+        title: f.title,
+        fileName: f.fileName,
+        mimeType: f.mimeType,
+        size: f.size,
+        sha256: f.sha256,
+        acceptanceCode: f.acceptanceCode,
+        version: f.version,
+        generatedAt: f.generatedAt.toISOString(),
       })),
     }
   },

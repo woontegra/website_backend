@@ -513,6 +513,7 @@ model Order {
   items                     OrderItem[]
   paymentTransactions       PaymentTransaction[]
   legalSnapshots            OrderLegalSnapshot[]
+  legalArchiveFiles         OrderLegalArchiveFile[]
   licenses                  License[]
 
   @@index([status, createdAt])
@@ -536,6 +537,29 @@ model OrderLegalSnapshot {
 
   @@index([orderId])
   @@index([documentType])
+}
+
+/// Sipariş yasal arşivi (PDF / acceptance.json) — Faz 3A
+model OrderLegalArchiveFile {
+  id             String             @id @default(uuid())
+  orderId        String
+  order          Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  packageNo      String
+  documentType   LegalDocumentType?
+  fileCategory   String
+  title          String
+  fileName       String
+  storageKey     String
+  mimeType       String
+  size           Int
+  sha256         String
+  acceptanceCode String?
+  version        Int?
+  generatedAt    DateTime           @default(now())
+
+  @@unique([orderId, fileName])
+  @@index([orderId])
+  @@index([packageNo])
 }
 
 model OrderItem {
