@@ -105,6 +105,9 @@ export const catalogMediaService = {
     const dir = resolveCatalogUploadDir()
     const absolutePath = path.join(dir, fileName)
     fs.writeFileSync(absolutePath, file.buffer)
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error('Dosya diske yazılamadı')
+    }
 
     const publicUrl = `/uploads/${UPLOAD_SUBDIR}/${fileName}`
     const row = await prisma.catalogMedia.create({
