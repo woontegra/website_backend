@@ -195,6 +195,11 @@ enum CatalogMediaFileType {
   DOCUMENT
 }
 
+enum MediaStorageProvider {
+  LOCAL
+  R2
+}
+
 model CatalogMedia {
   id             String               @id @default(uuid())
   fileName       String
@@ -204,6 +209,9 @@ model CatalogMedia {
   fileSize      Int
   url            String
   storageKey     String?
+  storageProvider MediaStorageProvider @default(LOCAL)
+  bucket         String?
+  publicUrl      String?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   coverProducts  Product[]          @relation("ProductCoverMedia")

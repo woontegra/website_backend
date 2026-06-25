@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   siteDescription: 'Yazılım, e-ticaret ve dijital sistemler',
   logo: '/logo.svg',
   navbarLogoHeight: '42',
+  navbarLogoWidth: '150',
   footerLogoHeight: '28',
   mobileLogoHeight: '34',
   favicon: '/favicon.svg',
@@ -117,11 +118,19 @@ function sanitizeForAdmin(settings: Record<string, any>) {
 
 const LOGO_HEIGHT_MIN = 24
 const LOGO_HEIGHT_MAX = 90
+const LOGO_WIDTH_MIN = 80
+const LOGO_WIDTH_MAX = 260
 
 function parseLogoHeight(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(String(value ?? '').trim(), 10)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(LOGO_HEIGHT_MAX, Math.max(LOGO_HEIGHT_MIN, parsed))
+}
+
+function parseLogoWidth(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? '').trim(), 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(LOGO_WIDTH_MAX, Math.max(LOGO_WIDTH_MIN, parsed))
 }
 
 async function getSettingUpdatedAt(key: string): Promise<string> {
@@ -136,6 +145,7 @@ export const settingsService = {
   async getPublic() {
     const settings = await this.getAll()
     const logoUpdatedAt = await getSettingUpdatedAt('logo')
+    const faviconUpdatedAt = await getSettingUpdatedAt('favicon')
     return {
       siteName: settings.siteName,
       contactEmail: settings.contactEmail,
@@ -144,9 +154,11 @@ export const settingsService = {
       logo: settings.logo,
       logoUpdatedAt,
       navbarLogoHeight: parseLogoHeight(settings.navbarLogoHeight, 42),
+      navbarLogoWidth: parseLogoWidth(settings.navbarLogoWidth, 150),
       footerLogoHeight: parseLogoHeight(settings.footerLogoHeight, 28),
       mobileLogoHeight: parseLogoHeight(settings.mobileLogoHeight, 34),
       favicon: settings.favicon,
+      faviconUpdatedAt,
       primaryColor: settings.primaryColor,
       secondaryColor: settings.secondaryColor,
     }
@@ -189,7 +201,8 @@ export const settingsService = {
   async getAdmin() {
     const settings = await this.getAll()
     const logoUpdatedAt = await getSettingUpdatedAt('logo')
-    return { ...sanitizeForAdmin(settings), logoUpdatedAt }
+    const faviconUpdatedAt = await getSettingUpdatedAt('favicon')
+    return { ...sanitizeForAdmin(settings), logoUpdatedAt, faviconUpdatedAt }
   },
 
   async update(data: Record<string, any>) {

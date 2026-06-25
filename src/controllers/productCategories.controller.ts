@@ -8,7 +8,7 @@ function validateCatBody(body: Record<string, unknown>, isPatch: boolean): strin
     if (name.length < 2) return 'Kategori adı en az 2 karakter olmalıdır'
   }
   if (body.slug !== undefined && body.slug !== null && String(body.slug).trim() !== '') {
-    const slug = String(body.slug).trim()
+    const slug = String(body.slug).trim().toLowerCase()
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return 'Slug yalnızca küçük harf, rakam ve tire içerebilir'
   }
   return null

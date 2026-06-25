@@ -1,8 +1,15 @@
 import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
-import { CatalogMediaFileType, Prisma } from '@prisma/client'
+import { CatalogMediaFileType, MediaStorageProvider, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { isR2PublicUploadConfigured, getR2ConfigStatus, assertR2PublicUploadConfigured } from '../lib/r2.client'
+import {
+  buildCatalogObjectKey,
+  deletePublicObject,
+  inferContentType,
+  uploadPublicObject,
+} from './r2Upload.service'
 import { buildSafeCatalogStorageFilename, maybeFixMojibakeFilename } from '../utils/uploadFilename'
 
 const UPLOAD_SUBDIR = 'catalog'
@@ -48,8 +55,20 @@ export type CatalogMediaDto = {
   fileSize: number
   url: string
   storageKey: string | null
+  storageProvider: MediaStorageProvider
+  bucket: string | null
+  publicUrl: string | null
   createdAt: string
   updatedAt: string
+}
+
+function effectiveMediaUrl(row: {
+  url: string
+  publicUrl: string | null
+  storageProvider: MediaStorageProvider
+}): string {
+  if (row.storageProvider === 'R2' && row.publicUrl) return row.publicUrl
+  return row.url
 }
 
 function mapRow(row: {
@@ -61,9 +80,13 @@ function mapRow(row: {
   fileSize: number
   url: string
   storageKey: string | null
+  storageProvider: MediaStorageProvider
+  bucket: string | null
+  publicUrl: string | null
   createdAt: Date
   updatedAt: Date
 }): CatalogMediaDto {
+  const displayUrl = effectiveMediaUrl(row)
   return {
     id: row.id,
     fileName: row.fileName,
@@ -71,11 +94,80 @@ function mapRow(row: {
     mimeType: row.mimeType,
     fileType: row.fileType,
     fileSize: row.fileSize,
-    url: row.url,
+    url: displayUrl,
     storageKey: row.storageKey,
+    storageProvider: row.storageProvider,
+    bucket: row.bucket,
+    publicUrl: row.publicUrl,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
+}
+
+async function persistUploadToDisk(
+  file: Express.Multer.File,
+  id: string,
+  fileName: string,
+  displayOriginalName: string,
+  fileType: CatalogMediaFileType,
+): Promise<CatalogMediaDto> {
+  const dir = resolveCatalogUploadDir()
+  const absolutePath = path.join(dir, fileName)
+  fs.writeFileSync(absolutePath, file.buffer)
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error('Dosya diske yazılamadı')
+  }
+
+  const publicUrl = `/uploads/${UPLOAD_SUBDIR}/${fileName}`
+  const row = await prisma.catalogMedia.create({
+    data: {
+      id,
+      fileName,
+      originalName: displayOriginalName,
+      mimeType: file.mimetype,
+      fileType,
+      fileSize: file.size,
+      url: publicUrl,
+      storageKey: null,
+      storageProvider: 'LOCAL',
+      bucket: null,
+      publicUrl: null,
+    },
+  })
+  return mapRow(row)
+}
+
+async function persistUploadToR2(
+  file: Express.Multer.File,
+  id: string,
+  fileName: string,
+  displayOriginalName: string,
+  fileType: CatalogMediaFileType,
+): Promise<CatalogMediaDto> {
+  const contentType = file.mimetype || inferContentType(fileName)
+  const objectKey = buildCatalogObjectKey('general', fileName)
+  const uploaded = await uploadPublicObject({
+    objectKey,
+    body: file.buffer,
+    contentType,
+  })
+
+  const row = await prisma.catalogMedia.create({
+    data: {
+      id,
+      fileName,
+      originalName: displayOriginalName,
+      mimeType: contentType,
+      fileType,
+      fileSize: file.size,
+      url: uploaded.publicUrl,
+      storageKey: uploaded.objectKey,
+      storageProvider: 'R2',
+      bucket: uploaded.bucket,
+      publicUrl: uploaded.publicUrl,
+    },
+  })
+  return mapRow(row)
 }
 
 export const catalogMediaService = {
@@ -102,27 +194,24 @@ export const catalogMediaService = {
     const id = randomUUID()
     const { storageFileName, displayOriginalName } = buildSafeCatalogStorageFilename(rawOriginal, ext)
     const fileName = storageFileName
-    const dir = resolveCatalogUploadDir()
-    const absolutePath = path.join(dir, fileName)
-    fs.writeFileSync(absolutePath, file.buffer)
-    if (!fs.existsSync(absolutePath)) {
-      throw new Error('Dosya diske yazılamadı')
+
+    const r2Status = getR2ConfigStatus()
+    if (r2Status.partiallyConfigured) {
+      assertR2PublicUploadConfigured()
     }
 
-    const publicUrl = `/uploads/${UPLOAD_SUBDIR}/${fileName}`
-    const row = await prisma.catalogMedia.create({
-      data: {
-        id,
-        fileName,
-        originalName: displayOriginalName,
-        mimeType: file.mimetype,
-        fileType,
-        fileSize: file.size,
-        url: publicUrl,
-        storageKey: null,
-      },
-    })
-    return mapRow(row)
+    if (isR2PublicUploadConfigured()) {
+      return persistUploadToR2(file, id, fileName, displayOriginalName, fileType)
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      assertR2PublicUploadConfigured()
+    }
+
+    console.warn(
+      '[catalogMedia] R2 public upload env tanımlı değil; geliştirme modunda dosya yerel diske yazılıyor (public/uploads/catalog).',
+    )
+    return persistUploadToDisk(file, id, fileName, displayOriginalName, fileType)
   },
 
   async deleteAdmin(id: string): Promise<CatalogMediaDto | null> {
@@ -135,12 +224,20 @@ export const catalogMediaService = {
       throw new Error('Bu dosya bir veya daha fazla üründe kullanılıyor; önce ürünlerden kaldırın.')
     }
 
-    const relPath = row.url.replace(/^\/uploads\//, '')
-    const abs = path.join(process.cwd(), 'public', 'uploads', relPath)
-    try {
-      if (fs.existsSync(abs)) fs.unlinkSync(abs)
-    } catch {
-      // ignore fs errors
+    if (row.storageProvider === 'R2' && row.storageKey) {
+      try {
+        await deletePublicObject(row.storageKey, row.bucket ?? undefined)
+      } catch {
+        // R2 silme hatası DB kaydını engellemesin
+      }
+    } else if (row.url.startsWith('/uploads/')) {
+      const relPath = row.url.replace(/^\/uploads\//, '')
+      const abs = path.join(process.cwd(), 'public', 'uploads', relPath)
+      try {
+        if (fs.existsSync(abs)) fs.unlinkSync(abs)
+      } catch {
+        // ignore fs errors
+      }
     }
 
     await prisma.catalogMedia.delete({ where: { id } })

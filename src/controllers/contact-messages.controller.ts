@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { contactMessagesService } from '../services/contact-messages.service'
+import { mailService } from '../services/mail.service'
 
 export async function getAll(_req: Request, res: Response) {
   try {
@@ -30,13 +31,26 @@ export async function create(req: Request, res: Response) {
       return res.status(400).json({ success: false, message: 'İsim, email ve mesaj zorunludur' })
     }
 
-    const contactMessage = await contactMessagesService.create({ 
-      name, 
-      email, 
-      message, 
-      phone, 
-      company 
+    const contactMessage = await contactMessagesService.create({
+      name,
+      email,
+      message,
+      phone,
+      company,
     })
+
+    try {
+      await mailService.sendContactForm({
+        name,
+        email,
+        message,
+        phone,
+        company,
+      })
+    } catch (mailError) {
+      console.error('[contact-messages] notification email failed', mailError)
+    }
+
     res.status(201).json({ success: true, data: contactMessage })
   } catch (error) {
     res.status(500).json({ success: false, message: 'Mesaj gönderilemedi', error })

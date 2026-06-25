@@ -6,6 +6,7 @@ require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
 
 import path from 'path'
 import express from 'express'
+import { getR2ConfigStatus } from './lib/r2.client'
 import cors from 'cors'
 import helmet from 'helmet'
 import { createGlobalRateLimiter } from './middleware/rateLimit.middleware'
@@ -165,7 +166,23 @@ app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, message: 'Woontegra API' })
+  const r2 = getR2ConfigStatus()
+  res.json({
+    success: true,
+    message: 'Woontegra API',
+    media: {
+      r2: {
+        configured: r2.configured,
+        publicUploadConfigured: r2.publicUploadConfigured,
+        partiallyConfigured: r2.partiallyConfigured,
+        publicBucket: r2.publicBucket,
+        privateBucket: r2.privateBucket,
+        publicBaseUrlSet: Boolean(r2.publicBaseUrl),
+        accountIdPresent: r2.accountIdPresent,
+        endpointPresent: r2.endpointPresent,
+      },
+    },
+  })
 })
 
 app.use((_req, res) => {

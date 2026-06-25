@@ -1,42 +1,109 @@
 import nodemailer from 'nodemailer'
+import type { Transporter } from 'nodemailer'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import { settingsService } from './settings.service'
 
-export const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'info@woontegra.com',
-    pass: process.env.GMAIL_APP_PASSWORD
+const DEFAULT_MAILBOX = 'info@woontegra.com'
+
+type MailConfig = {
+  transporter: Transporter
+  from: string
+  notifyTo: string
+}
+
+async function resolveMailConfig(): Promise<MailConfig> {
+  const settings = await settingsService.getAll()
+  const notifyTo = String(settings.contactEmail || DEFAULT_MAILBOX).trim() || DEFAULT_MAILBOX
+
+  const smtpHost = String(settings.smtpHost || '').trim()
+  const smtpUser = String(settings.smtpUser || '').trim()
+  const smtpPassword = String(settings.smtpPassword || '').trim()
+
+  if (smtpHost && smtpUser && smtpPassword) {
+    const port = Number.parseInt(String(settings.smtpPort || '587'), 10) || 587
+    const secure = settings.smtpSecure === true || settings.smtpSecure === 'true'
+    return {
+      transporter: nodemailer.createTransport({
+        host: smtpHost,
+        port,
+        secure,
+        auth: { user: smtpUser, pass: smtpPassword },
+      }),
+      from: `"Woontegra" <${smtpUser}>`,
+      notifyTo,
+    }
   }
-})
+
+  const gmailPass = process.env.GMAIL_APP_PASSWORD?.trim()
+  if (gmailPass) {
+    return {
+      transporter: nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: DEFAULT_MAILBOX, pass: gmailPass },
+      }),
+      from: `"Woontegra Website" <${DEFAULT_MAILBOX}>`,
+      notifyTo,
+    }
+  }
+
+  throw new Error('E-posta yapılandırması eksik: admin SMTP ayarları veya GMAIL_APP_PASSWORD gerekli')
+}
+
+async function dispatchMail(options: nodemailer.SendMailOptions) {
+  const config = await resolveMailConfig()
+  await config.transporter.sendMail({
+    from: config.from,
+    ...options,
+  })
+}
 
 export const mailService = {
-  async sendContactForm(data: { name: string; email: string; message: string }) {
-    await transporter.sendMail({
-      from: '"Woontegra Website" <info@woontegra.com>',
-      to: 'info@woontegra.com',
+  async sendContactForm(data: {
+    name: string
+    email: string
+    message: string
+    phone?: string
+    company?: string
+  }) {
+    const config = await resolveMailConfig()
+    const phoneLine = data.phone?.trim()
+      ? `<p><b>Telefon:</b> ${escapeHtml(data.phone.trim())}</p>`
+      : ''
+    const companyLine = data.company?.trim()
+      ? `<p><b>Firma:</b> ${escapeHtml(data.company.trim())}</p>`
+      : ''
+    await config.transporter.sendMail({
+      from: config.from,
+      to: config.notifyTo,
+      replyTo: data.email,
       subject: 'Yeni İletişim Formu',
       html: `
-        <h2>Yeni Mesaj</h2>
-        <p><b>Ad:</b> ${data.name}</p>
-        <p><b>Email:</b> ${data.email}</p>
-        <p><b>Mesaj:</b> ${data.message}</p>
-      `
+        <h2>Yeni İletişim Mesajı</h2>
+        <p><b>Ad:</b> ${escapeHtml(data.name)}</p>
+        <p><b>E-posta:</b> ${escapeHtml(data.email)}</p>
+        ${phoneLine}
+        ${companyLine}
+        <p><b>Mesaj:</b></p>
+        <p style="white-space:pre-wrap">${escapeHtml(data.message)}</p>
+      `,
     })
   },
 
   async sendOfferForm(data: { name: string; email: string; phone: string; service: string; note?: string }) {
-    await transporter.sendMail({
-      from: '"Woontegra Website" <info@woontegra.com>',
-      to: 'info@woontegra.com',
+    const config = await resolveMailConfig()
+    await config.transporter.sendMail({
+      from: config.from,
+      to: config.notifyTo,
+      replyTo: data.email,
       subject: 'Yeni Teklif Talebi',
       html: `
         <h2>Yeni Teklif Talebi</h2>
-        <p><b>Ad:</b> ${data.name}</p>
-        <p><b>Email:</b> ${data.email}</p>
-        <p><b>Telefon:</b> ${data.phone}</p>
-        <p><b>Hizmet:</b> ${data.service}</p>
-        <p><b>Not:</b> ${data.note || 'Yok'}</p>
-      `
+        <p><b>Ad:</b> ${escapeHtml(data.name)}</p>
+        <p><b>E-posta:</b> ${escapeHtml(data.email)}</p>
+        <p><b>Telefon:</b> ${escapeHtml(data.phone)}</p>
+        <p><b>Hizmet:</b> ${escapeHtml(data.service)}</p>
+        <p><b>Not:</b> ${escapeHtml(data.note || 'Yok')}</p>
+      `,
     })
   },
 
@@ -156,8 +223,7 @@ export const mailService = {
       ? `Müvekkil Kasa Defteri Masaüstü - Lisans ve İndirme Bilgileri`
       : `Siparişiniz onaylandı — ${data.orderNo}`
 
-    await transporter.sendMail({
-      from: '"Woontegra" <info@woontegra.com>',
+    await dispatchMail({
       to: data.customerEmail,
       subject,
       text: textBody,
@@ -221,8 +287,7 @@ export const mailService = {
       linesHtml.push(`<tr><td colspan="2"><i>${escapeHtml(i.instructions)}</i></td></tr>`)
     }
     const textBody = [`Merhaba ${data.customerName},`, '', 'Siparişiniz alındı. Havale/EFT ile ödeme için bilgileriniz:', '', ...textLines, '', 'İyi günler,', 'Woontegra'].join('\n')
-    await transporter.sendMail({
-      from: '"Woontegra" <info@woontegra.com>',
+    await dispatchMail({
       to: data.customerEmail,
       subject: `Siparişiniz alındı — Havale/EFT ödeme bilgileri — ${i.paymentReference}`,
       text: textBody,
@@ -296,8 +361,7 @@ export const mailService = {
       .filter(Boolean)
       .join('\n')
 
-    await transporter.sendMail({
-      from: '"Woontegra" <info@woontegra.com>',
+    await dispatchMail({
       to: data.customerEmail,
       subject: 'Müvekkil Kasa Defteri Masaüstü - Lisans ve İndirme Bilgileri',
       text: textBody,
@@ -326,8 +390,7 @@ export const mailService = {
     const safeName = escapeHtml(data.customerName)
     const safeOrder = escapeHtml(data.orderNo)
     const lines = data.messageLines.map((t) => `<p>${escapeHtml(t)}</p>`).join('')
-    await transporter.sendMail({
-      from: '"Woontegra" <info@woontegra.com>',
+    await dispatchMail({
       to: data.customerEmail,
       subject: `Ödemeniz onaylandı — ${data.orderNo}`,
       html: `

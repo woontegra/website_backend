@@ -81,7 +81,7 @@ export function resolveHref(row: NavRow): string {
       return u || '#'
     }
     case 'PRODUCT':
-      if (row.product?.isActive) return `/urun/${row.product.slug}`
+      if (row.product?.isActive) return `/yazilimlar/${row.product.slug}`
       return '#'
     case 'CATEGORY':
       if (row.category?.isActive) return `/kategori/${row.category.slug}`

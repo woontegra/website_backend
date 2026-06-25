@@ -469,7 +469,8 @@ async function resolveMediaIds(data: {
     const v = data.downloadMediaId
     if (v === null || v === '') {
       out.downloadMediaId = null
-      out.downloadUrl = null
+      // Not: `downloadMediaId` temizlenirken aynı request içinde `downloadUrl` verilebilir.
+      // Bu yüzden burada `downloadUrl`'i zorla null'lamak yerine, caller'ın `downloadUrl` alanına izin veriyoruz.
     } else {
       const m = await prisma.catalogMedia.findUnique({ where: { id: v } })
       if (!m) throw new Error('İndirme medyası bulunamadı')
