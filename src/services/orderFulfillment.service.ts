@@ -146,8 +146,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
-  const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
-  if (externalResult.errors.length > 0) {
+  const externalResult = fresh.downloadEmailSentAt
+    ? { errors: [] as Awaited<ReturnType<typeof ensureExternalLicenseServerOrders>>['errors'], provisioned: [] as ExternalLicenseProvisionSuccess[] }
+    : await ensureExternalLicenseServerOrders(fresh.id)
+  if (!fresh.downloadEmailSentAt && externalResult.errors.length > 0) {
     console.error('[orders] external license server errors', {
       orderId: fresh.id,
       orderNo: fresh.orderNo,
@@ -211,7 +213,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
     for (const line of allMailCandidates) {
       if (line.downloadUrl.startsWith('saas:')) continue
-      if (!resolveDownloadSourceFromRawUrl(line.downloadUrl)) {
+      const rawForSource = items.find((i) => i.id === line.id)
+        ? mergeOrderItemDownloadUrl(items.find((i) => i.id === line.id)!)
+        : line.downloadUrl
+      if (!resolveDownloadSourceFromRawUrl(rawForSource)) {
         console.error('[orders] paid mail blocked — unresolvable download URL', {
           orderNo: fresh.orderNo,
           productName: line.productName,
@@ -236,6 +241,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
         fresh.id,
         externalResult.provisioned.map((p) => p.orderItemId),
       )
+      await prisma.orderItem.updateMany({
+        where: { orderId: fresh.id, id: { in: externalResult.provisioned.map((p) => p.orderItemId) } },
+        data: { licenseServerLastError: null },
+      })
     } catch (e) {
       console.error('[orders] paid mail send failed', e)
     }

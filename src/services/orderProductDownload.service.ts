@@ -46,6 +46,7 @@ async function sourceFromOrderItem(payload: OrderDownloadTokenPayload): Promise<
               price: true,
               licenseRequired: true,
               downloadUrl: true,
+              downloadFiles: true,
               downloadMedia: { select: { url: true } },
             },
           },

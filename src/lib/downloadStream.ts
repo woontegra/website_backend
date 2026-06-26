@@ -14,6 +14,17 @@ import { getR2DownloadsPublicBaseUrl } from './r2.client'
 import { getR2S3Client, isR2PublicUploadConfigured } from './r2.client'
 import { isCatalogUploadDownloadPath } from './mailDeliveryUrl'
 
+function isR2DownloadsPublicHost(hostname: string): boolean {
+  if (hostname.endsWith('.r2.dev')) return true
+  const base = getR2DownloadsPublicBaseUrl()
+  if (!base) return false
+  try {
+    return new URL(base).hostname === hostname
+  } catch {
+    return false
+  }
+}
+
 export type ByteRange = { start: number; end: number }
 
 export type ResolvedDownloadSource = {
@@ -100,16 +111,22 @@ export function resolveDownloadSourceFromRawUrl(rawUrl: string | null | undefine
   }
 
   if (/^https?:\/\//i.test(url)) {
-    const downloadsBase = getR2DownloadsPublicBaseUrl()
-    if (downloadsBase && url.startsWith(downloadsBase)) {
-      const objectKey = objectKeyFromDownloadsPublicUrl(url)
-      if (objectKey) {
-        return {
-          kind: 'r2',
-          bucket: getDownloadsBucketName(),
-          objectKey,
-          filename: filenameFromUrl(url) || filenameFromObjectKey(objectKey),
+    if (isR2PublicUploadConfigured()) {
+      try {
+        const hostname = new URL(url).hostname
+        if (isR2DownloadsPublicHost(hostname)) {
+          const objectKey = objectKeyFromDownloadsPublicUrl(url)
+          if (objectKey) {
+            return {
+              kind: 'r2',
+              bucket: getDownloadsBucketName(),
+              objectKey,
+              filename: filenameFromUrl(url) || filenameFromObjectKey(objectKey),
+            }
+          }
         }
+      } catch {
+        /* geçersiz URL */
       }
     }
   }

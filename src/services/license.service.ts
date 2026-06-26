@@ -20,7 +20,7 @@ import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
 import { isKnownDesktopLicenseAppCode } from '../lib/desktopLicensePrograms'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
-import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
+import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
 
 function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -689,20 +689,27 @@ export async function resolveLicenseDownloadUrl(license: {
   if (license.productId) {
     const p = await prisma.product.findUnique({
       where: { id: license.productId },
-      select: { downloadUrl: true, downloadMedia: { select: { url: true } } },
+      select: { downloadUrl: true, downloadFiles: true, downloadMedia: { select: { url: true } } },
     })
     if (p) {
-      const url = (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '').trim()
+      const url = resolveProductDeliveryRawUrl(p)
       if (url) return url
     }
   }
   if (license.productCode === PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP) {
     const p = await prisma.product.findFirst({
-      where: { slug: 'muvekkil-kasa-defteri-desktop' },
-      select: { downloadUrl: true, downloadMedia: { select: { url: true } } },
+      where: { slug: 'muvekkil-kasa-defteri-yazilimi' },
+      select: { downloadUrl: true, downloadFiles: true, downloadMedia: { select: { url: true } } },
     })
     if (p) {
-      return (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '').trim() || null
+      return resolveProductDeliveryRawUrl(p) || null
+    }
+    const legacy = await prisma.product.findFirst({
+      where: { slug: 'muvekkil-kasa-defteri-desktop' },
+      select: { downloadUrl: true, downloadFiles: true, downloadMedia: { select: { url: true } } },
+    })
+    if (legacy) {
+      return resolveProductDeliveryRawUrl(legacy) || null
     }
   }
   return process.env.DESKTOP_DOWNLOAD_URL?.trim() || null

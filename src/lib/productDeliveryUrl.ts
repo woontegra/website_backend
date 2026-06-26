@@ -7,15 +7,10 @@ export type ProductDeliverySource = {
   downloadFiles?: unknown
 }
 
-/** Ürün teslimat URL önceliği: gerçek alternatif downloadUrl → R2 downloadFiles → medya kütüphanesi */
+/** Ürün teslimat URL önceliği: R2 downloadFiles → alternatif downloadUrl → medya kütüphanesi */
 export function resolveProductDeliveryRawUrl(product: ProductDeliverySource): string {
   const media = (product.downloadMedia?.url ?? '').trim()
   const manual = (product.downloadUrl ?? '').trim()
-
-  // Kullanıcının girdiği alternatif URL (medya kopyası değilse)
-  if (manual && (!media || manual !== media) && isDeliverableDownloadRawUrl(manual)) {
-    return manual
-  }
 
   const config = parseProductDownloadFiles(product.downloadFiles)
   const setup = config.files.find((f) => f.type === 'setup' && f.url.trim())
@@ -24,6 +19,10 @@ export function resolveProductDeliveryRawUrl(product: ProductDeliverySource): st
   for (const f of config.files) {
     const u = f.url.trim()
     if (u && isDeliverableDownloadRawUrl(u)) return u
+  }
+
+  if (manual && (!media || manual !== media) && isDeliverableDownloadRawUrl(manual)) {
+    return manual
   }
 
   if (media && isDeliverableDownloadRawUrl(media)) return media

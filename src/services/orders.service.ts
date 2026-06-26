@@ -983,6 +983,7 @@ export const ordersAdminService = {
               select: {
                 productType: true,
                 downloadUrl: true,
+                downloadFiles: true,
                 downloadMedia: { select: { url: true } },
               },
             },
@@ -1215,6 +1216,7 @@ export const ordersAdminService = {
                 productType: true,
                 licenseRequired: true,
                 downloadUrl: true,
+                downloadFiles: true,
                 downloadMedia: { select: { url: true } },
               },
             },

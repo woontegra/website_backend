@@ -1,6 +1,8 @@
 import { Prisma, ProductType } from '@prisma/client'
 import { getProductOrderDenialReason, isSingleLicenseQuantityProduct, type ProductOrderCheckRow } from '../lib/productOrderValidation'
 import { isDeliverableDownloadRawUrl } from '../lib/mailDeliveryUrl'
+import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
+import { resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
 import {
   hasValidDownloadFiles,
   isPublicFreeDownloadProduct,
@@ -185,8 +187,18 @@ function effectiveProductCoverImage(p: Pick<ProductRow, 'coverImage' | 'coverIma
   return p.coverImage?.trim() || null
 }
 
-function effectiveDownloadUrlForProduct(p: Pick<ProductRow, 'downloadUrl' | 'downloadMedia'>): string {
-  return (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '') || ''
+function effectiveDownloadUrlForProduct(p: Pick<ProductRow, 'downloadUrl' | 'downloadMedia' | 'downloadFiles'>): string {
+  return resolveProductDeliveryRawUrl({
+    downloadUrl: p.downloadUrl,
+    downloadMedia: p.downloadMedia,
+    downloadFiles: p.downloadFiles,
+  })
+}
+
+function isProductDeliverySourceResolvable(raw: string): boolean {
+  if (!raw || raw.startsWith('saas:')) return false
+  if (resolveDownloadSourceFromRawUrl(raw)) return true
+  return isDeliverableDownloadRawUrl(raw)
 }
 
 /** Admin listesi: satın alınabilir DOWNLOAD ürünlerinde teslimat linki eksik veya kullanılamıyor mu */
@@ -194,10 +206,8 @@ function adminProductDeliveryLinkMissing(p: ProductRow): boolean {
   if (p.productType !== ProductType.DOWNLOAD) return false
   if (!p.isActive || !p.purchaseEnabled) return false
   const u = effectiveDownloadUrlForProduct(p)
-  if (u && isDeliverableDownloadRawUrl(u)) return false
-  if (hasValidDownloadFiles(p.downloadFiles)) return false
-  if (!u) return true
-  return !isDeliverableDownloadRawUrl(u)
+  if (!u) return !hasValidDownloadFiles(p.downloadFiles)
+  return !isProductDeliverySourceResolvable(u)
 }
 
 function mapAdmin(p: ProductRow): AdminProductDto {
