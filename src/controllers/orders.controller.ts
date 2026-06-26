@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { ordersService } from '../services/orders.service'
+import { isIndividualBillingType, validateTurkishIdentityNumber } from '../lib/turkishIdentityNumber'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -24,6 +25,18 @@ function parseOrderItems(body: Record<string, unknown>): { productId: string; qu
   const legacy = readString(body, 'productId')
   if (legacy) return [{ productId: legacy, quantity: 1 }]
   return []
+}
+
+function resolveOrderTaxNumber(
+  body: Record<string, unknown>,
+  billingType?: string,
+): string | undefined {
+  const identityNumber = readString(body, 'identityNumber')
+  const taxNumber = readString(body, 'taxNumber')
+  if (isIndividualBillingType(billingType)) {
+    return identityNumber || taxNumber
+  }
+  return taxNumber
 }
 
 export async function createOrder(req: Request, res: Response) {
@@ -70,15 +83,24 @@ export async function createOrder(req: Request, res: Response) {
     payToken === 'WIRE'
   const paymentProvider: 'PAYTR' | 'BANK_TRANSFER' = isBank ? 'BANK_TRANSFER' : 'PAYTR'
 
+  const billingType = readString(body, 'billingType')
+  const taxNumber = resolveOrderTaxNumber(body, billingType)
+  if (isIndividualBillingType(billingType)) {
+    const tcErr = validateTurkishIdentityNumber(taxNumber)
+    if (tcErr) {
+      return res.status(400).json({ success: false, message: tcErr })
+    }
+  }
+
   try {
     const order = await ordersService.createOrder({
       items,
       customerName,
       customerEmail,
       customerPhone: readString(body, 'customerPhone'),
-      billingType: readString(body, 'billingType'),
+      billingType,
       taxOffice: readString(body, 'taxOffice'),
-      taxNumber: readString(body, 'taxNumber'),
+      taxNumber,
       companyName: readString(body, 'companyName'),
       deliveryCity: readString(body, 'deliveryCity') || readString(body, 'city'),
       deliveryDistrict: readString(body, 'deliveryDistrict') || readString(body, 'district'),
