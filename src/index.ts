@@ -41,6 +41,7 @@ import { ordersPublicRoutes } from './routes/orders.public.routes'
 import { licensePublicRoutes } from './routes/license.public.routes'
 import { ordersAdminRoutes } from './routes/orders.admin.routes'
 import { licensesAdminRoutes } from './routes/licenses.admin.routes'
+import { licenseProgramsAdminRoutes } from './routes/licensePrograms.admin.routes'
 import { paymentsPublicRoutes } from './routes/payments.public.routes'
 import { navigationMenuPublicRoutes } from './routes/navigationMenu.public.routes'
 import { legalDocumentsPublicRoutes } from './routes/legalDocuments.public.routes'
@@ -165,6 +166,7 @@ app.use('/api/admin', productCategoriesAdminRoutes)
 app.use('/api/admin', navigationMenuAdminRoutes)
 app.use('/api/admin', ordersAdminRoutes)
 app.use('/api/admin', licensesAdminRoutes)
+app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 

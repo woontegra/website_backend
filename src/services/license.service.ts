@@ -17,13 +17,29 @@ import {
   resolveProductCodeFromProduct,
 } from '../lib/productCode'
 import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
-import { isKnownDesktopLicenseAppCode } from '../lib/desktopLicensePrograms'
+import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
 
 function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+/** Lisans sunucusuna gönderilecek müşteri adı — checkout alıcı adı önceliklidir. */
+export function resolveOrderCustomerNameForLicense(order: {
+  customerName: string
+  customerEmail: string
+  companyName?: string | null
+  customer?: { name: string } | null
+}): string {
+  const checkoutName = order.customerName?.trim()
+  if (checkoutName) return checkoutName
+  const companyName = order.companyName?.trim()
+  if (companyName) return companyName
+  const accountName = order.customer?.name?.trim()
+  if (accountName) return accountName
+  return order.customerEmail.trim()
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -119,6 +135,15 @@ function resolveItemDownloadUrlForLicenseServer(item: {
   return resolveMailDownloadHref(raw) ?? raw
 }
 
+function mapLicenseServerProvisionError(raw: string | undefined): string {
+  if (!raw) return 'Lisans sunucusu isteği başarısız.'
+  const lower = raw.toLowerCase()
+  if (lower.includes('pasif program') || lower.includes('geçersiz veya pasif')) {
+    return 'Lisans programı lisans sunucusunda tanımlı değil veya pasif.'
+  }
+  return raw
+}
+
 export type ExternalLicenseProvisionSuccess = {
   orderItemId: string
   productName: string
@@ -141,6 +166,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
+      customer: { select: { name: true } },
       items: {
         include: {
           product: {
@@ -161,11 +187,15 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   if (!order) return { errors, provisioned }
   if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors, provisioned }
 
+  const licenseCustomerName = resolveOrderCustomerNameForLicense(order)
+  const licenseCustomerEmail = order.customerEmail.trim().toLowerCase()
+  const licenseCustomerPhone = order.customerPhone?.trim() || null
+
   for (const item of order.items) {
     const product = item.product
     if (!product?.licenseRequired) continue
-    const appCode = (product.licenseAppCode ?? '').trim()
-    if (!appCode || !isKnownDesktopLicenseAppCode(appCode)) {
+    const appCode = normalizeLicenseAppCodeInput(product.licenseAppCode)
+    if (!appCode || !isValidLicenseAppCodeFormat(appCode)) {
       const err = 'Geçersiz veya eksik lisans program kodu (licenseAppCode).'
       errors.push({ orderItemId: item.id, productName: item.productName, error: err })
       await prisma.orderItem.update({
@@ -206,9 +236,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
 
       const externalOrderNo = `${order.orderNo}:${item.id}:${qty - 1}`
       const resend = await requestWebsiteOrderLicense({
-        customerName: order.customerName.trim(),
-        customerEmail: order.customerEmail.trim().toLowerCase(),
-        customerPhone: order.customerPhone?.trim() || null,
+        customerName: licenseCustomerName,
+        customerEmail: licenseCustomerEmail,
+        customerPhone: licenseCustomerPhone,
         appCode,
         orderNo: externalOrderNo,
         downloadUrl,
@@ -249,9 +279,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
     for (let u = already; u < qty; u++) {
       const externalOrderNo = `${order.orderNo}:${item.id}:${u}`
       const result = await requestWebsiteOrderLicense({
-        customerName: order.customerName.trim(),
-        customerEmail: order.customerEmail.trim().toLowerCase(),
-        customerPhone: order.customerPhone?.trim() || null,
+        customerName: licenseCustomerName,
+        customerEmail: licenseCustomerEmail,
+        customerPhone: licenseCustomerPhone,
         appCode,
         orderNo: externalOrderNo,
         downloadUrl,
@@ -260,7 +290,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
       })
 
       if (!result.success || !result.licenseKey?.trim()) {
-        const err = result.error ?? 'Lisans sunucusu isteği başarısız.'
+        const err = mapLicenseServerProvisionError(result.error)
         errors.push({ orderItemId: item.id, productName: item.productName, error: err })
         await prisma.orderItem.update({
           where: { id: item.id },

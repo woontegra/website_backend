@@ -3,7 +3,10 @@ export type DesktopLicenseProgramOption = {
   appCode: string
 }
 
-/** Woontegra-Lisans-Server program kodları — admin ürün formu dropdown */
+/**
+ * Seed / öneri listesi — satış ve lisans doğrulaması için kullanılmaz.
+ * Gerçek kaynak: Woontegra-Lisans-Server program kayıtları (API).
+ */
 export const DESKTOP_LICENSE_PROGRAMS: DesktopLicenseProgramOption[] = [
   { label: 'Müvekkil Kasa Defteri Desktop', appCode: 'MUVEKKIL_KASA_DESKTOP' },
   { label: 'Şifre Kasası Desktop', appCode: 'SIFRE_KASASI_DESKTOP' },
@@ -11,9 +14,3 @@ export const DESKTOP_LICENSE_PROGRAMS: DesktopLicenseProgramOption[] = [
   { label: 'Optik Desktop', appCode: 'OPTIK_DESKTOP' },
   { label: 'Bilirkişi Desktop', appCode: 'BILIRKISI_DESKTOP' },
 ]
-
-const APP_CODES = new Set(DESKTOP_LICENSE_PROGRAMS.map((p) => p.appCode))
-
-export function isKnownDesktopLicenseAppCode(code: string | null | undefined): boolean {
-  return APP_CODES.has((code ?? '').trim())
-}

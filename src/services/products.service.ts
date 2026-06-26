@@ -16,6 +16,8 @@ import { prisma } from '../lib/prisma'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { slugifyName } from '../utils/slugify'
+import { assertLicensedProductSaleReady } from './licensePrograms.service'
+import { normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 
 const categorySelect = { id: true, name: true, slug: true, isActive: true } as const
 const mediaTiny = { id: true, url: true, fileType: true, originalName: true, fileSize: true } as const
@@ -645,6 +647,17 @@ export const productsService = {
       downloadFiles: data.downloadFiles,
     })
 
+    const licenseAppCodeValue =
+      data.licenseRequired === true && data.licenseAppCode?.trim()
+        ? normalizeLicenseAppCodeInput(data.licenseAppCode)
+        : null
+    await assertLicensedProductSaleReady({
+      licenseRequired: data.licenseRequired === true,
+      licenseAppCode: licenseAppCodeValue,
+      isActive: data.isActive !== false,
+      purchaseEnabled: data.purchaseEnabled !== false,
+    })
+
     const downloadFilesJson =
       data.downloadFiles !== undefined ? normalizeProductDownloadFilesForDb(data.downloadFiles) : undefined
 
@@ -668,10 +681,7 @@ export const productsService = {
             ? Math.min(120, Math.floor(data.licenseMonths))
             : 12,
         licenseRequired: data.licenseRequired === true,
-        licenseAppCode:
-          data.licenseRequired === true && data.licenseAppCode?.trim()
-            ? data.licenseAppCode.trim()
-            : null,
+        licenseAppCode: licenseAppCodeValue,
         licenseDays:
           data.licenseRequired === true && typeof data.licenseDays === 'number' && data.licenseDays > 0
             ? Math.min(3650, Math.floor(data.licenseDays))
@@ -734,7 +744,9 @@ export const productsService = {
       }
     }
     if (data.licenseAppCode !== undefined) {
-      patch.licenseAppCode = data.licenseAppCode?.trim() || null
+      patch.licenseAppCode = data.licenseAppCode?.trim()
+        ? normalizeLicenseAppCodeInput(data.licenseAppCode)
+        : null
     }
     if (data.licenseDays !== undefined) {
       patch.licenseDays =
@@ -811,6 +823,12 @@ export const productsService = {
       include: productInclude,
     })
     assertActiveDownloadDeliverable(full)
+    await assertLicensedProductSaleReady({
+      licenseRequired: full.licenseRequired,
+      licenseAppCode: full.licenseAppCode,
+      isActive: full.isActive,
+      purchaseEnabled: full.purchaseEnabled,
+    })
     return mapAdmin(full as unknown as ProductRow)
   },
 
