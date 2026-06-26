@@ -1113,6 +1113,13 @@ export const ordersAdminService = {
         throw err
       }
       data.status = st
+      if (
+        st === OrderStatus.PAID &&
+        order.paymentProvider === PaymentProvider.BANK_TRANSFER &&
+        !order.paidAt
+      ) {
+        data.paidAt = new Date()
+      }
     }
 
     const txStatusRaw = input.paymentTransactionStatus?.trim().toUpperCase()

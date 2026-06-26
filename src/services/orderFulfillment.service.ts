@@ -3,11 +3,14 @@ import { ProductType } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { getClientIp } from '../lib/clientIp'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
+import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
 import { mailService } from './mail.service'
 import {
   ensureExternalLicenseServerOrders,
   ensurePaidOrderLicenses,
   getLicenseMailEntriesByOrderItemIds,
+  clearExternalLicensePendingPasswords,
   type ExternalLicenseProvisionSuccess,
 } from './license.service'
 
@@ -17,6 +20,7 @@ const paidOrderDeliveryItemInclude = {
       productType: true,
       licenseRequired: true,
       downloadUrl: true,
+      downloadFiles: true,
       downloadMedia: { select: { url: true } },
     },
   },
@@ -30,15 +34,22 @@ export type OrderItemForDeliveryCheck = {
     productType: ProductType
     licenseRequired: boolean
     downloadUrl: string | null
+    downloadFiles?: unknown
     downloadMedia: { url: string } | null
   } | null
 }
 
 export function mergeOrderItemDownloadUrl(item: OrderItemForDeliveryCheck): string {
-  const fromLine = (item.downloadUrl ?? '').trim()
-  const fromProduct =
-    (item.product?.downloadUrl?.trim() || item.product?.downloadMedia?.url?.trim() || '').trim() || ''
-  return fromLine || fromProduct
+  return resolveOrderItemDeliveryRawUrl({
+    downloadUrl: item.downloadUrl,
+    product: item.product
+      ? {
+          downloadUrl: item.product.downloadUrl,
+          downloadMedia: item.product.downloadMedia,
+          downloadFiles: item.product.downloadFiles,
+        }
+      : null,
+  })
 }
 
 export function buildPaidDownloadMailLinesFromItems(
@@ -55,21 +66,28 @@ export function buildPaidDownloadMailLinesFromItems(
 
 function buildMailLinesFromExternalLicenses(
   provisioned: ExternalLicenseProvisionSuccess[],
+  items: OrderItemForDeliveryCheck[],
 ): { id: string; productName: string; downloadUrl: string; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
+  const itemById = new Map(items.map((i) => [i.id, i]))
   return provisioned
-    .filter((p) => p.downloadUrl?.trim())
     .filter((p) => !p.mailSentByLicenseServer || Boolean(p.activationPassword))
-    .map((p) => ({
-      id: p.orderItemId,
-      productName: p.productName,
-      downloadUrl: p.downloadUrl!.trim(),
-      licenses: [
-        {
-          licenseKey: p.licenseKey,
-          ...(p.activationPassword ? { activationPassword: p.activationPassword } : {}),
-        },
-      ],
-    }))
+    .map((p) => {
+      const item = itemById.get(p.orderItemId)
+      const rawDownload = item ? mergeOrderItemDownloadUrl(item) : (p.downloadUrl ?? '')
+      const downloadUrl = resolveMailDownloadHref(rawDownload) ?? rawDownload.trim()
+      return {
+        id: p.orderItemId,
+        productName: p.productName,
+        downloadUrl,
+        licenses: [
+          {
+            licenseKey: p.licenseKey,
+            ...(p.activationPassword ? { activationPassword: p.activationPassword } : {}),
+          },
+        ],
+      }
+    })
+    .filter((l) => l.downloadUrl)
 }
 
 /**
@@ -139,7 +157,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   if (!fresh.downloadEmailSentAt) {
     const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
-    const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned)
+    const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
 
     const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
     const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
@@ -214,6 +232,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
         where: { id: fresh.id },
         data: { downloadEmailSentAt: new Date() },
       })
+      await clearExternalLicensePendingPasswords(
+        fresh.id,
+        externalResult.provisioned.map((p) => p.orderItemId),
+      )
     } catch (e) {
       console.error('[orders] paid mail send failed', e)
     }

@@ -589,6 +589,10 @@ model OrderItem {
   licenseServerUnitsNotified Int      @default(0)
   licenseServerLastError     String?  @db.Text
   licenseServerLastNotifiedAt DateTime?
+  /// Merkezi lisans sunucusundan dönen anahtar (mail yeniden denemesi için)
+  licenseServerLicenseKey    String?
+  /// Mail gönderilene kadar tutulur; gönderim sonrası silinir
+  licenseServerActivationPasswordPending String? @db.Text
 
   @@index([orderId])
 }

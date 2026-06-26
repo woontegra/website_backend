@@ -7,10 +7,13 @@ export type WebsiteOrderLicenseRequest = {
   downloadUrl?: string | null
   licenseDays?: number
   maxDevices?: number
+  /** Mevcut lisans için mail yeniden denemesinde aktivasyon şifresi üretir */
+  resendCredentials?: boolean
 }
 
 export type WebsiteOrderLicenseResponse = {
   success: boolean
+  alreadyExists?: boolean
   orderNo?: string
   licenseKey?: string
   activationPassword?: string
@@ -67,6 +70,7 @@ export async function requestWebsiteOrderLicense(
         downloadUrl: input.downloadUrl ?? undefined,
         licenseDays: input.licenseDays,
         maxDevices: input.maxDevices,
+        resendCredentials: input.resendCredentials === true ? true : undefined,
       }),
     })
   } catch (e) {
@@ -76,6 +80,26 @@ export async function requestWebsiteOrderLicense(
   }
 
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (res.status === 409 && data.alreadyExists === true) {
+    const licenseKey = typeof data.licenseKey === 'string' ? data.licenseKey : undefined
+    if (input.resendCredentials === true) {
+      return {
+        success: false,
+        alreadyExists: true,
+        orderNo: typeof data.orderNo === 'string' ? data.orderNo : input.orderNo,
+        licenseKey,
+        error:
+          'Mevcut lisans bulundu ancak aktivasyon şifresi alınamadı. Lisans sunucusunda resendCredentials desteği deploy edilmeli.',
+      }
+    }
+    return {
+      success: false,
+      alreadyExists: true,
+      orderNo: typeof data.orderNo === 'string' ? data.orderNo : input.orderNo,
+      licenseKey,
+      error: typeof data.error === 'string' ? data.error : 'Lisans zaten oluşturulmuş',
+    }
+  }
   if (!res.ok) {
     let err = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
     if (res.status === 403 || err.toLowerCase().includes('entegrasyon')) {

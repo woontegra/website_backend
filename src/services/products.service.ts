@@ -619,8 +619,8 @@ export const productsService = {
     }
 
     let downloadUrl: string | null = null
-    if (mediaPatch.downloadUrl !== undefined) downloadUrl = mediaPatch.downloadUrl
-    else if (data.downloadUrl !== undefined) downloadUrl = normalizeUrl(data.downloadUrl)
+    if (data.downloadUrl !== undefined) downloadUrl = normalizeUrl(data.downloadUrl)
+    else if (mediaPatch.downloadUrl !== undefined) downloadUrl = mediaPatch.downloadUrl
 
     const dmForAssert =
       mediaPatch.downloadMediaId && mediaPatch.downloadUrl != null && String(mediaPatch.downloadUrl).trim() !== ''
@@ -771,7 +771,12 @@ export const productsService = {
             ? { disconnect: true }
             : { connect: { id: mediaPatch.downloadMediaId } }
       }
-      if (mediaPatch.downloadUrl !== undefined) patch.downloadUrl = mediaPatch.downloadUrl
+      // Alternatif indirme URL (R2 vb.) medya seçimi olsa bile önceliklidir.
+      if (data.downloadUrl !== undefined) {
+        patch.downloadUrl = normalizeUrl(data.downloadUrl)
+      } else if (mediaPatch.downloadUrl !== undefined) {
+        patch.downloadUrl = mediaPatch.downloadUrl
+      }
     } else {
       if (data.coverImage !== undefined) {
         const c = sanitizeImageUrl(data.coverImage ?? '')

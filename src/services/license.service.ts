@@ -20,6 +20,7 @@ import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
 import { isKnownDesktopLicenseAppCode } from '../lib/desktopLicensePrograms'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
 
 function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
@@ -43,19 +44,25 @@ function effectiveLicenseItemQuantity(item: {
   return raw
 }
 
-/** orderFulfillment.mergeOrderItemDownloadUrl ile aynı mantık (döngüsel import yok). */
 function effectiveItemDownloadUrl(item: {
   downloadUrl: string | null
   product: {
     productType: ProductType
     downloadUrl: string | null
+    downloadFiles?: unknown
     downloadMedia: { url: string } | null
   } | null
 }): string {
-  const fromLine = (item.downloadUrl ?? '').trim()
-  const fromProduct =
-    (item.product?.downloadUrl?.trim() || item.product?.downloadMedia?.url?.trim() || '').trim() || ''
-  return fromLine || fromProduct
+  return resolveOrderItemDeliveryRawUrl({
+    downloadUrl: item.downloadUrl,
+    product: item.product
+      ? {
+          downloadUrl: item.product.downloadUrl,
+          downloadMedia: item.product.downloadMedia,
+          downloadFiles: item.product.downloadFiles,
+        }
+      : null,
+  })
 }
 
 export function isOrderItemEligibleForDesktopLicense(item: {
@@ -103,13 +110,11 @@ function resolveItemDownloadUrlForLicenseServer(item: {
   downloadUrl: string | null
   product: {
     downloadUrl: string | null
+    downloadFiles?: unknown
     downloadMedia: { url: string } | null
   } | null
 }): string | null {
-  const fromLine = (item.downloadUrl ?? '').trim()
-  const fromProduct =
-    (item.product?.downloadUrl?.trim() || item.product?.downloadMedia?.url?.trim() || '').trim() || ''
-  const raw = fromLine || fromProduct
+  const raw = effectiveItemDownloadUrl(item as Parameters<typeof effectiveItemDownloadUrl>[0])
   if (!raw || raw.startsWith('saas:')) return null
   return resolveMailDownloadHref(raw) ?? raw
 }
@@ -145,6 +150,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
               licenseDays: true,
               licenseMaxDevices: true,
               downloadUrl: true,
+              downloadFiles: true,
               downloadMedia: { select: { url: true } },
             },
           },
@@ -171,11 +177,74 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
 
     const qty = 1
     const already = item.licenseServerUnitsNotified ?? 0
-    if (already >= qty) continue
-
     const downloadUrl = resolveItemDownloadUrlForLicenseServer(item)
     const licenseDays = Math.max(1, product.licenseDays ?? 365)
     const maxDevices = Math.max(1, product.licenseMaxDevices ?? 1)
+
+    const pushProvisioned = (
+      licenseKey: string,
+      activationPassword: string,
+      mailSentByLicenseServer: boolean,
+    ) => {
+      provisioned.push({
+        orderItemId: item.id,
+        productName: item.productName,
+        licenseKey: licenseKey.trim(),
+        activationPassword: activationPassword.trim(),
+        downloadUrl,
+        mailSentByLicenseServer,
+      })
+    }
+
+    if (already >= qty) {
+      const storedKey = item.licenseServerLicenseKey?.trim()
+      const storedPassword = item.licenseServerActivationPasswordPending?.trim()
+      if (storedKey && storedPassword) {
+        pushProvisioned(storedKey, storedPassword, false)
+        continue
+      }
+
+      const externalOrderNo = `${order.orderNo}:${item.id}:${qty - 1}`
+      const resend = await requestWebsiteOrderLicense({
+        customerName: order.customerName.trim(),
+        customerEmail: order.customerEmail.trim().toLowerCase(),
+        customerPhone: order.customerPhone?.trim() || null,
+        appCode,
+        orderNo: externalOrderNo,
+        downloadUrl,
+        licenseDays,
+        maxDevices,
+        resendCredentials: true,
+      })
+
+      if (!resend.success || !resend.licenseKey?.trim() || !resend.activationPassword?.trim()) {
+        const err = resend.error ?? 'Lisans maili için kimlik bilgileri alınamadı.'
+        errors.push({ orderItemId: item.id, productName: item.productName, error: err })
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { licenseServerLastError: err },
+        })
+        console.error('[license-server] mail credentials resend failed', {
+          orderNo: order.orderNo,
+          orderItemId: item.id,
+          appCode,
+          error: err,
+        })
+        continue
+      }
+
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: {
+          licenseServerLicenseKey: resend.licenseKey.trim(),
+          licenseServerActivationPasswordPending: resend.activationPassword.trim(),
+          licenseServerLastError: resend.mailError ?? null,
+        },
+      })
+
+      pushProvisioned(resend.licenseKey, resend.activationPassword, resend.mailSent === true)
+      continue
+    }
 
     for (let u = already; u < qty; u++) {
       const externalOrderNo = `${order.orderNo}:${item.id}:${u}`
@@ -217,23 +286,17 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
           licenseServerUnitsNotified: u + 1,
           licenseServerLastError: result.mailError ?? null,
           licenseServerLastNotifiedAt: new Date(),
+          licenseServerLicenseKey: result.licenseKey.trim(),
+          licenseServerActivationPasswordPending: activationPassword || null,
         },
       })
 
-      provisioned.push({
-        orderItemId: item.id,
-        productName: item.productName,
-        licenseKey: result.licenseKey.trim(),
-        activationPassword,
-        downloadUrl,
-        mailSentByLicenseServer,
-      })
+      pushProvisioned(result.licenseKey, activationPassword, mailSentByLicenseServer)
 
       console.info('[license-server] provision ok', {
         orderNo: order.orderNo,
         externalOrderNo,
         appCode,
-        licenseKey: result.licenseKey,
         mailSentByLicenseServer,
         hasActivationPassword: Boolean(activationPassword),
       })
@@ -241,6 +304,19 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   }
 
   return { errors, provisioned }
+}
+
+/** Lisans maili gönderildikten sonra geçici aktivasyon şifresini temizler. */
+export async function clearExternalLicensePendingPasswords(
+  orderId: string,
+  orderItemIds: string[],
+): Promise<void> {
+  const ids = [...new Set(orderItemIds.filter(Boolean))]
+  if (ids.length === 0) return
+  await prisma.orderItem.updateMany({
+    where: { orderId, id: { in: ids } },
+    data: { licenseServerActivationPasswordPending: null },
+  })
 }
 
 /** PAID / PROCESSING siparişte indirilebilir satırlar için lisans üretir (idempotent). */
