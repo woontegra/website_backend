@@ -7,6 +7,7 @@ const r = Router()
 r.use(authMiddleware, adminOnly)
 
 r.get('/orders', ordersAdmin.adminListOrders)
+r.post('/orders/:id/retry-delivery', ordersAdmin.adminRetryOrderDelivery)
 r.post('/orders/:id/confirm-bank-payment', ordersAdmin.adminConfirmBankPayment)
 r.patch('/orders/:id/confirm-bank-transfer', ordersAdmin.adminConfirmBankPayment)
 r.patch('/orders/:id/licenses/:licenseId', ordersAdmin.adminPatchOrderLicense)

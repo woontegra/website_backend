@@ -1,5 +1,5 @@
 import { ProductType } from '@prisma/client'
-import { resolveMailDownloadHref } from './mailDeliveryUrl'
+import { isDeliverableDownloadRawUrl } from './mailDeliveryUrl'
 
 export type ProductOrderCheckRow = {
   id: string
@@ -25,7 +25,7 @@ export function getProductOrderDenialReason(p: ProductOrderCheckRow): ProductOrd
   if (p.productType === ProductType.DOWNLOAD) {
     const u = (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '') || ''
     if (!u) return 'download_missing'
-    if (!resolveMailDownloadHref(u)) return 'download_unresolvable'
+    if (!isDeliverableDownloadRawUrl(u)) return 'download_unresolvable'
     return null
   }
   if (p.productType === ProductType.SAAS || p.productType === ProductType.SERVICE) {

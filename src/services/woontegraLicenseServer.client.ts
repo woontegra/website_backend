@@ -13,6 +13,8 @@ export type WebsiteOrderLicenseResponse = {
   success: boolean
   orderNo?: string
   licenseKey?: string
+  activationPassword?: string
+  programName?: string
   expiresAt?: string
   mailSent?: boolean
   mailError?: string
@@ -20,7 +22,7 @@ export type WebsiteOrderLicenseResponse = {
 }
 
 function baseUrl(): string | null {
-  const url = (process.env.LICENSE_SERVER_URL ?? 'http://localhost:4000').replace(/\/$/, '')
+  const url = (process.env.LICENSE_SERVER_URL ?? 'http://localhost:4001').replace(/\/$/, '')
   return url || null
 }
 
@@ -75,7 +77,11 @@ export async function requestWebsiteOrderLicense(
 
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok) {
-    const err = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
+    let err = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
+    if (res.status === 403 || err.toLowerCase().includes('entegrasyon')) {
+      err =
+        'Geçersiz entegrasyon anahtarı. Website backend LICENSE_SERVER_INTEGRATION_SECRET ile Lisans Server INTEGRATION_SECRET (Railway Variables) birebir aynı olmalı.'
+    }
     console.error('[license-server] order-license failed', {
       orderNo: input.orderNo,
       appCode: input.appCode,
@@ -89,6 +95,8 @@ export async function requestWebsiteOrderLicense(
     success: data.success === true,
     orderNo: typeof data.orderNo === 'string' ? data.orderNo : input.orderNo,
     licenseKey: typeof data.licenseKey === 'string' ? data.licenseKey : undefined,
+    activationPassword: typeof data.activationPassword === 'string' ? data.activationPassword : undefined,
+    programName: typeof data.programName === 'string' ? data.programName : undefined,
     expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : undefined,
     mailSent: data.mailSent === true,
     mailError: typeof data.mailError === 'string' ? data.mailError : undefined,

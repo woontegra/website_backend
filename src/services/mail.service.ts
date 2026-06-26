@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
+import { escapeMailHtml, mailBadge, mailHtmlDocument, mailInfoTable } from '../lib/mailHtmlLayout'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { settingsService } from './settings.service'
 
@@ -227,13 +228,110 @@ export const mailService = {
       to: data.customerEmail,
       subject,
       text: textBody,
-      html: `
-        <p>Merhaba ${safeName},</p>
-        <p>Ödemeniz alındı. Sipariş numaranız: <b>${safeOrder}</b></p>
+      html: mailHtmlDocument(
+        hasDesktopLicenseMail ? 'Lisans ve İndirme Bilgileri' : 'Siparişiniz Onaylandı',
+        `
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Merhaba ${safeName},</p>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Ödemeniz alındı. Sipariş numaranız: <strong>${safeOrder}</strong></p>
         ${deliverySectionHtml}
-        <p>Sorularınız için: <a href="mailto:${support}">${support}</a></p>
-        <p>İyi çalışmalar,<br/>Woontegra</p>
+        <p style="margin:16px 0 0;font-size:14px;line-height:1.6;">Sorularınız için: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
+        <p style="margin:12px 0 0;font-size:14px;line-height:1.6;">İyi çalışmalar,<br/>Woontegra</p>
       `,
+      ),
+    })
+  },
+
+  /** Yeni sipariş — admin / iletişim e-postasına bildirim */
+  async sendNewOrderAdminNotification(data: {
+    orderNo: string
+    customerName: string
+    customerEmail: string
+    customerPhone?: string | null
+    total: number
+    currency: string
+    paymentProvider: string
+    items: { productName: string; quantity: number; total: number }[]
+  }) {
+    const config = await resolveMailConfig()
+    const amount = `${data.total.toFixed(2)} ${data.currency}`
+    const paymentLabel =
+      data.paymentProvider === 'BANK_TRANSFER'
+        ? 'Havale / EFT'
+        : data.paymentProvider === 'PAYTR'
+          ? 'Kart (PayTR)'
+          : data.paymentProvider
+    const paymentBadge =
+      data.paymentProvider === 'BANK_TRANSFER'
+        ? mailBadge('Havale / EFT — onay bekliyor', 'amber')
+        : mailBadge(paymentLabel, 'blue')
+
+    const itemsRows = data.items
+      .map(
+        (i) =>
+          `<tr>
+            <td style="padding:12px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#0f172a;">${escapeHtml(i.productName)}</td>
+            <td style="padding:12px;border-bottom:1px solid #e2e8f0;font-size:14px;text-align:center;color:#475569;">${i.quantity}</td>
+            <td style="padding:12px;border-bottom:1px solid #e2e8f0;font-size:14px;text-align:right;font-weight:600;color:#0f172a;">${escapeHtml(i.total.toFixed(2))} ${escapeHtml(data.currency)}</td>
+          </tr>`,
+      )
+      .join('')
+
+    const infoRows = [
+      { label: 'Sipariş no', value: escapeMailHtml(data.orderNo), mono: true },
+      { label: 'Müşteri', value: escapeMailHtml(data.customerName) },
+      {
+        label: 'E-posta',
+        value: `<a href="mailto:${escapeMailHtml(data.customerEmail)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(data.customerEmail)}</a>`,
+      },
+    ]
+    if (data.customerPhone?.trim()) {
+      infoRows.push({ label: 'Telefon', value: escapeMailHtml(data.customerPhone.trim()), mono: true })
+    }
+    infoRows.push(
+      { label: 'Toplam tutar', value: `<strong style="font-size:16px;color:#1d4ed8;">${escapeMailHtml(amount)}</strong>` },
+      { label: 'Ödeme yöntemi', value: paymentBadge },
+    )
+
+    const bodyHtml = `
+      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#334155;">Yeni bir sipariş alındı. Detaylar aşağıdadır.</p>
+      ${mailInfoTable(infoRows)}
+      <h3 style="margin:20px 0 10px;font-size:15px;color:#0f172a;">Sipariş kalemleri</h3>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:#f8fafc;">
+            <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Ürün</th>
+            <th style="padding:10px 12px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Adet</th>
+            <th style="padding:10px 12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Tutar</th>
+          </tr>
+        </thead>
+        <tbody>${itemsRows}</tbody>
+      </table>
+      ${
+        data.paymentProvider === 'BANK_TRANSFER'
+          ? `<p style="margin:16px 0 0;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px;line-height:1.5;color:#92400e;">Havale/EFT siparişi — ödeme gelince admin panelden onaylayın; onay sonrası müşteriye lisans ve indirme maili gider.</p>`
+          : ''
+      }
+    `
+
+    await config.transporter.sendMail({
+      from: config.from,
+      to: config.notifyTo,
+      replyTo: data.customerEmail,
+      subject: `Yeni sipariş — ${data.orderNo}`,
+      text: [
+        'Yeni sipariş alındı.',
+        '',
+        `Sipariş no: ${data.orderNo}`,
+        `Müşteri: ${data.customerName}`,
+        `E-posta: ${data.customerEmail}`,
+        ...(data.customerPhone?.trim() ? [`Telefon: ${data.customerPhone.trim()}`] : []),
+        `Tutar: ${amount}`,
+        `Ödeme: ${paymentLabel}`,
+        '',
+        'Ürünler:',
+        ...data.items.map((i) => `- ${i.productName} × ${i.quantity} — ${i.total.toFixed(2)} ${data.currency}`),
+      ].join('\n'),
+      html: mailHtmlDocument('Yeni Sipariş', bodyHtml),
     })
   },
 

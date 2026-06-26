@@ -548,6 +548,25 @@ export const ordersService = {
           }
         }
 
+        try {
+          await mailService.sendNewOrderAdminNotification({
+            orderNo: order.orderNo,
+            customerName: order.customerName,
+            customerEmail: order.customerEmail,
+            customerPhone: order.customerPhone,
+            total: Number(order.total),
+            currency: order.currency,
+            paymentProvider: order.paymentProvider,
+            items: order.items.map((i) => ({
+              productName: i.productName,
+              quantity: i.quantity,
+              total: Number(i.total),
+            })),
+          })
+        } catch (e) {
+          console.error('[orders] Admin yeni sipariş bildirimi gönderilemedi', e)
+        }
+
         return order
       } catch (e) {
         if (isUniqueViolation(e)) continue
@@ -1183,6 +1202,7 @@ export const ordersAdminService = {
             product: {
               select: {
                 productType: true,
+                licenseRequired: true,
                 downloadUrl: true,
                 downloadMedia: { select: { url: true } },
               },
@@ -1207,8 +1227,13 @@ export const ordersAdminService = {
     const mailLines = buildPaidDownloadMailLinesFromItems(deliveryItems)
     const deliveryCheckOk = checkOrderDownloadLinesForPaidMail(deliveryItems)
     const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
+    const centralLicenseErrors = order.items
+      .filter((i) => i.product?.licenseRequired && i.licenseServerLastError?.trim())
+      .map((i) => ({ productName: i.productName, error: i.licenseServerLastError!.trim() }))
     let digitalDeliveryEmailAlert: string | null = null
-    if (paidLike && !order.downloadEmailSentAt && (mailLines.length > 0 || !deliveryCheckOk)) {
+    if (paidLike && centralLicenseErrors.length > 0) {
+      digitalDeliveryEmailAlert = `Merkezi lisans oluşturulamadı: ${centralLicenseErrors[0]!.error}`
+    } else if (paidLike && !order.downloadEmailSentAt && (mailLines.length > 0 || !deliveryCheckOk)) {
       if (!deliveryCheckOk) {
         digitalDeliveryEmailAlert =
           'Ödeme alındı ancak ürün teslimat bağlantısı eksik veya kullanılamıyor; müşteri indirme e-postası gönderilmedi. Ürün ayarlarından indirme bağlantısını düzeltin.'
@@ -1356,6 +1381,9 @@ export const ordersAdminService = {
         quantity: i.quantity,
         total: Number(i.total),
         downloadUrl: i.downloadUrl,
+        licenseRequired: i.product?.licenseRequired === true,
+        licenseServerUnitsNotified: i.licenseServerUnitsNotified ?? 0,
+        licenseServerLastError: i.licenseServerLastError,
       })),
       paymentTransactions: order.paymentTransactions.map((t) => ({
         id: t.id,
@@ -1392,5 +1420,24 @@ export const ordersAdminService = {
         generatedAt: f.generatedAt.toISOString(),
       })),
     }
+  },
+
+  async retryDelivery(orderId: string) {
+    const id = orderId.trim()
+    const order = await prisma.order.findFirst({ where: { id, archivedAt: null } })
+    if (!order) {
+      const err = new Error('Sipariş bulunamadı') as Error & { status: number }
+      err.status = 404
+      throw err
+    }
+    if (order.status !== 'PAID' && order.status !== 'PROCESSING') {
+      const err = new Error('Lisans teslimatı yalnızca ödenmiş siparişlerde yeniden denenebilir') as Error & {
+        status: number
+      }
+      err.status = 400
+      throw err
+    }
+    await fulfillPaidOrderDelivery(order.id)
+    return { ok: true as const }
   },
 }

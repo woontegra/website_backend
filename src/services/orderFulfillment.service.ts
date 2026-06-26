@@ -4,7 +4,12 @@ import { prisma } from '../lib/prisma'
 import { getClientIp } from '../lib/clientIp'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { mailService } from './mail.service'
-import { ensureExternalLicenseServerOrders, ensurePaidOrderLicenses, getLicenseMailEntriesByOrderItemIds } from './license.service'
+import {
+  ensureExternalLicenseServerOrders,
+  ensurePaidOrderLicenses,
+  getLicenseMailEntriesByOrderItemIds,
+  type ExternalLicenseProvisionSuccess,
+} from './license.service'
 
 const paidOrderDeliveryItemInclude = {
   product: {
@@ -48,9 +53,27 @@ export function buildPaidDownloadMailLinesFromItems(
     .filter((l) => l.downloadUrl)
 }
 
+function buildMailLinesFromExternalLicenses(
+  provisioned: ExternalLicenseProvisionSuccess[],
+): { id: string; productName: string; downloadUrl: string; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
+  return provisioned
+    .filter((p) => p.downloadUrl?.trim())
+    .filter((p) => !p.mailSentByLicenseServer || Boolean(p.activationPassword))
+    .map((p) => ({
+      id: p.orderItemId,
+      productName: p.productName,
+      downloadUrl: p.downloadUrl!.trim(),
+      licenses: [
+        {
+          licenseKey: p.licenseKey,
+          ...(p.activationPassword ? { activationPassword: p.activationPassword } : {}),
+        },
+      ],
+    }))
+}
+
 /**
  * Ödeme sonrası müşteri indirme maili gönderilebilir mi (saas hariç URL’ler çözülüyor mu, DOWNLOAD için URL var mı).
- * Başarısızlıkta ayrıntı yalnızca sunucu günlüğüne yazılır; müşteri mesajı üretilmez.
  */
 export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCheck[]): boolean {
   for (const item of items) {
@@ -76,7 +99,7 @@ export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCh
   return true
 }
 
-/** Havale onayı vb. öncesi: eksik/çözülemeyen teslimat varsa 400 fırlatır (mesaj müşteriye gitmez). */
+/** Havale onayı vb. öncesi: eksik/çözülemeyen teslimat varsa 400 fırlatır. */
 export function assertOrderDownloadLinesResolvableForCustomerMail(items: OrderItemForDeliveryCheck[]): void {
   if (checkOrderDownloadLinesForPaidMail(items)) return
   const err = new Error(
@@ -88,9 +111,8 @@ export function assertOrderDownloadLinesResolvableForCustomerMail(items: OrderIt
 }
 
 /**
- * Sipariş PAID / PROCESSING olduktan sonra indirme bilgilendirme e-postası ve log.
- * PayTR callback ve admin havale onayı aynı yolu kullanır.
- * Teslimat URL’leri müşteri maili için uygun değilse mail gönderilmez (yalnızca log).
+ * Sipariş PAID / PROCESSING olduktan sonra indirme + lisans bilgilendirme e-postası.
+ * Merkezi lisans: sunucuda üretilir, müşteri maili website backend (Gmail) ile gider.
  */
 export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): Promise<void> {
   const fresh = await prisma.order.findUnique({
@@ -115,49 +137,84 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     })
   }
 
-  /** Merkezi lisans sunucusu mail gönderir; website mailinde bu satırlar yer almaz */
-  const itemsForWebsiteMail = items.filter((i) => !i.product?.licenseRequired)
-
   if (!fresh.downloadEmailSentAt) {
+    const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
+    const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned)
+
     const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
-    const linesRaw = buildPaidDownloadMailLinesFromItems(itemsForWebsiteMail)
-    if (linesRaw.length > 0) {
-      if (!checkOrderDownloadLinesForPaidMail(itemsForWebsiteMail)) {
-        return
+    const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
+
+    const allMailCandidates = [...externalMailLines]
+    if (localLinesRaw.length > 0) {
+      if (!checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
+        if (allMailCandidates.length === 0) return
+      } else {
+        const licenseMap = await getLicenseMailEntriesByOrderItemIds(
+          fresh.id,
+          localLinesRaw.map((l) => l.id),
+          freshPasswords,
+        )
+        for (const l of localLinesRaw) {
+          allMailCandidates.push({
+            ...l,
+            licenses: (licenseMap.get(l.id) ?? []).filter(
+              (entry): entry is { licenseKey: string; activationPassword: string } =>
+                Boolean(entry.licenseKey?.trim() && entry.activationPassword?.trim()),
+            ),
+          })
+        }
       }
-      const licenseMap = await getLicenseMailEntriesByOrderItemIds(
-        fresh.id,
-        linesRaw.map((l) => l.id),
-        freshPasswords,
-      )
-      const lines = linesRaw.map((l) => ({
-        ...l,
-        licenses: licenseMap.get(l.id) ?? [],
-      }))
-      try {
-        await mailService.sendPaidDownloadOrder({
-          customerName: fresh.customerName,
-          customerEmail: fresh.customerEmail,
-          orderNo: fresh.orderNo,
-          lines,
-        })
+    }
+
+    if (allMailCandidates.length === 0) {
+      const allCentralMailSent =
+        externalResult.provisioned.length > 0 &&
+        externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
+      if (allCentralMailSent && externalResult.errors.length === 0) {
         await prisma.order.update({
           where: { id: fresh.id },
           data: { downloadEmailSentAt: new Date() },
         })
-      } catch (e) {
-        console.error('[orders] paid mail send failed', e)
+        return
       }
-    } else if (itemsForWebsiteMail.length === 0 && items.some((i) => i.product?.licenseRequired)) {
-      console.info('[orders] paid download mail skipped — license server handles delivery', {
+      if (items.some((i) => i.product?.licenseRequired) && externalResult.errors.length > 0) {
+        console.error('[orders] central license delivery blocked — provision failed', {
+          orderNo: fresh.orderNo,
+          orderId: fresh.id,
+        })
+      } else if (items.length > 0) {
+        console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
+          orderNo: fresh.orderNo,
+          orderId: fresh.id,
+        })
+      }
+      return
+    }
+
+    for (const line of allMailCandidates) {
+      if (line.downloadUrl.startsWith('saas:')) continue
+      if (!resolveMailDownloadHref(line.downloadUrl)) {
+        console.error('[orders] paid mail blocked — unresolvable download URL', {
+          orderNo: fresh.orderNo,
+          productName: line.productName,
+        })
+        return
+      }
+    }
+
+    try {
+      await mailService.sendPaidDownloadOrder({
+        customerName: fresh.customerName,
+        customerEmail: fresh.customerEmail,
         orderNo: fresh.orderNo,
-        orderId: fresh.id,
+        lines: allMailCandidates,
       })
-    } else {
-      console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
-        orderNo: fresh.orderNo,
-        orderId: fresh.id,
+      await prisma.order.update({
+        where: { id: fresh.id },
+        data: { downloadEmailSentAt: new Date() },
       })
+    } catch (e) {
+      console.error('[orders] paid mail send failed', e)
     }
   }
 

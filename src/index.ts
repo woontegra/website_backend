@@ -7,6 +7,7 @@ require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
 import path from 'path'
 import express from 'express'
 import { getR2ConfigStatus } from './lib/r2.client'
+import { isLicenseServerConfigured } from './services/woontegraLicenseServer.client'
 import cors from 'cors'
 import helmet from 'helmet'
 import { createGlobalRateLimiter } from './middleware/rateLimit.middleware'
@@ -191,4 +192,11 @@ app.use((_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Woontegra API http://localhost:${PORT}`)
+  if (!isLicenseServerConfigured()) {
+    console.warn(
+      '[startup] Merkezi lisans sunucusu yapılandırılmamış — LICENSE_SERVER_URL ve LICENSE_SERVER_INTEGRATION_SECRET gerekli (merkezi lisanslı ürün satışlarında lisans oluşturulmaz).',
+    )
+  } else {
+    console.log('[startup] Merkezi lisans sunucusu:', process.env.LICENSE_SERVER_URL ?? 'http://localhost:4001')
+  }
 })

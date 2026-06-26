@@ -100,6 +100,21 @@ export async function adminUpdateOrder(req: Request, res: Response) {
   }
 }
 
+export async function adminRetryOrderDelivery(req: Request, res: Response) {
+  const id = String(req.params.id ?? '').trim()
+  if (!id) {
+    return res.status(400).json({ success: false, message: 'Geçersiz id' })
+  }
+  try {
+    const data = await ordersAdminService.retryDelivery(id)
+    return res.json({ success: true, data })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    const code = err.status ?? 500
+    return res.status(code).json({ success: false, message: err.message || 'Teslimat yeniden denenemedi' })
+  }
+}
+
 export async function adminDeleteOrder(req: Request, res: Response) {
   const id = String(req.params.id ?? '').trim()
   if (!id) {

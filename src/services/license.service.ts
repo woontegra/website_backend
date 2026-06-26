@@ -101,14 +101,25 @@ function resolveItemDownloadUrlForLicenseServer(item: {
   return resolveMailDownloadHref(raw) ?? raw
 }
 
+export type ExternalLicenseProvisionSuccess = {
+  orderItemId: string
+  productName: string
+  licenseKey: string
+  activationPassword: string
+  downloadUrl: string | null
+  mailSentByLicenseServer: boolean
+}
+
 /**
  * licenseRequired=true ürünler için Woontegra-Lisans-Server'a lisans üretimi bildirir.
- * Website iç License tablosuna yazmaz. Idempotent: orderItem.licenseServerUnitsNotified.
+ * Müşteri e-postası website backend (Gmail/SMTP) üzerinden gönderilir.
  */
 export async function ensureExternalLicenseServerOrders(orderId: string): Promise<{
   errors: ExternalLicenseProvisionError[]
+  provisioned: ExternalLicenseProvisionSuccess[]
 }> {
   const errors: ExternalLicenseProvisionError[] = []
+  const provisioned: ExternalLicenseProvisionSuccess[] = []
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -128,8 +139,8 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
       },
     },
   })
-  if (!order) return { errors }
-  if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors }
+  if (!order) return { errors, provisioned }
+  if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors, provisioned }
 
   for (const item of order.items) {
     const product = item.product
@@ -166,7 +177,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         maxDevices,
       })
 
-      if (!result.success) {
+      if (!result.success || !result.licenseKey?.trim()) {
         const err = result.error ?? 'Lisans sunucusu isteği başarısız.'
         errors.push({ orderItemId: item.id, productName: item.productName, error: err })
         await prisma.orderItem.update({
@@ -184,6 +195,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         break
       }
 
+      const activationPassword = result.activationPassword?.trim() ?? ''
+      const mailSentByLicenseServer = result.mailSent === true
+
       await prisma.orderItem.update({
         where: { id: item.id },
         data: {
@@ -193,17 +207,27 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         },
       })
 
+      provisioned.push({
+        orderItemId: item.id,
+        productName: item.productName,
+        licenseKey: result.licenseKey.trim(),
+        activationPassword,
+        downloadUrl,
+        mailSentByLicenseServer,
+      })
+
       console.info('[license-server] provision ok', {
         orderNo: order.orderNo,
         externalOrderNo,
         appCode,
         licenseKey: result.licenseKey,
-        mailSent: result.mailSent,
+        mailSentByLicenseServer,
+        hasActivationPassword: Boolean(activationPassword),
       })
     }
   }
 
-  return { errors }
+  return { errors, provisioned }
 }
 
 /** PAID / PROCESSING siparişte indirilebilir satırlar için lisans üretir (idempotent). */

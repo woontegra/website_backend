@@ -1,6 +1,6 @@
 import { Prisma, ProductType } from '@prisma/client'
 import { getProductOrderDenialReason, type ProductOrderCheckRow } from '../lib/productOrderValidation'
-import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import { isDeliverableDownloadRawUrl } from '../lib/mailDeliveryUrl'
 import { prisma } from '../lib/prisma'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
@@ -182,7 +182,7 @@ function adminProductDeliveryLinkMissing(p: ProductRow): boolean {
   if (!p.isActive || !p.purchaseEnabled) return false
   const u = effectiveDownloadUrlForProduct(p)
   if (!u) return true
-  return !resolveMailDownloadHref(u)
+  return !isDeliverableDownloadRawUrl(u)
 }
 
 function mapAdmin(p: ProductRow): AdminProductDto {
@@ -428,10 +428,14 @@ function assertActiveDownloadDeliverable(row: {
   if (!row.isActive || !row.purchaseEnabled) return
   const u = (row.downloadUrl?.trim() || row.downloadMedia?.url?.trim() || '') || ''
   if (!u) {
-    throw new Error('Dijital ürünlerde indirme/teslimat bağlantısı zorunludur.')
+    throw new Error(
+      'Dijital ürünlerde indirme/teslimat bağlantısı zorunludur. Medyadan dosya seçin veya bir indirme adresi girin.',
+    )
   }
-  if (!resolveMailDownloadHref(u)) {
-    throw new Error('Dijital ürünlerde indirme/teslimat bağlantısı zorunludur.')
+  if (!isDeliverableDownloadRawUrl(u)) {
+    throw new Error(
+      'İndirme adresi geçersiz. Medyadan ZIP/exe seçin, /uploads/... yolu kullanın veya https:// ile tam bir URL girin.',
+    )
   }
 }
 

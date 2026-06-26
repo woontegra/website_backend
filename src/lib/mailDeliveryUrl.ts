@@ -88,6 +88,24 @@ function isUploadsCatalogPath(pathname: string): boolean {
   return pathname.startsWith('/uploads/')
 }
 
+/** Göreli katalog indirme yolu — sunucuda `/uploads` altında servis edilir. */
+export function isCatalogUploadDownloadPath(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim()
+  if (!t.startsWith('/uploads/') || t.includes('..')) return false
+  return isUploadsCatalogPath(t)
+}
+
+/**
+ * Ürün kaydı ve sipariş doğrulaması: ham teslimat URL'si tanımlı ve kullanılabilir mi?
+ * `/uploads/...` yolları BACKEND_PUBLIC_URL olmadan da geçerlidir (mail gönderiminde köken gerekir).
+ */
+export function isDeliverableDownloadRawUrl(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim()
+  if (!t || t.startsWith('saas:')) return false
+  if (isCatalogUploadDownloadPath(t)) return true
+  return resolveMailDownloadHref(t) !== null
+}
+
 /**
  * Mailde kullanılacak tam http(s) URL veya null (saas:, boş, geçersiz, çözülemeyen).
  * Göreli `/uploads/...` için BACKEND_PUBLIC_URL zorunludur (/api eklenmez).
