@@ -1,7 +1,12 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { escapeMailHtml, mailBadge, mailHtmlDocument, mailInfoTable } from '../lib/mailHtmlLayout'
-import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import {
+  buildCustomerOrdersPageHref,
+  buildOrderDownloadMailHref,
+  mailDownloadButton,
+} from '../lib/mailDownloadLink'
+import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -109,6 +114,7 @@ export const mailService = {
   },
 
   async sendPaidDownloadOrder(data: {
+    orderId: string
     customerName: string
     customerEmail: string
     orderNo: string
@@ -116,16 +122,16 @@ export const mailService = {
       id: string
       productName: string
       downloadUrl: string
+      productId?: string
       licenseKeys?: string[]
       licenses?: { licenseKey: string; activationPassword?: string }[]
+      licenseId?: string
     }[]
   }) {
-    const support = 'info@woontegra.com'
+    const support = 'destek@woontegra.com'
     const safeName = escapeHtml(data.customerName)
     const safeOrder = escapeHtml(data.orderNo)
-
-    const htmlParts: string[] = []
-    const textParts: string[] = []
+    const ordersPageHref = buildCustomerOrdersPageHref()
 
     const entries = data.lines.filter((x) => x.downloadUrl?.trim())
     if (entries.length === 0) {
@@ -135,8 +141,8 @@ export const mailService = {
 
     for (const l of entries) {
       if (l.downloadUrl.startsWith('saas:')) continue
-      if (!resolveMailDownloadHref(l.downloadUrl)) {
-        console.error('[mail] sendPaidDownloadOrder: unresolved URL after pre-check', {
+      if (!resolveDownloadSourceFromRawUrl(l.downloadUrl)) {
+        console.error('[mail] sendPaidDownloadOrder: unresolved source after pre-check', {
           orderNo: data.orderNo,
           productName: l.productName,
         })
@@ -144,100 +150,135 @@ export const mailService = {
       }
     }
 
-    const licenseHelpHtml =
-      '<p style="margin-top:14px;font-size:14px;line-height:1.5;color:#334155">Programı kurduktan sonra açın; lisans anahtarı ve aktivasyon şifresini aktivasyon ekranına girin.</p>'
-    const licenseHelpText =
-      '\nProgramı kurduktan sonra açın; lisans anahtarı ve aktivasyon şifresini aktivasyon ekranına girin.\n'
+    const productSectionsHtml: string[] = []
+    const productSectionsText: string[] = []
 
     for (const l of entries) {
-      const name = escapeHtml(l.productName)
       const plainName = l.productName
       const licenseEntries: { licenseKey: string; activationPassword?: string }[] =
         l.licenses?.filter((x) => x.licenseKey?.trim()) ??
         (l.licenseKeys ?? []).filter((k) => k?.trim()).map((k) => ({ licenseKey: k }))
-      const keysHtml =
-        licenseEntries.length > 0
-          ? licenseEntries
-              .map((entry) => {
-                const keyLine = `<strong>Lisans anahtarı:</strong> <span style="font-family:monospace">${escapeHtml(entry.licenseKey)}</span>`
-                const passLine = entry.activationPassword
-                  ? `<br/><strong>Aktivasyon şifresi:</strong> <span style="font-family:monospace">${escapeHtml(entry.activationPassword)}</span>`
-                  : ''
-                return `<div style="margin-top:6px;font-size:13px">${keyLine}${passLine}</div>`
-              })
-              .join('')
-          : ''
-      const keysText =
-        licenseEntries.length > 0
-          ? licenseEntries
-              .map((entry) => {
-                const parts = [`Lisans anahtarı: ${entry.licenseKey}`]
-                if (entry.activationPassword) parts.push(`Aktivasyon şifresi: ${entry.activationPassword}`)
-                return `  ${parts.join('\n  ')}`
-              })
-              .join('\n')
-          : ''
+
       if (l.downloadUrl.startsWith('saas:')) {
         const saasNote =
           'Web tabanlı program için kullanım hesabınız ve giriş bilgileriniz Woontegra tarafından e-posta ile paylaşılacaktır.'
-        htmlParts.push(`<li><strong>${name}</strong> — ${escapeHtml(saasNote)}${keysHtml}</li>`)
-        textParts.push(`- ${plainName}: ${saasNote}${keysText}`)
+        productSectionsHtml.push(
+          `<div style="margin-bottom:24px;"><h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">${escapeHtml(l.productName)}</h3><p style="margin:0;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(saasNote)}</p></div>`,
+        )
+        productSectionsText.push(`- ${plainName}: ${saasNote}`)
         continue
       }
-      const abs = resolveMailDownloadHref(l.downloadUrl)!
-      if (process.env.MAIL_LOG_DOWNLOAD_HREF === '1') {
-        // eslint-disable-next-line no-console -- opsiyonel mail href denetimi
-        console.log('[mail] paid download final href', { orderNo: data.orderNo, productName: l.productName, href: abs })
+
+      const downloadHref = buildOrderDownloadMailHref({
+        orderId: data.orderId,
+        orderItemId: l.id,
+        productId: l.productId,
+        licenseId: l.licenseId,
+      })
+
+      const licenseRows: { label: string; value: string; mono?: boolean }[] = [
+        { label: 'Program', value: escapeMailHtml(l.productName) },
+      ]
+      if (licenseEntries[0]?.licenseKey) {
+        licenseRows.push({
+          label: 'Lisans Anahtarı',
+          value: escapeMailHtml(licenseEntries[0].licenseKey),
+          mono: true,
+        })
       }
-      const safeHref = escapeHtml(abs)
-      htmlParts.push(
-        `<li><strong>${name}</strong> — <a href="${safeHref}" target="_blank" rel="noopener noreferrer">İndir</a>${keysHtml}</li>`,
+      if (licenseEntries[0]?.activationPassword) {
+        licenseRows.push({
+          label: 'Aktivasyon Şifresi',
+          value: escapeMailHtml(licenseEntries[0].activationPassword),
+          mono: true,
+        })
+      }
+
+      const licenseTable =
+        licenseRows.length > 1
+          ? mailInfoTable(licenseRows)
+          : `<p style="margin:0 0 12px;font-size:14px;color:#475569;">${escapeMailHtml(l.productName)}</p>`
+
+      productSectionsHtml.push(`
+        <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
+          ${licenseTable}
+          <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
+          ${mailDownloadButton(downloadHref, 'Programı İndir')}
+          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantısı ödeme onayınıza özel oluşturulmuştur. Linki üçüncü kişilerle paylaşmayınız.</p>
+        </div>`)
+
+      const textLicense =
+        licenseEntries.length > 0
+          ? licenseEntries
+              .map((entry) => {
+                const parts = [`Program: ${plainName}`, `Lisans anahtarı: ${entry.licenseKey}`]
+                if (entry.activationPassword) parts.push(`Aktivasyon şifresi: ${entry.activationPassword}`)
+                return parts.join('\n')
+              })
+              .join('\n')
+          : `Program: ${plainName}`
+
+      productSectionsText.push(
+        `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
       )
-      textParts.push(`- ${plainName}: İndirme bağlantısı: ${abs}${keysText}`)
     }
 
-    if (htmlParts.length === 0) {
+    if (productSectionsHtml.length === 0) {
       console.warn('[mail] sendPaidDownloadOrder skipped: no renderable lines', { orderNo: data.orderNo })
       return
     }
-
-    const deliverySectionHtml = `<p><b>Ürün teslimi:</b></p><ul>${htmlParts.join('')}</ul>${licenseHelpHtml}`
-
-    const textBody = [
-      `Merhaba ${data.customerName},`,
-      '',
-      `Ödemeniz alındı. Sipariş numaranız: ${data.orderNo}`,
-      '',
-      'Ürün teslimi:',
-      textParts.join('\n'),
-      licenseHelpText,
-      `Sorularınız için: ${support}`,
-      '',
-      'İyi çalışmalar,',
-      'Woontegra',
-    ].join('\n')
 
     const hasDesktopLicenseMail = entries.some(
       (l) => (l.licenses?.length ?? 0) > 0 || (l.licenseKeys?.length ?? 0) > 0,
     )
     const subject = hasDesktopLicenseMail
-      ? `Müvekkil Kasa Defteri Masaüstü - Lisans ve İndirme Bilgileri`
+      ? 'Woontegra Lisans ve Kurulum Bilgileri'
       : `Siparişiniz onaylandı — ${data.orderNo}`
+
+    const installHtml = `<ol style="margin:12px 0 0;padding-left:20px;line-height:1.7;color:#334155;font-size:14px;">
+      <li>Programı indirin ve kurun.</li>
+      <li>Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.</li>
+      <li>Lisans anahtarınızı ve aktivasyon şifrenizi girin.</li>
+      <li>Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.</li>
+    </ol>`
+
+    const bodyHtml = `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Sayın ${safeName},</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır. Sipariş numaranız: <strong>${safeOrder}</strong></p>
+      ${productSectionsHtml.join('')}
+      <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a;">Kurulum</h3>
+      ${installHtml}
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Bağlantı çalışmazsa <a href="${escapeHtml(ordersPageHref)}" style="color:#2563eb;text-decoration:none;">Hesabım &gt; Siparişlerim</a> bölümünden programınızı indirebilirsiniz.</p>
+      <p style="margin:16px 0 0;font-size:14px;line-height:1.6;">Destek: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
+    `
+
+    const textBody = [
+      `Sayın ${data.customerName},`,
+      '',
+      'Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır.',
+      `Sipariş numaranız: ${data.orderNo}`,
+      '',
+      ...productSectionsText,
+      '',
+      'Kurulum:',
+      '1. Programı indirin ve kurun.',
+      '2. Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.',
+      '3. Lisans anahtarınızı ve aktivasyon şifrenizi girin.',
+      '4. Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.',
+      '',
+      `Alternatif: ${ordersPageHref}`,
+      '',
+      `Destek: ${support}`,
+      '',
+      'İyi çalışmalar,',
+      'Woontegra',
+    ].join('\n')
 
     await dispatchMail({
       to: data.customerEmail,
       subject,
       text: textBody,
-      html: mailHtmlDocument(
-        hasDesktopLicenseMail ? 'Lisans ve İndirme Bilgileri' : 'Siparişiniz Onaylandı',
-        `
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Merhaba ${safeName},</p>
-        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Ödemeniz alındı. Sipariş numaranız: <strong>${safeOrder}</strong></p>
-        ${deliverySectionHtml}
-        <p style="margin:16px 0 0;font-size:14px;line-height:1.6;">Sorularınız için: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
-        <p style="margin:12px 0 0;font-size:14px;line-height:1.6;">İyi çalışmalar,<br/>Woontegra</p>
-      `,
-      ),
+      html: mailHtmlDocument('Woontegra Lisans ve Kurulum Bilgileri', bodyHtml),
     })
   },
 
@@ -410,46 +451,90 @@ export const mailService = {
     licenseKey: string
     activationPassword?: string
     orderNo?: string | null
+    orderId?: string | null
+    orderItemId?: string | null
+    licenseId?: string | null
+    productId?: string | null
   }) {
-    const support = 'info@woontegra.com'
+    const support = 'destek@woontegra.com'
     const safeName = escapeHtml(data.customerName)
     const safeProduct = escapeHtml(data.productName)
     const safeKey = escapeHtml(data.licenseKey)
-    const passBlock = data.activationPassword
-      ? `<p><strong>Aktivasyon şifresi:</strong> <span style="font-family:monospace">${escapeHtml(data.activationPassword)}</span></p>`
-      : `<p><em>Aktivasyon şifreniz daha önce iletilmiştir. Hatırlamıyorsanız destek ile iletişime geçin.</em></p>`
+    const ordersPageHref = buildCustomerOrdersPageHref()
+
+    const licenseRows = [
+      { label: 'Program', value: safeProduct },
+      { label: 'Lisans Anahtarı', value: safeKey, mono: true as const },
+    ]
+    if (data.activationPassword) {
+      licenseRows.push({
+        label: 'Aktivasyon Şifresi',
+        value: escapeMailHtml(data.activationPassword),
+        mono: true as const,
+      })
+    }
+
+    let downloadSectionHtml = ''
+    let downloadText = ''
+    const orderId = data.orderId ?? data.licenseId ?? null
+    const orderItemId = data.orderItemId ?? data.licenseId ?? null
+    if (orderId && orderItemId && resolveDownloadSourceFromRawUrl(data.downloadUrl)) {
+      const href = buildOrderDownloadMailHref({
+        orderId,
+        orderItemId,
+        productId: data.productId ?? undefined,
+        licenseId: data.licenseId ?? undefined,
+      })
+      downloadSectionHtml = `
+        <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
+        ${mailDownloadButton(href, 'Programı İndir')}
+        <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantınız ödeme onayınıza özel oluşturulmuştur. Bağlantı çalışmazsa Woontegra hesabınızdan sipariş detayına girerek programı indirebilirsiniz.</p>`
+      downloadText = `Programı İndir: ${href}`
+    }
+
+    const orderLine = data.orderNo
+      ? `<p style="margin:0 0 16px;font-size:14px;color:#475569;">Sipariş numaranız: <strong>${escapeHtml(data.orderNo)}</strong></p>`
+      : ''
+    const orderText = data.orderNo ? `Sipariş numaranız: ${data.orderNo}\n` : ''
+
     const passText = data.activationPassword
       ? `Aktivasyon şifresi: ${data.activationPassword}`
       : 'Aktivasyon şifreniz daha önce iletilmiştir.'
 
-    let downloadHtml = ''
-    let downloadText = ''
-    if (data.downloadUrl?.trim()) {
-      const href = resolveMailDownloadHref(data.downloadUrl.trim())
-      if (href) {
-        downloadHtml = `<p><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">Programı indir</a></p>`
-        downloadText = `İndirme bağlantısı: ${href}`
-      }
-    }
+    const installHtml = `<ol style="margin:12px 0 0;padding-left:20px;line-height:1.7;color:#334155;font-size:14px;">
+      <li>Programı indirin ve kurun.</li>
+      <li>Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.</li>
+      <li>Lisans anahtarınızı ve aktivasyon şifrenizi girin.</li>
+      <li>Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.</li>
+    </ol>`
 
-    const orderLine = data.orderNo
-      ? `<p>Sipariş numaranız: <b>${escapeHtml(data.orderNo)}</b></p>`
-      : ''
-    const orderText = data.orderNo ? `Sipariş numaranız: ${data.orderNo}\n` : ''
-
-    const installHtml =
-      '<ol style="margin:12px 0;padding-left:20px;line-height:1.6"><li>Programı indirip kurun.</li><li>Programı açın.</li><li>Lisans anahtarı ve aktivasyon şifresini girin.</li><li>İlk kullanıcı hesabınızı oluşturup giriş yapın.</li></ol>'
+    const bodyHtml = `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Sayın ${safeName},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Satın aldığınız <strong>${safeProduct}</strong> için lisans ve kurulum bilgileriniz aşağıdadır.</p>
+      ${orderLine}
+      ${mailInfoTable(licenseRows)}
+      ${downloadSectionHtml}
+      <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Kurulum</h3>
+      ${installHtml}
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Bağlantı çalışmazsa <a href="${escapeHtml(ordersPageHref)}" style="color:#2563eb;text-decoration:none;">Hesabım &gt; Siparişlerim</a> bölümünden programınızı indirebilirsiniz.</p>
+      <p style="margin:16px 0 0;font-size:14px;line-height:1.6;">Destek: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
+    `
 
     const textBody = [
-      `Merhaba ${data.customerName},`,
+      `Sayın ${data.customerName},`,
       '',
-      `${data.productName} lisans bilgileriniz:`,
+      `Satın aldığınız ${data.productName} için lisans ve kurulum bilgileriniz aşağıdadır.`,
       orderText,
-      downloadText,
       `Lisans anahtarı: ${data.licenseKey}`,
       passText,
+      downloadText,
       '',
-      'Kurulum: İndir → Kur → Lisans bilgilerini gir → Hesap oluştur',
+      'Kurulum:',
+      '1. Programı indirin ve kurun.',
+      '2. Lisans aktivasyon ekranında bilgilerinizi girin.',
+      '3. Programı kullanmaya başlayın.',
+      '',
+      `Alternatif: ${ordersPageHref}`,
       '',
       `Destek: ${support}`,
       '',
@@ -461,20 +546,9 @@ export const mailService = {
 
     await dispatchMail({
       to: data.customerEmail,
-      subject: 'Müvekkil Kasa Defteri Masaüstü - Lisans ve İndirme Bilgileri',
+      subject: 'Woontegra Lisans ve Kurulum Bilgileri',
       text: textBody,
-      html: `
-        <p>Merhaba ${safeName},</p>
-        <p><strong>${safeProduct}</strong> lisans bilgileriniz aşağıdadır.</p>
-        ${orderLine}
-        ${downloadHtml}
-        <p><strong>Lisans anahtarı:</strong> <span style="font-family:monospace">${safeKey}</span></p>
-        ${passBlock}
-        <p><strong>Kurulum:</strong></p>
-        ${installHtml}
-        <p>Destek: <a href="mailto:${support}">${support}</a></p>
-        <p>İyi çalışmalar,<br/>Woontegra</p>
-      `,
+      html: mailHtmlDocument('Woontegra Lisans ve Kurulum Bilgileri', bodyHtml),
     })
   },
 

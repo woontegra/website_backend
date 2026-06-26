@@ -24,28 +24,59 @@ const COVER_SOURCE = path.join(REPO_ROOT, 'frontend', 'src', 'assets', 'images',
 const PRODUCT_SLUG = 'sifre-kasasi'
 const R2_COVER_KEY = `products/${PRODUCT_SLUG}/cover.png`
 
-const SETUP_DOWNLOAD_URL =
-  'https://github.com/woontegra/website_frontend/releases/download/sifre-kasasi-v1.0.0/woontegra-sifre-kasasi-setup-1.0.0.exe'
+function downloadsPublicBase(): string {
+  return (process.env.R2_DOWNLOADS_PUBLIC_BASE_URL ?? '').replace(/\/+$/, '')
+}
 
-const SHORT_DESC =
-  'Giriş bilgilerinizi güvenli, düzenli ve kolay erişilebilir şekilde saklayın — ücretsiz Windows masaüstü aracı.'
+function buildDownloadFiles() {
+  const base = downloadsPublicBase()
+  const setupUrl = base ? `${base}/woontegra-sifre-kasasi-setup-1.0.0.exe` : ''
+  const portableUrl = base ? `${base}/woontegra-sifre-kasasi-portable-1.0.0.exe` : ''
+  if (!setupUrl || !portableUrl) {
+    console.warn('R2_DOWNLOADS_PUBLIC_BASE_URL tanımlı değil — downloadFiles URL’leri boş kalacak.')
+  }
+  return {
+    version: '1.0.0',
+    publicFreeDownload: true,
+    showAfterPaymentOnly: false,
+    files: [
+      {
+        label: 'Kurulum Sürümü',
+        url: setupUrl,
+        version: '1.0.0',
+        size: '171 MB',
+        type: 'setup',
+        buttonLabel: 'Kurulum Sürümünü İndir',
+      },
+      {
+        label: 'Portable Sürüm',
+        url: portableUrl,
+        version: '1.0.0',
+        size: '171 MB',
+        type: 'portable',
+        buttonLabel: 'Portable Sürümü İndir',
+      },
+    ],
+  }
+}
 
-const LONG_DESC = `Woontegra Şifre Kasası, avukatlık ve işletme ekipleri için geliştirilmiş ücretsiz bir Windows masaüstü uygulamasıdır.
+const SHORT_DESC = 'Windows için ücretsiz masaüstü şifre kasası.'
 
-Şifrelerinizi, giriş URL'lerinizi, kullanıcı adlarınızı ve notlarınızı Excel dosyaları yerine yerel ve şifreli bir kasada yönetin. Verileriniz bilgisayarınızda kalır; Woontegra sunucularına gönderilmez.
+const LONG_DESC = `Woontegra Şifre Kasası, giriş bilgilerinizi güvenli ve düzenli şekilde saklamanız için geliştirilmiş ücretsiz bir Windows masaüstü uygulamasıdır.
 
-Kurulumlu ve portable sürümler mevcuttur. İndirme bağlantıları resmi Woontegra sitesi üzerinden sunulur.`
+Veriler kullanıcının kendi bilgisayarında saklanır. Woontegra sunucularına gönderilmez. Ana şifre unutulursa kayıtlar kurtarılamaz.
+
+Kurulumlu ve portable sürümler R2 üzerinden indirilebilir.`
 
 const FEATURE_BULLETS = [
   "Giriş URL'si, kullanıcı adı, şifre ve not saklama",
-  'Kategori / klasör yönetimi',
-  'Şifre göster / gizle ve panoya kopyalama',
-  'Güçlü şifre üretici ve şifre gücü göstergesi',
-  'Otomatik kilitleme',
+  'Ana şifre ile şifreli kasa',
   'Şifreli yedek alma ve geri yükleme',
   'Güvenli Excel ve tam Excel dışa aktarım',
-  'Kurulumlu ve portable Windows sürümü',
-  'Yerel çalışır — veriler cihazınızda şifreli saklanır',
+  'Kategori / klasör yönetimi',
+  'Şifre üretici ve şifre gücü göstergesi',
+  'Otomatik kilitleme',
+  'Portable ve kurulumlu Windows sürümü',
 ].join('\n')
 
 async function resolveCoverUrl(): Promise<string | null> {
@@ -94,6 +125,7 @@ async function main() {
   }
 
   const coverUrl = await resolveCoverUrl()
+  const downloadFiles = buildDownloadFiles()
 
   const data = {
     name: 'Woontegra Şifre Kasası',
@@ -108,13 +140,14 @@ async function main() {
     purchaseEnabled: false,
     licenseMonths: 0,
     licenseRequired: false,
-    licenseAppCode: 'SIFRE_KASASI_DESKTOP',
+    licenseAppCode: null,
     featureBullets: FEATURE_BULLETS,
     isFeatured: true,
     sortOrder: 5,
     version: '1.0.0',
     coverImage: coverUrl,
-    downloadUrl: SETUP_DOWNLOAD_URL,
+    downloadUrl: null,
+    downloadFiles,
     seoTitle: 'Woontegra Şifre Kasası | Ücretsiz Windows Şifre Yönetim Aracı',
     seoDescription:
       "Giriş URL'lerinizi, kullanıcı adlarınızı, şifrelerinizi ve notlarınızı yerel ve şifreli şekilde saklayabileceğiniz ücretsiz Windows masaüstü aracı.",
@@ -137,7 +170,20 @@ async function main() {
   }
 
   const row = await prisma.product.findUnique({ where: { slug: PRODUCT_SLUG } })
-  console.log(JSON.stringify({ slug: row?.slug, isActive: row?.isActive, purchaseEnabled: row?.purchaseEnabled, price: row?.price, coverImage: row?.coverImage }, null, 2))
+  console.log(
+    JSON.stringify(
+      {
+        slug: row?.slug,
+        isActive: row?.isActive,
+        purchaseEnabled: row?.purchaseEnabled,
+        price: row?.price,
+        coverImage: row?.coverImage,
+        downloadFiles: row?.downloadFiles,
+      },
+      null,
+      2,
+    ),
+  )
 }
 
 main()

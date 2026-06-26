@@ -217,7 +217,11 @@ export const licensesAdminService = {
         downloadUrl,
         licenseKey: lic.licenseKey,
         activationPassword,
-        orderNo: null,
+        orderNo: lic.orderNo,
+        orderId: lic.orderId ?? lic.id,
+        orderItemId: lic.orderItemId ?? lic.id,
+        licenseId: lic.id,
+        productId: lic.productId,
       })
     }
 
@@ -300,6 +304,10 @@ export const licensesAdminService = {
       licenseKey: lic.licenseKey,
       activationPassword: activationPasswordPlain,
       orderNo: lic.orderNo,
+      orderId: lic.orderId ?? lic.id,
+      orderItemId: lic.orderItemId ?? lic.id,
+      licenseId: lic.id,
+      productId: lic.productId,
     })
   },
 }

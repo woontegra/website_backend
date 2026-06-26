@@ -352,6 +352,8 @@ model Product {
   version             String?
   coverImage          String?
   downloadUrl         String?
+  /// Çoklu R2 indirme dosyaları (setup/portable vb.) — JSON: { version, publicFreeDownload, showAfterPaymentOnly, files[] }
+  downloadFiles       Json?
   categoryId          String?
   category            ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   seoTitle            String?

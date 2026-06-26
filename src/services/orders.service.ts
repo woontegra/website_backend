@@ -11,7 +11,7 @@ import {
   type OrderLegalConsentFlags,
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
-import { denialReasonLabel, getProductOrderDenialReason, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
+import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
@@ -404,6 +404,10 @@ export const ordersService = {
         dl = dlResolved
       }
       const qty = mergedCanonical.get(p.id) ?? 1
+      assertSingleLicenseQuantityOrThrow(
+        { productType: p.productType, licenseRequired: p.licenseRequired, name: p.name },
+        qty,
+      )
       const unit = p.price
       const lineTotal = new Prisma.Decimal(Number(unit) * qty)
       subtotal = subtotal.add(lineTotal)

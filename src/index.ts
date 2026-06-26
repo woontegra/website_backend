@@ -29,6 +29,7 @@ import { contactMessagesRoutes } from './routes/contact-messages.routes'
 import pageContentRoutes from './routes/page-content.routes'
 import mailRoutes from './routes/mail.routes'
 import { downloadsPublicRoutes } from './routes/downloads.public.routes'
+import { downloadsFreeRoutes } from './routes/downloads.free.routes'
 import { cookiesPublicRoutes, cookiesAdminRoutes } from './routes/cookies.routes'
 import { productsAdminRoutes } from './routes/products.admin.routes'
 import { productsPublicRoutes } from './routes/products.public.routes'
@@ -141,6 +142,7 @@ app.use('/api/contact-messages', contactMessagesRoutes)
 app.use('/api/page-content', pageContentRoutes)
 app.use('/api/mail', mailRoutes)
 app.use('/api/public/downloads', downloadsPublicRoutes)
+app.use('/api/downloads', downloadsFreeRoutes)
 app.use('/api/public', cookiesPublicRoutes)
 app.use('/api/products', productsPublicRoutes)
 app.use('/api/legal-documents', legalDocumentsPublicRoutes)

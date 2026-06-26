@@ -186,6 +186,7 @@ export async function adminCreate(req: Request, res: Response) {
                 : (body.galleryMediaIds as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
           }
         : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'downloadFiles') ? { downloadFiles: body.downloadFiles } : {}),
     })
     res.status(201).json({ success: true, data: row })
   } catch (e) {
@@ -200,7 +201,8 @@ export async function adminCreate(req: Request, res: Response) {
       msg.includes('İndirilebilir') ||
       msg.includes('Dijital') ||
       msg.includes('Galeri') ||
-      msg.includes('zorunludur')
+      msg.includes('zorunludur') ||
+      msg.includes('R2 indirme')
     ) {
       return res.status(400).json({ success: false, message: msg })
     }
@@ -290,6 +292,9 @@ export async function adminPatch(req: Request, res: Response) {
         ? []
         : (body.galleryMediaIds as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean)
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'downloadFiles')) {
+    patch.downloadFiles = body.downloadFiles
+  }
 
   try {
     const row = await productsService.update(req.params.id, patch)
@@ -309,7 +314,8 @@ export async function adminPatch(req: Request, res: Response) {
       msg.includes('İndirilebilir') ||
       msg.includes('Dijital') ||
       msg.includes('Galeri') ||
-      msg.includes('zorunludur')
+      msg.includes('zorunludur') ||
+      msg.includes('R2 indirme')
     ) {
       return res.status(400).json({ success: false, message: msg })
     }

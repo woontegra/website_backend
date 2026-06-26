@@ -1,6 +1,32 @@
 import { ProductType } from '@prisma/client'
 import { isDeliverableDownloadRawUrl } from './mailDeliveryUrl'
 
+/** SaaS dışında tek lisans/adet: masaüstü, merkezi lisans, hizmet. */
+export function isSingleLicenseQuantityProduct(p: {
+  productType: ProductType
+  licenseRequired?: boolean
+}): boolean {
+  if (p.productType === ProductType.SAAS) return false
+  if (p.licenseRequired === true) return true
+  if (p.productType === ProductType.DOWNLOAD) return true
+  if (p.productType === ProductType.SERVICE) return true
+  return false
+}
+
+export function assertSingleLicenseQuantityOrThrow(
+  p: { productType: ProductType; licenseRequired: boolean; name: string },
+  quantity: number,
+): void {
+  if (!isSingleLicenseQuantityProduct(p)) return
+  const q = Math.floor(Number(quantity)) || 1
+  if (q > 1) {
+    const err = new Error('ORDER_QUANTITY_INVALID') as Error & { status: number; publicMessage?: string }
+    err.status = 400
+    err.publicMessage = `“${p.name}” yalnızca tek lisans olarak satın alınabilir.`
+    throw err
+  }
+}
+
 export type ProductOrderCheckRow = {
   id: string
   slug: string | null

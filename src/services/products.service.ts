@@ -1,6 +1,15 @@
 import { Prisma, ProductType } from '@prisma/client'
-import { getProductOrderDenialReason, type ProductOrderCheckRow } from '../lib/productOrderValidation'
+import { getProductOrderDenialReason, isSingleLicenseQuantityProduct, type ProductOrderCheckRow } from '../lib/productOrderValidation'
 import { isDeliverableDownloadRawUrl } from '../lib/mailDeliveryUrl'
+import {
+  hasValidDownloadFiles,
+  isPublicFreeDownloadProduct,
+  normalizeProductDownloadFilesForDb,
+  parseProductDownloadFiles,
+  sanitizePublicDownloadFiles,
+  type ProductDownloadFilesConfig,
+  type PublicProductDownloadFile,
+} from '../lib/productDownloadFiles'
 import { prisma } from '../lib/prisma'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
@@ -69,6 +78,7 @@ export type AdminProductDto = {
   updatedAt: string
   /** DOWNLOAD + aktif + satın alınabilir; teslimat URL yok veya satın alma/mail için çözümlenemiyor */
   deliveryLinkMissing: boolean
+  downloadFiles: ProductDownloadFilesConfig | null
 }
 
 export type PublicProductGalleryImage = {
@@ -107,6 +117,8 @@ export type PublicProductDetail = PublicProductListItem & {
   licenseMaxDevices: number | null
   /** İndirme URL’si public yanıtta yer almaz; yalnızca tanımlı olup olmadığı */
   hasDownload: boolean
+  /** Ücretsiz araçlarda public R2 indirme dosyaları */
+  publicDownloadFiles?: PublicProductDownloadFile[]
 }
 
 function toNumber(d: Prisma.Decimal | null | undefined): number | null {
@@ -137,6 +149,7 @@ type ProductRow = {
   version: string | null
   coverImage: string | null
   downloadUrl: string | null
+  downloadFiles: unknown
   categoryId: string | null
   seoTitle: string | null
   seoDescription: string | null
@@ -181,6 +194,8 @@ function adminProductDeliveryLinkMissing(p: ProductRow): boolean {
   if (p.productType !== ProductType.DOWNLOAD) return false
   if (!p.isActive || !p.purchaseEnabled) return false
   const u = effectiveDownloadUrlForProduct(p)
+  if (u && isDeliverableDownloadRawUrl(u)) return false
+  if (hasValidDownloadFiles(p.downloadFiles)) return false
   if (!u) return true
   return !isDeliverableDownloadRawUrl(u)
 }
@@ -239,6 +254,10 @@ function mapAdmin(p: ProductRow): AdminProductDto {
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     deliveryLinkMissing: adminProductDeliveryLinkMissing(p),
+    downloadFiles: (() => {
+      const parsed = parseProductDownloadFiles(p.downloadFiles)
+      return parsed.files.length > 0 || parsed.version ? parsed : null
+    })(),
   }
 }
 
@@ -277,6 +296,13 @@ function mapPublicDetail(p: ProductRow): PublicProductDetail {
       url: g.media.url,
       sortOrder: g.sortOrder,
     }))
+  const downloadConfig = parseProductDownloadFiles(p.downloadFiles)
+  const freeDownload = isPublicFreeDownloadProduct(p)
+  const publicFiles =
+    freeDownload && downloadConfig.publicFreeDownload !== false
+      ? sanitizePublicDownloadFiles(p.slug, downloadConfig.files)
+      : []
+  const singleUrl = effectiveDownloadUrlForProduct(p)
   return {
     ...mapPublicList(p),
     description: p.description,
@@ -289,8 +315,9 @@ function mapPublicDetail(p: ProductRow): PublicProductDetail {
     licenseMaxDevices: p.licenseRequired ? (p.licenseMaxDevices ?? null) : null,
     hasDownload:
       p.productType === ProductType.DOWNLOAD
-        ? !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim())
+        ? !!(singleUrl || hasValidDownloadFiles(p.downloadFiles))
         : p.productType === ProductType.SAAS || p.productType === ProductType.SERVICE,
+    ...(publicFiles.length > 0 ? { publicDownloadFiles: publicFiles } : {}),
   }
 }
 
@@ -328,6 +355,7 @@ const productPublicSelect = {
   licenseDays: true,
   licenseMaxDevices: true,
   downloadUrl: true,
+  downloadFiles: true,
   featureBullets: true,
   isFeatured: true,
   sortOrder: true,
@@ -380,6 +408,7 @@ type CreateInput = {
   coverImageMediaId?: string | null
   downloadMediaId?: string | null
   galleryMediaIds?: string[] | null
+  downloadFiles?: unknown | null
 }
 
 type PatchInput = Partial<CreateInput>
@@ -423,19 +452,29 @@ function assertActiveDownloadDeliverable(row: {
   purchaseEnabled: boolean
   downloadUrl: string | null
   downloadMedia: { url: string } | null
+  downloadFiles?: unknown
 }): void {
   if (row.productType !== ProductType.DOWNLOAD) return
   if (!row.isActive || !row.purchaseEnabled) return
   const u = (row.downloadUrl?.trim() || row.downloadMedia?.url?.trim() || '') || ''
-  if (!u) {
+  const hasFiles = hasValidDownloadFiles(row.downloadFiles)
+  if (!u && !hasFiles) {
     throw new Error(
-      'Dijital ürünlerde indirme/teslimat bağlantısı zorunludur. Medyadan dosya seçin veya bir indirme adresi girin.',
+      'Dijital ürünlerde indirme/teslimat bağlantısı zorunludur. Medyadan dosya seçin, R2 indirme dosyası ekleyin veya bir indirme adresi girin.',
     )
   }
-  if (!isDeliverableDownloadRawUrl(u)) {
+  if (u && !isDeliverableDownloadRawUrl(u)) {
     throw new Error(
       'İndirme adresi geçersiz. Medyadan ZIP/exe seçin, /uploads/... yolu kullanın veya https:// ile tam bir URL girin.',
     )
+  }
+  if (hasFiles) {
+    const config = parseProductDownloadFiles(row.downloadFiles)
+    for (const f of config.files) {
+      if (f.url.trim() && !isDeliverableDownloadRawUrl(f.url)) {
+        throw new Error(`Geçersiz R2 indirme URL (${f.label}): https:// ile tam bir adres girin.`)
+      }
+    }
   }
 }
 
@@ -593,7 +632,11 @@ export const productsService = {
       purchaseEnabled: data.purchaseEnabled !== false,
       downloadUrl,
       downloadMedia: dmForAssert,
+      downloadFiles: data.downloadFiles,
     })
+
+    const downloadFilesJson =
+      data.downloadFiles !== undefined ? normalizeProductDownloadFilesForDb(data.downloadFiles) : undefined
 
     const row = await prisma.product.create({
       data: {
@@ -638,6 +681,7 @@ export const productsService = {
         seoDescription: data.seoDescription?.trim() || null,
         coverImageMediaId: mediaPatch.coverImageMediaId ?? null,
         downloadMediaId: mediaPatch.downloadMediaId ?? null,
+        ...(downloadFilesJson !== undefined ? { downloadFiles: downloadFilesJson } : {}),
       },
       include: productInclude,
     })
@@ -736,6 +780,10 @@ export const productsService = {
       if (data.downloadUrl !== undefined) patch.downloadUrl = normalizeUrl(data.downloadUrl)
     }
 
+    if (Object.prototype.hasOwnProperty.call(data, 'downloadFiles')) {
+      patch.downloadFiles = normalizeProductDownloadFilesForDb(data.downloadFiles)
+    }
+
     await prisma.product.update({
       where: { id },
       data: patch,
@@ -779,6 +827,7 @@ export const productsService = {
         currency: true,
         isActive: true,
         purchaseEnabled: true,
+        licenseRequired: true,
         coverImage: true,
         coverImageMedia: { select: { url: true } },
         downloadUrl: true,
@@ -795,6 +844,8 @@ export const productsService = {
       currency: string
       coverImage: string | null
       hasDownload: boolean
+      licenseRequired: boolean
+      singleQuantity: boolean
       matchKeys: string[]
     }[] = []
 
@@ -826,6 +877,11 @@ export const productsService = {
           p.productType === ProductType.DOWNLOAD
             ? !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim())
             : true,
+        licenseRequired: p.licenseRequired,
+        singleQuantity: isSingleLicenseQuantityProduct({
+          productType: p.productType,
+          licenseRequired: p.licenseRequired,
+        }),
         matchKeys,
       })
     }

@@ -2,7 +2,7 @@ import type { Request } from 'express'
 import { ProductType } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { getClientIp } from '../lib/clientIp'
-import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
+import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { mailService } from './mail.service'
 import {
   ensureExternalLicenseServerOrders,
@@ -86,7 +86,7 @@ export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCh
       return false
     }
     if (!effective.startsWith('saas:')) {
-      if (!resolveMailDownloadHref(effective)) {
+      if (!resolveDownloadSourceFromRawUrl(effective)) {
         console.error('[orders] Paid digital order delivery URL missing', {
           productName: item.productName,
           rawUrl: effective,
@@ -193,7 +193,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
     for (const line of allMailCandidates) {
       if (line.downloadUrl.startsWith('saas:')) continue
-      if (!resolveMailDownloadHref(line.downloadUrl)) {
+      if (!resolveDownloadSourceFromRawUrl(line.downloadUrl)) {
         console.error('[orders] paid mail blocked — unresolvable download URL', {
           orderNo: fresh.orderNo,
           productName: line.productName,
@@ -204,6 +204,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
     try {
       await mailService.sendPaidDownloadOrder({
+        orderId: fresh.id,
         customerName: fresh.customerName,
         customerEmail: fresh.customerEmail,
         orderNo: fresh.orderNo,

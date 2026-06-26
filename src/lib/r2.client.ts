@@ -42,6 +42,11 @@ export function getR2PrivateBucketName(): string {
   return readEnv('R2_PRIVATE_BUCKET_NAME') || 'woontegra-downloads'
 }
 
+/** woontegra-downloads bucket public base (EXE/ZIP doğrudan indirme). */
+export function getR2DownloadsPublicBaseUrl(): string {
+  return readEnv('R2_DOWNLOADS_PUBLIC_BASE_URL').replace(/\/+$/, '')
+}
+
 export function getR2PublicBaseUrl(): string {
   return readEnv('R2_PUBLIC_BASE_URL').replace(/\/+$/, '')
 }

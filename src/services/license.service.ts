@@ -16,6 +16,7 @@ import {
   PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP,
   resolveProductCodeFromProduct,
 } from '../lib/productCode'
+import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
 import { isKnownDesktopLicenseAppCode } from '../lib/desktopLicensePrograms'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
@@ -28,6 +29,18 @@ function addMonths(date: Date, months: number): Date {
   const d = new Date(date)
   d.setMonth(d.getMonth() + Math.max(1, months))
   return d
+}
+
+function effectiveLicenseItemQuantity(item: {
+  quantity: number
+  product?: { productType: ProductType; licenseRequired?: boolean } | null
+}): number {
+  const raw = Math.max(1, Math.min(99, item.quantity))
+  const p = item.product
+  if (p && isSingleLicenseQuantityProduct({ productType: p.productType, licenseRequired: p.licenseRequired })) {
+    return 1
+  }
+  return raw
 }
 
 /** orderFulfillment.mergeOrderItemDownloadUrl ile aynı mantık (döngüsel import yok). */
@@ -156,7 +169,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
       continue
     }
 
-    const qty = Math.max(1, Math.min(99, item.quantity))
+    const qty = 1
     const already = item.licenseServerUnitsNotified ?? 0
     if (already >= qty) continue
 
@@ -262,7 +275,7 @@ export async function ensurePaidOrderLicenses(orderId: string): Promise<{
   for (const item of order.items) {
     if (!isOrderItemEligibleForDesktopLicense(item)) continue
     if (item.product?.licenseRequired) continue
-    const qty = Math.max(1, Math.min(99, item.quantity))
+    const qty = effectiveLicenseItemQuantity(item)
     const licenseMonths = Math.max(1, item.product?.licenseMonths ?? 12)
     const expiresAt = addMonths(startsAt, licenseMonths)
     const productCode = item.product
