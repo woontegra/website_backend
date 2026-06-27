@@ -201,6 +201,8 @@ export async function adminCreate(req: Request, res: Response) {
       msg.includes('İndirilebilir') ||
       msg.includes('Dijital') ||
       msg.includes('Galeri') ||
+      msg.includes('Lisans') ||
+      msg.includes('Merkezi') ||
       msg.includes('zorunludur') ||
       msg.includes('R2 indirme')
     ) {
@@ -314,6 +316,8 @@ export async function adminPatch(req: Request, res: Response) {
       msg.includes('İndirilebilir') ||
       msg.includes('Dijital') ||
       msg.includes('Galeri') ||
+      msg.includes('Lisans') ||
+      msg.includes('Merkezi') ||
       msg.includes('zorunludur') ||
       msg.includes('R2 indirme')
     ) {

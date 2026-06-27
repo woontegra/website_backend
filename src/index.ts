@@ -33,6 +33,8 @@ import { downloadsFreeRoutes } from './routes/downloads.free.routes'
 import { cookiesPublicRoutes, cookiesAdminRoutes } from './routes/cookies.routes'
 import { productsAdminRoutes } from './routes/products.admin.routes'
 import { productsPublicRoutes } from './routes/products.public.routes'
+import { campaignsPublicRoutes } from './routes/campaigns.public.routes'
+import { campaignsAdminRoutes } from './routes/campaigns.admin.routes'
 import { catalogMediaAdminRoutes } from './routes/catalogMedia.admin.routes'
 import { productCategoriesAdminRoutes } from './routes/productCategories.admin.routes'
 import { productCategoriesPublicRoutes } from './routes/productCategories.public.routes'
@@ -146,6 +148,7 @@ app.use('/api/public/downloads', downloadsPublicRoutes)
 app.use('/api/downloads', downloadsFreeRoutes)
 app.use('/api/public', cookiesPublicRoutes)
 app.use('/api/products', productsPublicRoutes)
+app.use('/api', campaignsPublicRoutes)
 app.use('/api/legal-documents', legalDocumentsPublicRoutes)
 app.use('/api/orders', ordersPublicRoutes)
 app.use('/api/license', licensePublicRoutes)
@@ -169,6 +172,7 @@ app.use('/api/admin', licensesAdminRoutes)
 app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
+app.use('/api/admin', campaignsAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   const r2 = getR2ConfigStatus()

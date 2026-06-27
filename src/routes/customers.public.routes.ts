@@ -20,6 +20,7 @@ r.delete('/me/addresses/:id', c.deleteAddress)
 
 r.get('/me/orders', c.listOrders)
 r.get('/me/orders/:orderNo', c.getOrder)
+r.get('/me/licenses', c.listLicenses)
 
 r.get('/me/favorites', c.listFavorites)
 r.post('/me/favorites/:productId', c.addFavorite)

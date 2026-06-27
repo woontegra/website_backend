@@ -19,6 +19,8 @@ import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { slugifyName } from '../utils/slugify'
 import { assertLicensedProductSaleReady } from './licensePrograms.service'
 import { normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
+import { campaignsService } from './campaigns.service'
+import { resolveProductCampaignPrice, type AppliedCampaignPricing } from '../lib/campaignPricing'
 
 const categorySelect = { id: true, name: true, slug: true, isActive: true } as const
 const mediaTiny = { id: true, url: true, fileType: true, originalName: true, fileSize: true } as const
@@ -92,6 +94,14 @@ export type PublicProductGalleryImage = {
   sortOrder: number
 }
 
+export type PublicProductCampaignInfo = {
+  id: string
+  name: string
+  badge: string | null
+  endsAt: string | null
+  discountAmount: number
+}
+
 export type PublicProductListItem = {
   id: string
   name: string
@@ -100,6 +110,8 @@ export type PublicProductListItem = {
   shortDescription: string
   price: number
   compareAtPrice: number | null
+  originalPrice?: number | null
+  campaign?: PublicProductCampaignInfo | null
   currency: string
   isFeatured: boolean
   sortOrder: number
@@ -301,6 +313,63 @@ function mapPublicList(p: ProductRow): PublicProductListItem {
   }
 }
 
+function applyCampaignToPublicItem(
+  item: PublicProductListItem,
+  p: ProductRow,
+  pricing: AppliedCampaignPricing | null,
+): PublicProductListItem {
+  if (!pricing) return item
+  const compareAt = item.compareAtPrice
+  const strikeBase = compareAt != null && compareAt > pricing.effectivePrice ? compareAt : pricing.originalPrice
+  return {
+    ...item,
+    price: pricing.effectivePrice,
+    originalPrice: pricing.originalPrice,
+    compareAtPrice: strikeBase > pricing.effectivePrice ? strikeBase : item.compareAtPrice,
+    campaign: {
+      id: pricing.campaignId,
+      name: pricing.campaignName,
+      badge: pricing.badge,
+      endsAt: pricing.endsAt,
+      discountAmount: pricing.discountAmount,
+    },
+  }
+}
+
+async function mapPublicListWithCampaigns(rows: ProductRow[]): Promise<PublicProductListItem[]> {
+  const campaigns = await campaignsService.getActiveCampaigns()
+  return rows.map((r) => {
+    const base = mapPublicList(r)
+    const pricing = resolveProductCampaignPrice(
+      {
+        id: r.id,
+        categoryId: r.categoryId,
+        productType: r.productType,
+        price: toNumber(r.price)!,
+        purchaseEnabled: r.purchaseEnabled,
+      },
+      campaigns,
+    )
+    return applyCampaignToPublicItem(base, r, pricing)
+  })
+}
+
+async function mapPublicDetailWithCampaigns(p: ProductRow): Promise<PublicProductDetail> {
+  const campaigns = await campaignsService.getActiveCampaigns()
+  const base = mapPublicDetail(p)
+  const pricing = resolveProductCampaignPrice(
+    {
+      id: p.id,
+      categoryId: p.categoryId,
+      productType: p.productType,
+      price: toNumber(p.price)!,
+      purchaseEnabled: p.purchaseEnabled,
+    },
+    campaigns,
+  )
+  return applyCampaignToPublicItem(base, p, pricing) as PublicProductDetail
+}
+
 function mapPublicDetail(p: ProductRow): PublicProductDetail {
   const gallery: PublicProductGalleryImage[] = (p.galleryImages ?? [])
     .filter((g) => g.media.fileType === 'IMAGE')
@@ -425,6 +494,51 @@ type CreateInput = {
 }
 
 type PatchInput = Partial<CreateInput>
+
+function resolveNextLicensedSaleFields(
+  current: {
+    isActive: boolean
+    purchaseEnabled: boolean
+    licenseRequired: boolean
+    licenseAppCode: string | null
+  },
+  data: PatchInput,
+): {
+  nextIsActive: boolean
+  nextPurchaseEnabled: boolean
+  nextLicenseRequired: boolean
+  nextLicenseAppCode: string | null
+  saleStateChanged: boolean
+} {
+  const nextIsActive = data.isActive !== undefined ? data.isActive : current.isActive
+  const nextPurchaseEnabled =
+    data.purchaseEnabled !== undefined ? data.purchaseEnabled : current.purchaseEnabled
+  const nextLicenseRequired =
+    data.licenseRequired !== undefined ? data.licenseRequired === true : current.licenseRequired
+
+  let nextLicenseAppCode = current.licenseAppCode
+  if (data.licenseRequired === false) {
+    nextLicenseAppCode = null
+  } else if (data.licenseAppCode !== undefined) {
+    nextLicenseAppCode = data.licenseAppCode?.trim()
+      ? normalizeLicenseAppCodeInput(data.licenseAppCode)
+      : null
+  }
+
+  const saleStateChanged =
+    nextIsActive !== current.isActive ||
+    nextPurchaseEnabled !== current.purchaseEnabled ||
+    nextLicenseRequired !== current.licenseRequired ||
+    (nextLicenseAppCode ?? '') !== (current.licenseAppCode ?? '')
+
+  return {
+    nextIsActive,
+    nextPurchaseEnabled,
+    nextLicenseRequired,
+    nextLicenseAppCode,
+    saleStateChanged,
+  }
+}
 
 async function syncProductGallery(productId: string, mediaIds: string[]): Promise<void> {
   const ordered = [...new Set(mediaIds.map((id) => id.trim()).filter(Boolean))]
@@ -583,7 +697,7 @@ export const productsService = {
       select: productPublicSelect,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
-    return rows.map((r) => mapPublicList(r as unknown as ProductRow))
+    return mapPublicListWithCampaigns(rows as unknown as ProductRow[])
   },
 
   async listPublicByCategorySlug(categorySlug: string): Promise<PublicProductListItem[]> {
@@ -600,7 +714,7 @@ export const productsService = {
       select: productPublicSelect,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
-    return rows.map((r) => mapPublicList(r as unknown as ProductRow))
+    return mapPublicListWithCampaigns(rows as unknown as ProductRow[])
   },
 
   async getPublicBySlug(slug: string): Promise<PublicProductDetail | null> {
@@ -608,7 +722,7 @@ export const productsService = {
       where: { slug, ...publicListWhere },
       select: productPublicSelect,
     })
-    return p ? mapPublicDetail(p as unknown as ProductRow) : null
+    return p ? mapPublicDetailWithCampaigns(p as unknown as ProductRow) : null
   },
 
   async create(data: CreateInput): Promise<AdminProductDto> {
@@ -820,7 +934,14 @@ export const productsService = {
 
     const currentForCover = await prisma.product.findUniqueOrThrow({
       where: { id },
-      select: { isActive: true, coverImage: true, coverImageMedia: { select: { url: true } } },
+      select: {
+        isActive: true,
+        purchaseEnabled: true,
+        licenseRequired: true,
+        licenseAppCode: true,
+        coverImage: true,
+        coverImageMedia: { select: { url: true } },
+      },
     })
     const nextActive = data.isActive !== undefined ? data.isActive : currentForCover.isActive
     if (nextActive) {
@@ -831,6 +952,21 @@ export const productsService = {
         nextCover = c && c !== '' ? c : null
       }
       assertPublishImageRequired(hasImageUrl(nextCover))
+    }
+
+    const nextSale = resolveNextLicensedSaleFields(currentForCover, data)
+    if (
+      nextSale.saleStateChanged &&
+      nextSale.nextLicenseRequired &&
+      nextSale.nextIsActive &&
+      nextSale.nextPurchaseEnabled
+    ) {
+      await assertLicensedProductSaleReady({
+        licenseRequired: nextSale.nextLicenseRequired,
+        licenseAppCode: nextSale.nextLicenseAppCode,
+        isActive: nextSale.nextIsActive,
+        purchaseEnabled: nextSale.nextPurchaseEnabled,
+      })
     }
 
     await prisma.product.update({
@@ -845,12 +981,6 @@ export const productsService = {
       include: productInclude,
     })
     assertActiveDownloadDeliverable(full)
-    await assertLicensedProductSaleReady({
-      licenseRequired: full.licenseRequired,
-      licenseAppCode: full.licenseAppCode,
-      isActive: full.isActive,
-      purchaseEnabled: full.purchaseEnabled,
-    })
     return mapAdmin(full as unknown as ProductRow)
   },
 
@@ -883,6 +1013,7 @@ export const productsService = {
         isActive: true,
         purchaseEnabled: true,
         licenseRequired: true,
+        categoryId: true,
         coverImage: true,
         coverImageMedia: { select: { url: true } },
         downloadUrl: true,
@@ -896,6 +1027,8 @@ export const productsService = {
       slug: string
       productType: ProductType
       price: number
+      originalPrice?: number | null
+      campaign?: PublicProductCampaignInfo | null
       currency: string
       coverImage: string | null
       hasDownload: boolean
@@ -920,12 +1053,30 @@ export const productsService = {
       const rawFor = canonicalToRaw.get(p.id) ?? []
       const matchKeys = [...new Set([p.id, p.slug, ...rawFor].filter((k): k is string => !!k && String(k).trim() !== ''))]
 
+      const { unitPrice, pricing } = await campaignsService.resolveProductUnitPrice({
+        id: p.id,
+        categoryId: p.categoryId,
+        productType: p.productType,
+        price: toNumber(p.price)!,
+        purchaseEnabled: p.purchaseEnabled,
+      })
+
       out.push({
         id: p.id,
         name: p.name,
         slug: p.slug,
         productType: p.productType,
-        price: toNumber(p.price)!,
+        price: unitPrice,
+        originalPrice: pricing?.originalPrice ?? null,
+        campaign: pricing
+          ? {
+              id: pricing.campaignId,
+              name: pricing.campaignName,
+              badge: pricing.badge,
+              endsAt: pricing.endsAt,
+              discountAmount: pricing.discountAmount,
+            }
+          : null,
         currency: p.currency,
         coverImage: p.coverImageMedia?.url?.trim() || p.coverImage?.trim() || null,
         hasDownload:

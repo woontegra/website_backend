@@ -104,15 +104,19 @@ function normalizeSettings(settingsMap: Record<string, any>) {
 function sanitizeForAdmin(settings: Record<string, any>) {
   const token = String(settings.metaConversionsAccessToken || '')
   const smtpPassword = String(settings.smtpPassword || '')
+  const gaSecret = String(settings.gaMeasurementApiSecret || '')
 
   return {
     ...settings,
     metaConversionsAccessToken: '',
     smtpPassword: '',
+    gaMeasurementApiSecret: '',
     metaConversionsAccessTokenConfigured: Boolean(token),
     metaConversionsAccessTokenPreview: token ? maskSecret(token) : '',
     smtpPasswordConfigured: Boolean(smtpPassword),
     smtpPasswordPreview: smtpPassword ? maskSecret(smtpPassword) : '',
+    gaMeasurementApiSecretConfigured: Boolean(gaSecret),
+    gaMeasurementApiSecretPreview: gaSecret ? maskSecret(gaSecret) : '',
   }
 }
 
@@ -184,6 +188,8 @@ export const settingsService = {
       metaBrowserPixelEnabled: settings.metaBrowserPixelEnabled,
       tiktokPixelId: settings.tiktokPixelId,
       tiktokPixelEnabled: settings.tiktokPixelEnabled,
+      googleSiteVerification: settings.googleSiteVerification || '',
+      analyticsPublicJson: settings.analyticsPublicJson || '',
     }
   },
 
@@ -212,6 +218,8 @@ export const settingsService = {
     delete payload.metaConversionsAccessTokenPreview
     delete payload.smtpPasswordConfigured
     delete payload.smtpPasswordPreview
+    delete payload.gaMeasurementApiSecretConfigured
+    delete payload.gaMeasurementApiSecretPreview
 
     if (payload.clearMetaConversionsAccessToken === true) {
       payload.metaConversionsAccessToken = ''
@@ -234,6 +242,15 @@ export const settingsService = {
       }
     }
 
+    if ('gaMeasurementApiSecret' in payload) {
+      const nextSecret = String(payload.gaMeasurementApiSecret || '').trim()
+      if (!nextSecret) {
+        delete payload.gaMeasurementApiSecret
+      } else {
+        payload.gaMeasurementApiSecret = nextSecret
+      }
+    }
+
     if (payload.metaPixelId) {
       payload.facebookPixelId = payload.metaPixelId
     }
@@ -245,6 +262,7 @@ export const settingsService = {
 
       if (key === 'metaConversionsAccessToken' && !String(value).trim()) continue
       if (key === 'smtpPassword' && !String(value).trim()) continue
+      if (key === 'gaMeasurementApiSecret' && !String(value).trim()) continue
 
       let stringValue: string
 

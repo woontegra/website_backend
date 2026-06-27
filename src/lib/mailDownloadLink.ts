@@ -17,6 +17,11 @@ export function buildCustomerOrdersPageHref(): string {
   return site ? `${site}/hesabim/siparisler` : 'https://woontegra.com/hesabim/siparisler'
 }
 
+export function buildCustomerLoginPageHref(): string {
+  const site = pickPublicSiteOrigin()
+  return site ? `${site}/giris` : 'https://woontegra.com/giris'
+}
+
 export function buildOrderDownloadMailHref(payload: OrderDownloadTokenPayload): string {
   return buildBrandedOrderDownloadHref(signOrderDownloadToken(payload))
 }

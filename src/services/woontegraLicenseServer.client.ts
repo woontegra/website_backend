@@ -168,6 +168,60 @@ export async function createLicenseServerProgram(
   return { program, status: result.status }
 }
 
+export type LicenseServerCustomerLicense = {
+  id: string | null
+  licenseKeyMasked: string
+  programName: string
+  appCode: string
+  productName: string
+  websiteOrderNo: string | null
+  status: string
+  expiresAt: string
+  maxDevices: number
+  createdAt: string
+}
+
+export async function fetchLicenseServerCustomerLicenses(email: string): Promise<{
+  licenses: LicenseServerCustomerLicense[]
+  error?: string
+}> {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return { licenses: [], error: 'E-posta zorunludur' }
+
+  const result = await licenseServerFetch(
+    `/api/integrations/website/customer-licenses?email=${encodeURIComponent(normalized)}`,
+  )
+  if (!result.ok) {
+    const err = typeof result.data.error === 'string' ? result.data.error : `HTTP ${result.status}`
+    return { licenses: [], error: err }
+  }
+  if (!Array.isArray(result.data)) {
+    return { licenses: [], error: 'Lisans sunucusu geçersiz yanıt döndü.' }
+  }
+
+  const licenses = result.data
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const o = row as Record<string, unknown>
+      if (typeof o.licenseKeyMasked !== 'string' || typeof o.programName !== 'string') return null
+      return {
+        id: typeof o.id === 'string' ? o.id : null,
+        licenseKeyMasked: o.licenseKeyMasked,
+        programName: o.programName,
+        appCode: typeof o.appCode === 'string' ? o.appCode : '',
+        productName: typeof o.productName === 'string' ? o.productName : o.programName,
+        websiteOrderNo: typeof o.websiteOrderNo === 'string' ? o.websiteOrderNo : null,
+        status: typeof o.status === 'string' ? o.status : 'ACTIVE',
+        expiresAt: typeof o.expiresAt === 'string' ? o.expiresAt : '',
+        maxDevices: typeof o.maxDevices === 'number' ? o.maxDevices : 1,
+        createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
+      } satisfies LicenseServerCustomerLicense
+    })
+    .filter((lic): lic is LicenseServerCustomerLicense => lic !== null)
+
+  return { licenses }
+}
+
 /** Woontegra-Lisans-Server website entegrasyonu — secret yalnızca sunucu tarafında */
 export async function requestWebsiteOrderLicense(
   input: WebsiteOrderLicenseRequest,

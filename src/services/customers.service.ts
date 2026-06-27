@@ -3,8 +3,11 @@ import jwt from 'jsonwebtoken'
 import { PaymentProvider, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { maskLicenseKeyForDisplay } from '../lib/licenseKey'
+import { resolveCustomerOrderDownloadMeta } from '../lib/customerOrderDownload'
 import { getBankTransferCustomerInfo } from './bankTransferSettings.service'
+import { mailService } from './mail.service'
 import { resolveOrderPaymentRowStatus } from './orders.service'
+import { fetchLicenseServerCustomerLicenses } from './woontegraLicenseServer.client'
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
 const SALT_ROUNDS = 10
@@ -15,6 +18,63 @@ function isUniqueViolation(err: unknown): boolean {
 
 function signCustomerToken(id: string, email: string) {
   return jwt.sign({ customerId: id, email }, JWT_SECRET, { audience: 'customer', expiresIn: '7d' })
+}
+
+async function getCustomerEmailOrThrow(customerId: string): Promise<string> {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { email: true },
+  })
+  if (!customer) throw new Error('Hesap bulunamadı')
+  return customer.email.trim().toLowerCase()
+}
+
+function orderAccessWhere(customerId: string, customerEmail: string, orderNo?: string) {
+  return {
+    archivedAt: null,
+    ...(orderNo ? { orderNo: orderNo.trim() } : {}),
+    OR: [
+      { customerId },
+      {
+        customerId: null,
+        customerEmail: { equals: customerEmail, mode: 'insensitive' as const },
+      },
+    ],
+  }
+}
+
+async function linkOrphanOrdersToCustomer(customerId: string, orderIds: string[]) {
+  if (orderIds.length === 0) return
+  await prisma.order.updateMany({
+    where: { id: { in: orderIds }, customerId: null },
+    data: { customerId },
+  })
+}
+
+function collectMaskedLicenseKeysFromOrder(order: {
+  id: string
+  items: Array<{ licenseServerLicenseKey: string | null }>
+}): string[] {
+  const keys = new Set<string>()
+  for (const item of order.items) {
+    const central = item.licenseServerLicenseKey?.trim()
+    if (central) keys.add(maskLicenseKeyForDisplay(central))
+  }
+  return [...keys]
+}
+
+export type CustomerLicenseListItem = {
+  id: string | null
+  licenseKeyMasked: string | null
+  productName: string
+  programName: string | null
+  appCode: string | null
+  orderNo: string
+  status: string
+  expiresAt: string | null
+  maxDevices: number | null
+  createdAt: string
+  source: 'central' | 'local'
 }
 
 function mapCustomer(c: { id: string; name: string; email: string; phone: string | null; createdAt: Date }) {
@@ -46,7 +106,18 @@ export const customersService = {
         },
       })
       const token = signCustomerToken(c.id, c.email)
-      return { token, customer: mapCustomer(c) }
+      const result = { token, customer: mapCustomer(c) }
+
+      void mailService
+        .sendCustomerWelcomeEmail({ customerName: name, customerEmail: email })
+        .catch((err) => {
+          console.error('[customers] Hoş geldin e-postası gönderilemedi', {
+            email,
+            error: err instanceof Error ? err.message : err,
+          })
+        })
+
+      return result
     } catch (e) {
       if (isUniqueViolation(e)) throw new Error('Bu e-posta adresi zaten kayıtlı')
       throw e
@@ -244,8 +315,9 @@ export const customersService = {
   },
 
   async listOrders(customerId: string) {
+    const customerEmail = await getCustomerEmailOrThrow(customerId)
     const rows = await prisma.order.findMany({
-      where: { customerId, archivedAt: null },
+      where: orderAccessWhere(customerId, customerEmail),
       orderBy: { createdAt: 'desc' },
       include: {
         paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
@@ -258,6 +330,10 @@ export const customersService = {
         },
       },
     })
+    await linkOrphanOrdersToCustomer(
+      customerId,
+      rows.filter((o) => !o.customerId).map((o) => o.id),
+    )
     return rows.map((o) => {
       const names = o.items.map((i) => i.productName).filter(Boolean)
       const first = names[0]?.trim() ?? 'Ürün'
@@ -283,12 +359,13 @@ export const customersService = {
   },
 
   async getMyOrder(customerId: string, orderNo: string) {
+    const customerEmail = await getCustomerEmailOrThrow(customerId)
     const order = await prisma.order.findFirst({
-      where: { orderNo: orderNo.trim(), customerId },
+      where: orderAccessWhere(customerId, customerEmail, orderNo),
       include: {
         items: {
           orderBy: { id: 'asc' },
-          include: { product: { select: { productType: true } } },
+          include: { product: { select: { productType: true, downloadFiles: true } } },
         },
         paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
@@ -297,6 +374,9 @@ export const customersService = {
       const err = new Error('Sipariş bulunamadı') as Error & { status: number }
       err.status = 404
       throw err
+    }
+    if (!order.customerId) {
+      await prisma.order.update({ where: { id: order.id }, data: { customerId } })
     }
     const bankPending =
       order.paymentProvider === PaymentProvider.BANK_TRANSFER && order.status === 'PENDING'
@@ -311,14 +391,15 @@ export const customersService = {
     const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
     let licenseCodesMasked: string[] | undefined
     if (paidLike) {
+      const keys = new Set<string>()
       const licenseRows = await prisma.license.findMany({
         where: { orderId: order.id },
         orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
         select: { licenseKey: true },
       })
-      if (licenseRows.length > 0) {
-        licenseCodesMasked = licenseRows.map((r) => maskLicenseKeyForDisplay(r.licenseKey))
-      }
+      for (const row of licenseRows) keys.add(maskLicenseKeyForDisplay(row.licenseKey))
+      for (const key of collectMaskedLicenseKeysFromOrder(order)) keys.add(key)
+      if (keys.size > 0) licenseCodesMasked = [...keys]
     }
 
     return {
@@ -345,16 +426,194 @@ export const customersService = {
       shippingStatus: order.shippingStatus,
       bankTransferInfo,
       licenseCodesMasked,
-      items: order.items.map((i) => ({
-        productName: i.productName,
-        productSlug: i.productSlug,
-        productType: i.product?.productType ?? null,
-        quantity: i.quantity,
-        unitPrice: Number(i.unitPrice),
-        total: Number(i.total),
-        downloadUrl: order.status === 'PAID' || order.status === 'PROCESSING' ? i.downloadUrl : null,
-      })),
+      items: order.items.map((i) => {
+        const paidDelivery = order.status === 'PAID' || order.status === 'PROCESSING'
+        const downloadUrl = paidDelivery ? i.downloadUrl : null
+        const downloadMeta = paidDelivery && downloadUrl
+          ? resolveCustomerOrderDownloadMeta({ downloadUrl, product: i.product })
+          : null
+        return {
+          productName: i.productName,
+          productSlug: i.productSlug,
+          productType: i.product?.productType ?? null,
+          quantity: i.quantity,
+          unitPrice: Number(i.unitPrice),
+          total: Number(i.total),
+          downloadUrl,
+          downloadKind: downloadMeta?.downloadKind ?? null,
+          downloadLabel: downloadMeta?.downloadLabel ?? null,
+          downloadButtonLabel: downloadMeta?.downloadButtonLabel ?? null,
+        }
+      }),
     }
+  },
+
+  async listLicenses(customerId: string): Promise<CustomerLicenseListItem[]> {
+    const customerEmail = await getCustomerEmailOrThrow(customerId)
+    const central = await fetchLicenseServerCustomerLicenses(customerEmail)
+
+    const centralByOrderNo = new Map<string, typeof central.licenses>()
+    const centralOrphans: typeof central.licenses = []
+    for (const lic of central.licenses) {
+      const orderNo = lic.websiteOrderNo?.trim()
+      if (!orderNo) {
+        centralOrphans.push(lic)
+        continue
+      }
+      const bucket = centralByOrderNo.get(orderNo) ?? []
+      bucket.push(lic)
+      centralByOrderNo.set(orderNo, bucket)
+    }
+
+    const rows: CustomerLicenseListItem[] = []
+
+    const orders = await prisma.order.findMany({
+      where: {
+        ...orderAccessWhere(customerId, customerEmail),
+        status: { in: ['PAID', 'PROCESSING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+          select: {
+            productName: true,
+            licenseServerLicenseKey: true,
+            product: { select: { licenseRequired: true } },
+          },
+        },
+      },
+    })
+
+    for (const order of orders) {
+      const licenseItems = order.items.filter(
+        (item) => item.product?.licenseRequired || Boolean(item.licenseServerLicenseKey?.trim()),
+      )
+      if (licenseItems.length === 0) continue
+
+      const centralMatches = centralByOrderNo.get(order.orderNo) ?? []
+      if (centralMatches.length > 0) {
+        for (const lic of centralMatches) {
+          rows.push({
+            id: lic.id ?? null,
+            licenseKeyMasked: lic.licenseKeyMasked,
+            productName: lic.productName,
+            programName: lic.programName,
+            appCode: lic.appCode || null,
+            orderNo: order.orderNo,
+            status: lic.status,
+            expiresAt: lic.expiresAt || null,
+            maxDevices: lic.maxDevices,
+            createdAt: lic.createdAt,
+            source: 'central',
+          })
+        }
+        centralByOrderNo.delete(order.orderNo)
+        continue
+      }
+
+      const localRows = await prisma.license.findMany({
+        where: { orderId: order.id },
+        orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+        select: {
+          id: true,
+          licenseKey: true,
+          productName: true,
+          status: true,
+          expiresAt: true,
+          maxDevices: true,
+          createdAt: true,
+        },
+      })
+
+      if (localRows.length > 0) {
+        for (const row of localRows) {
+          rows.push({
+            id: row.id,
+            licenseKeyMasked: maskLicenseKeyForDisplay(row.licenseKey),
+            productName: row.productName,
+            programName: null,
+            appCode: null,
+            orderNo: order.orderNo,
+            status: row.status,
+            expiresAt: row.expiresAt?.toISOString() ?? null,
+            maxDevices: row.maxDevices,
+            createdAt: row.createdAt.toISOString(),
+            source: 'local',
+          })
+        }
+        continue
+      }
+
+      const itemWithKey = licenseItems.find((item) => item.licenseServerLicenseKey?.trim())
+      if (itemWithKey?.licenseServerLicenseKey?.trim()) {
+        rows.push({
+          id: null,
+          licenseKeyMasked: maskLicenseKeyForDisplay(itemWithKey.licenseServerLicenseKey.trim()),
+          productName: itemWithKey.productName,
+          programName: null,
+          appCode: null,
+          orderNo: order.orderNo,
+          status: 'ACTIVE',
+          expiresAt: null,
+          maxDevices: null,
+          createdAt: order.createdAt.toISOString(),
+          source: 'local',
+        })
+        continue
+      }
+
+      const primary = licenseItems[0]!
+      rows.push({
+        id: null,
+        licenseKeyMasked: null,
+        productName: primary.productName,
+        programName: null,
+        appCode: null,
+        orderNo: order.orderNo,
+        status: 'PENDING',
+        expiresAt: null,
+        maxDevices: null,
+        createdAt: order.createdAt.toISOString(),
+        source: 'local',
+      })
+    }
+
+    for (const lic of centralOrphans) {
+      rows.push({
+        id: lic.id ?? null,
+        licenseKeyMasked: lic.licenseKeyMasked,
+        productName: lic.productName,
+        programName: lic.programName,
+        appCode: lic.appCode || null,
+        orderNo: lic.websiteOrderNo ?? `central-${lic.id ?? lic.createdAt}`,
+        status: lic.status,
+        expiresAt: lic.expiresAt || null,
+        maxDevices: lic.maxDevices,
+        createdAt: lic.createdAt,
+        source: 'central',
+      })
+    }
+
+    for (const [, leftovers] of centralByOrderNo) {
+      for (const lic of leftovers) {
+        rows.push({
+          id: lic.id ?? null,
+          licenseKeyMasked: lic.licenseKeyMasked,
+          productName: lic.productName,
+          programName: lic.programName,
+          appCode: lic.appCode || null,
+          orderNo: lic.websiteOrderNo ?? `central-${lic.id ?? lic.createdAt}`,
+          status: lic.status,
+          expiresAt: lic.expiresAt || null,
+          maxDevices: lic.maxDevices,
+          createdAt: lic.createdAt,
+          source: 'central',
+        })
+      }
+    }
+
+    return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   },
 
   async listFavorites(customerId: string) {

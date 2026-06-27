@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { escapeMailHtml, mailBadge, mailHtmlDocument, mailInfoTable } from '../lib/mailHtmlLayout'
 import {
+  buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
   buildOrderDownloadMailHref,
   mailDownloadButton,
@@ -572,6 +573,55 @@ export const mailService = {
         <p>Sorularınız için: <a href="mailto:info@woontegra.com">info@woontegra.com</a></p>
         <p>İyi çalışmalar,<br/>Woontegra</p>
       `,
+    })
+  },
+
+  /** Yeni müşteri kaydı — hoş geldin e-postası */
+  async sendCustomerWelcomeEmail(data: { customerName: string; customerEmail: string }) {
+    const support = 'destek@woontegra.com'
+    const safeName = escapeMailHtml(data.customerName.trim() || 'Müşterimiz')
+    const loginHref = buildCustomerLoginPageHref()
+    const ordersHref = buildCustomerOrdersPageHref()
+
+    const bodyHtml = `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Merhaba ${safeName},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Woontegra hesabınız başarıyla oluşturuldu.</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Hesabınıza giriş yaparak siparişlerinizi, lisanslarınızı ve indirme bağlantılarınızı tek panelden takip edebilirsiniz.</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:20px 0;">
+        <tr>
+          <td align="center" style="border-radius:8px;background:#2563eb;">
+            <a href="${escapeMailHtml(loginHref)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Hesabıma giriş yap</a>
+          </td>
+        </tr>
+      </table>
+      ${mailInfoTable([
+        { label: 'Giriş adresi', value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(loginHref)}</a>` },
+        { label: 'Siparişlerim', value: `<a href="${escapeMailHtml(ordersHref)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(ordersHref)}</a>` },
+      ])}
+      <p style="margin:20px 0 0;font-size:14px;line-height:1.6;">Destek: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
+    `
+
+    const textBody = [
+      `Merhaba ${data.customerName.trim() || 'Müşterimiz'},`,
+      '',
+      'Woontegra hesabınız başarıyla oluşturuldu.',
+      '',
+      'Hesabınıza giriş yaparak siparişlerinizi, lisanslarınızı ve indirme bağlantılarınızı takip edebilirsiniz.',
+      '',
+      `Giriş: ${loginHref}`,
+      `Siparişlerim: ${ordersHref}`,
+      '',
+      `Destek: ${support}`,
+      '',
+      'İyi günler,',
+      'Woontegra',
+    ].join('\n')
+
+    await dispatchMail({
+      to: data.customerEmail,
+      subject: 'Woontegra hesabınız oluşturuldu',
+      text: textBody,
+      html: mailHtmlDocument('Hesabınız oluşturuldu', bodyHtml),
     })
   },
 }

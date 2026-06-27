@@ -28,6 +28,7 @@ import {
   adminSetLicenseStatus,
 } from './license.service'
 import { renderLegalTemplate } from './legalTemplate.service'
+import { campaignsService } from './campaigns.service'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -408,7 +409,14 @@ export const ordersService = {
         { productType: p.productType, licenseRequired: p.licenseRequired, name: p.name },
         qty,
       )
-      const unit = p.price
+      const { unitPrice } = await campaignsService.resolveProductUnitPrice({
+        id: p.id,
+        categoryId: p.categoryId,
+        productType: p.productType,
+        price: Number(p.price),
+        purchaseEnabled: p.purchaseEnabled,
+      })
+      const unit = new Prisma.Decimal(unitPrice)
       const lineTotal = new Prisma.Decimal(Number(unit) * qty)
       subtotal = subtotal.add(lineTotal)
       lineSnapshots.push({
