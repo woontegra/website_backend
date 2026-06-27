@@ -1,6 +1,13 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
+import {
+  assertPublishImageRequired,
+  hasImageUrl,
+  PublishImageValidationError,
+} from '../lib/publishImageValidation'
+
+export { PublishImageValidationError }
 
 export async function listCategoriesPublic() {
   return prisma.postCategory.findMany({ orderBy: { name: 'asc' } })
@@ -77,6 +84,9 @@ export async function createPost(data: {
   status?: string
 }) {
   const status = data.status ?? 'draft'
+  if (status === 'published') {
+    assertPublishImageRequired(hasImageUrl(data.featuredImage))
+  }
   return prisma.post.create({
     data: {
       slug: data.slug,
@@ -115,7 +125,13 @@ export async function updatePost(
   if (data.status !== undefined) {
     d.status = data.status
     if (data.status === 'published') {
-      const cur = await prisma.post.findUnique({ where: { id }, select: { publishedAt: true } })
+      const cur = await prisma.post.findUnique({
+        where: { id },
+        select: { publishedAt: true, featuredImage: true },
+      })
+      const cover =
+        data.featuredImage !== undefined ? data.featuredImage : cur?.featuredImage ?? null
+      assertPublishImageRequired(hasImageUrl(cover))
       if (!cur?.publishedAt) d.publishedAt = new Date()
     }
   }

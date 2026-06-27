@@ -76,6 +76,9 @@ export async function adminCreatePost(req: Request, res: Response) {
     })
     res.status(201).json({ success: true, data })
   } catch (e: unknown) {
+    if (e instanceof posts.PublishImageValidationError) {
+      return res.status(400).json({ success: false, message: e.message })
+    }
     const dup = e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002'
     res.status(400).json({ success: false, message: dup ? 'Bu slug kullanılıyor' : 'Oluşturulamadı' })
   }
@@ -85,7 +88,10 @@ export async function adminUpdatePost(req: Request, res: Response) {
   try {
     const data = await posts.updatePost(req.params.id, req.body)
     res.json({ success: true, data })
-  } catch {
+  } catch (e: unknown) {
+    if (e instanceof posts.PublishImageValidationError) {
+      return res.status(400).json({ success: false, message: e.message })
+    }
     res.status(400).json({ success: false, message: 'Güncellenemedi' })
   }
 }

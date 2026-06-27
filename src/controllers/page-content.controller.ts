@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
+import { PublishImageValidationError, validatePageContentPublishImages } from '../lib/publishImageValidation'
 import { sanitizeImageFields } from '../utils/sanitizeImageFields'
 
 export const pageContentController = {
@@ -35,6 +36,15 @@ export const pageContentController = {
       }
 
       const sanitized = sanitizeImageFields(content)
+
+      try {
+        validatePageContentPublishImages(pageKey, sanitized)
+      } catch (err) {
+        if (err instanceof PublishImageValidationError) {
+          return res.status(400).json({ success: false, message: err.message })
+        }
+        throw err
+      }
       
       const pageContent = await prisma.pageContent.upsert({
         where: { pageKey },

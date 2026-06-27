@@ -13,6 +13,7 @@ import {
   type PublicProductDownloadFile,
 } from '../lib/productDownloadFiles'
 import { prisma } from '../lib/prisma'
+import { assertPublishImageRequired, hasImageUrl } from '../lib/publishImageValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { slugifyName } from '../utils/slugify'
@@ -658,6 +659,10 @@ export const productsService = {
       purchaseEnabled: data.purchaseEnabled !== false,
     })
 
+    if (data.isActive !== false) {
+      assertPublishImageRequired(hasImageUrl(coverImage))
+    }
+
     const downloadFilesJson =
       data.downloadFiles !== undefined ? normalizeProductDownloadFilesForDb(data.downloadFiles) : undefined
 
@@ -778,8 +783,10 @@ export const productsService = {
     if (Object.prototype.hasOwnProperty.call(data, 'downloadMediaId')) {
       mediaPayload.downloadMediaId = data.downloadMediaId ?? null
     }
+    let resolvedCoverFromMedia: string | null | undefined
     if (Object.keys(mediaPayload).length > 0) {
       const mediaPatch = await resolveMediaIds(mediaPayload)
+      resolvedCoverFromMedia = mediaPatch.coverImage
       if (mediaPatch.coverImageMediaId !== undefined) {
         patch.coverImageMedia =
           mediaPatch.coverImageMediaId === null
@@ -809,6 +816,21 @@ export const productsService = {
 
     if (Object.prototype.hasOwnProperty.call(data, 'downloadFiles')) {
       patch.downloadFiles = normalizeProductDownloadFilesForDb(data.downloadFiles)
+    }
+
+    const currentForCover = await prisma.product.findUniqueOrThrow({
+      where: { id },
+      select: { isActive: true, coverImage: true, coverImageMedia: { select: { url: true } } },
+    })
+    const nextActive = data.isActive !== undefined ? data.isActive : currentForCover.isActive
+    if (nextActive) {
+      let nextCover = effectiveProductCoverImage(currentForCover as Pick<ProductRow, 'coverImage' | 'coverImageMedia'>)
+      if (resolvedCoverFromMedia !== undefined) nextCover = resolvedCoverFromMedia ?? null
+      else if (data.coverImage !== undefined) {
+        const c = sanitizeImageUrl(data.coverImage ?? '')
+        nextCover = c && c !== '' ? c : null
+      }
+      assertPublishImageRequired(hasImageUrl(nextCover))
     }
 
     await prisma.product.update({
