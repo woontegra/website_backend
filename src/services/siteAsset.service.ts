@@ -1,15 +1,12 @@
 import fs from 'fs'
 import path from 'path'
+import { isVercelBlobConfigured, assertVercelBlobConfigured } from '../lib/vercelBlob.client'
+import { inferContentType } from './r2Upload.service'
 import {
-  isR2PublicUploadConfigured,
-  getR2ConfigStatus,
-  assertR2PublicUploadConfigured,
-} from '../lib/r2.client'
-import {
-  buildBrandingObjectKey,
-  inferContentType,
-  uploadPublicObject,
-} from './r2Upload.service'
+  buildWebsiteMediaBlobPath,
+  normalizeWebsiteMediaFolder,
+  uploadWebsiteMediaBlob,
+} from './vercelBlobUpload.service'
 
 const ALLOWED_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -24,7 +21,7 @@ export type SiteAssetKind = 'logo' | 'favicon' | 'general'
 
 export type SiteAssetPersistResult = {
   path: string
-  storage: 'r2' | 'frontend-public' | 'backend-uploads'
+  storage: 'vercel-blob' | 'r2' | 'frontend-public' | 'backend-uploads'
 }
 
 function extensionForMime(mimetype: string): string | null {
@@ -55,19 +52,20 @@ function writeFile(targetPath: string, buffer: Buffer) {
   fs.writeFileSync(targetPath, buffer)
 }
 
-async function persistSiteAssetToR2(
+async function persistSiteAssetToBlob(
   file: Express.Multer.File,
   kind: SiteAssetKind,
   fileName: string,
 ): Promise<SiteAssetPersistResult> {
   const contentType = file.mimetype || inferContentType(fileName)
-  const objectKey = buildBrandingObjectKey(kind, fileName)
-  const uploaded = await uploadPublicObject({
-    objectKey,
+  const folder = normalizeWebsiteMediaFolder(kind === 'general' ? 'general' : kind)
+  const pathname = buildWebsiteMediaBlobPath(folder, fileName)
+  const uploaded = await uploadWebsiteMediaBlob({
+    pathname,
     body: file.buffer,
     contentType,
   })
-  return { path: uploaded.publicUrl, storage: 'r2' }
+  return { path: uploaded.url, storage: 'vercel-blob' }
 }
 
 function persistSiteAssetToDisk(
@@ -98,23 +96,18 @@ export async function persistSiteAsset(
   }
 
   const fileName =
-    kind === 'logo' ? `logo.${ext}` : kind === 'favicon' ? `favicon.${ext}` : `asset-${Date.now()}.${ext}`
+    kind === 'logo' ? `logo-${Date.now()}.${ext}` : kind === 'favicon' ? `favicon-${Date.now()}.${ext}` : `asset-${Date.now()}.${ext}`
 
-  const r2Status = getR2ConfigStatus()
-  if (r2Status.partiallyConfigured) {
-    assertR2PublicUploadConfigured()
-  }
-
-  if (isR2PublicUploadConfigured()) {
-    return persistSiteAssetToR2(file, kind, fileName)
+  if (isVercelBlobConfigured()) {
+    return persistSiteAssetToBlob(file, kind, fileName)
   }
 
   if (process.env.NODE_ENV === 'production') {
-    assertR2PublicUploadConfigured()
+    assertVercelBlobConfigured()
   }
 
   console.warn(
-    '[siteAsset] R2 public upload env tanımlı değil; geliştirme modunda dosya yerel diske yazılıyor.',
+    '[siteAsset] BLOB_READ_WRITE_TOKEN tanımlı değil; geliştirme modunda dosya yerel diske yazılıyor.',
   )
   return persistSiteAssetToDisk(file, kind, fileName)
 }

@@ -7,6 +7,7 @@ require('../scripts/resolve-database-url.cjs').applyToProcessEnv()
 import path from 'path'
 import express from 'express'
 import { getR2ConfigStatus } from './lib/r2.client'
+import { getVercelBlobConfigStatus } from './lib/vercelBlob.client'
 import { isLicenseServerConfigured } from './services/woontegraLicenseServer.client'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -176,10 +177,16 @@ app.use('/api/admin', campaignsAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   const r2 = getR2ConfigStatus()
+  const blob = getVercelBlobConfigStatus()
   res.json({
     success: true,
     message: 'Woontegra API',
     media: {
+      vercelBlob: {
+        configured: blob.configured,
+        tokenPresent: blob.tokenPresent,
+        tokenEnvKey: blob.tokenEnvKey,
+      },
       r2: {
         configured: r2.configured,
         publicUploadConfigured: r2.publicUploadConfigured,
@@ -200,6 +207,17 @@ app.use((_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Woontegra API http://localhost:${PORT}`)
+  const blob = getVercelBlobConfigStatus()
+  console.log(
+    `[startup] website media blobConfigured=${blob.configured}${
+      blob.tokenEnvKey ? ` tokenEnvKey=${blob.tokenEnvKey}` : ''
+    }`,
+  )
+  if (!blob.configured) {
+    console.warn(
+      '[startup] BLOB_READ_WRITE_TOKEN yok — production IMAGE/DOCUMENT upload 503 döner; Railway Variables\'a Blob token ekleyin.',
+    )
+  }
   if (!isLicenseServerConfigured()) {
     console.warn(
       '[startup] Merkezi lisans sunucusu yapılandırılmamış — LICENSE_SERVER_URL ve LICENSE_SERVER_INTEGRATION_SECRET gerekli (merkezi lisanslı ürün satışlarında lisans oluşturulmaz).',

@@ -26,11 +26,13 @@ export async function adminUploadSiteAsset(req: Request, res: Response) {
       path: result.path,
       storage: result.storage,
       message:
-        result.storage === 'r2'
-          ? 'Dosya Cloudflare R2 medya deposuna yüklendi.'
-          : result.storage === 'frontend-public'
-            ? 'Dosya frontend/public klasörüne kaydedildi.'
-            : 'Dosya sunucuya yüklendi. Kalıcı olması için deploy sonrası kontrol edin.',
+        result.storage === 'vercel-blob'
+          ? 'Dosya Vercel Blob medya deposuna yüklendi.'
+          : result.storage === 'r2'
+            ? 'Dosya Cloudflare R2 medya deposuna yüklendi.'
+            : result.storage === 'frontend-public'
+              ? 'Dosya frontend/public klasörüne kaydedildi.'
+              : 'Dosya sunucuya yüklendi. Kalıcı olması için deploy sonrası kontrol edin.',
     })
   } catch (error) {
     console.error(error)
