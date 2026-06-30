@@ -70,7 +70,10 @@ function buildMailLinesFromExternalLicenses(
 ): { id: string; productName: string; downloadUrl: string; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
   const itemById = new Map(items.map((i) => [i.id, i]))
   return provisioned
-    .filter((p) => !p.mailSentByLicenseServer || Boolean(p.activationPassword))
+    .filter(
+      (p) =>
+        p.deliveryType !== 'SAAS' && (!p.mailSentByLicenseServer || Boolean(p.activationPassword)),
+    )
     .map((p) => {
       const item = itemById.get(p.orderItemId)
       const rawDownload = item ? mergeOrderItemDownloadUrl(item) : (p.downloadUrl ?? '')
@@ -81,7 +84,7 @@ function buildMailLinesFromExternalLicenses(
         downloadUrl,
         licenses: [
           {
-            licenseKey: p.licenseKey,
+            licenseKey: p.licenseKey!,
             ...(p.activationPassword ? { activationPassword: p.activationPassword } : {}),
           },
         ],

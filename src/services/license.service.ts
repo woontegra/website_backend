@@ -81,6 +81,17 @@ function effectiveItemDownloadUrl(item: {
   })
 }
 
+export function isOrderItemEligibleForCentralLicense(item: {
+  product: {
+    licenseRequired?: boolean
+    licenseAppCode?: string | null
+  } | null
+}): boolean {
+  if (!item.product?.licenseRequired) return false
+  const appCode = normalizeLicenseAppCodeInput(item.product.licenseAppCode)
+  return Boolean(appCode && isValidLicenseAppCodeFormat(appCode))
+}
+
 export function isOrderItemEligibleForDesktopLicense(item: {
   downloadUrl: string | null
   product: {
@@ -91,7 +102,6 @@ export function isOrderItemEligibleForDesktopLicense(item: {
   } | null
 }): boolean {
   if (item.product?.licenseRequired) return false
-  if (item.product?.productType === ProductType.SAAS) return false
   const url = effectiveItemDownloadUrl(item)
   if (!url || url.startsWith('saas:')) return false
   if (item.product?.productType === ProductType.DOWNLOAD) return true
@@ -147,10 +157,11 @@ function mapLicenseServerProvisionError(raw: string | undefined): string {
 export type ExternalLicenseProvisionSuccess = {
   orderItemId: string
   productName: string
-  licenseKey: string
-  activationPassword: string
+  licenseKey?: string
+  activationPassword?: string
   downloadUrl: string | null
   mailSentByLicenseServer: boolean
+  deliveryType: 'DESKTOP' | 'SAAS'
 }
 
 /**
@@ -171,6 +182,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         include: {
           product: {
             select: {
+              productType: true,
               licenseRequired: true,
               licenseAppCode: true,
               licenseDays: true,
@@ -192,18 +204,10 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   const licenseCustomerPhone = order.customerPhone?.trim() || null
 
   for (const item of order.items) {
-    const product = item.product
-    if (!product?.licenseRequired) continue
-    const appCode = normalizeLicenseAppCodeInput(product.licenseAppCode)
-    if (!appCode || !isValidLicenseAppCodeFormat(appCode)) {
-      const err = 'Geçersiz veya eksik lisans program kodu (licenseAppCode).'
-      errors.push({ orderItemId: item.id, productName: item.productName, error: err })
-      await prisma.orderItem.update({
-        where: { id: item.id },
-        data: { licenseServerLastError: err },
-      })
-      continue
-    }
+    if (!isOrderItemEligibleForCentralLicense(item)) continue
+    const product = item.product!
+    const appCode = normalizeLicenseAppCodeInput(product.licenseAppCode)!
+    const isSaasCentral = product.productType === ProductType.SAAS
 
     const qty = 1
     const already = item.licenseServerUnitsNotified ?? 0
@@ -212,25 +216,40 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
     const maxDevices = Math.max(1, product.licenseMaxDevices ?? 1)
 
     const pushProvisioned = (
-      licenseKey: string,
-      activationPassword: string,
+      licenseKey: string | undefined,
+      activationPassword: string | undefined,
       mailSentByLicenseServer: boolean,
+      deliveryType: 'DESKTOP' | 'SAAS',
     ) => {
       provisioned.push({
         orderItemId: item.id,
         productName: item.productName,
-        licenseKey: licenseKey.trim(),
-        activationPassword: activationPassword.trim(),
+        ...(licenseKey?.trim() ? { licenseKey: licenseKey.trim() } : {}),
+        ...(activationPassword?.trim() ? { activationPassword: activationPassword.trim() } : {}),
         downloadUrl,
         mailSentByLicenseServer,
+        deliveryType,
       })
     }
 
+    const centralProvisionSucceeded = (
+      result: Awaited<ReturnType<typeof requestWebsiteOrderLicense>>,
+    ): boolean => {
+      if (!result.success) return false
+      if (isSaasCentral) return true
+      return Boolean(result.licenseKey?.trim())
+    }
+
     if (already >= qty) {
+      if (isSaasCentral) {
+        pushProvisioned(undefined, undefined, true, 'SAAS')
+        continue
+      }
+
       const storedKey = item.licenseServerLicenseKey?.trim()
       const storedPassword = item.licenseServerActivationPasswordPending?.trim()
       if (storedKey && storedPassword) {
-        pushProvisioned(storedKey, storedPassword, false)
+        pushProvisioned(storedKey, storedPassword, false, 'DESKTOP')
         continue
       }
 
@@ -247,7 +266,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         resendCredentials: true,
       })
 
-      if (!resend.success || !resend.licenseKey?.trim() || !resend.activationPassword?.trim()) {
+      if (!centralProvisionSucceeded(resend) || !resend.licenseKey?.trim() || !resend.activationPassword?.trim()) {
         const err = resend.error ?? 'Lisans maili için kimlik bilgileri alınamadı.'
         errors.push({ orderItemId: item.id, productName: item.productName, error: err })
         await prisma.orderItem.update({
@@ -272,7 +291,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         },
       })
 
-      pushProvisioned(resend.licenseKey, resend.activationPassword, resend.mailSent === true)
+      pushProvisioned(resend.licenseKey, resend.activationPassword, resend.mailSent === true, 'DESKTOP')
       continue
     }
 
@@ -289,7 +308,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         maxDevices,
       })
 
-      if (!result.success || !result.licenseKey?.trim()) {
+      if (!centralProvisionSucceeded(result)) {
         const err = mapLicenseServerProvisionError(result.error)
         errors.push({ orderItemId: item.id, productName: item.productName, error: err })
         await prisma.orderItem.update({
@@ -302,13 +321,16 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
           orderItemId: item.id,
           unit: u,
           appCode,
+          productType: product.productType,
           error: err,
         })
         break
       }
 
+      const licenseKey = result.licenseKey?.trim() ?? ''
       const activationPassword = result.activationPassword?.trim() ?? ''
       const mailSentByLicenseServer = result.mailSent === true
+      const deliveryType: 'DESKTOP' | 'SAAS' = isSaasCentral ? 'SAAS' : 'DESKTOP'
 
       await prisma.orderItem.update({
         where: { id: item.id },
@@ -316,19 +338,27 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
           licenseServerUnitsNotified: u + 1,
           licenseServerLastError: result.mailError ?? null,
           licenseServerLastNotifiedAt: new Date(),
-          licenseServerLicenseKey: result.licenseKey.trim(),
-          licenseServerActivationPasswordPending: activationPassword || null,
+          licenseServerLicenseKey: licenseKey || null,
+          licenseServerActivationPasswordPending:
+            deliveryType === 'DESKTOP' ? activationPassword || null : null,
         },
       })
 
-      pushProvisioned(result.licenseKey, activationPassword, mailSentByLicenseServer)
+      pushProvisioned(
+        licenseKey || undefined,
+        activationPassword || undefined,
+        mailSentByLicenseServer,
+        deliveryType,
+      )
 
       console.info('[license-server] provision ok', {
         orderNo: order.orderNo,
         externalOrderNo,
         appCode,
+        deliveryType,
         mailSentByLicenseServer,
         hasActivationPassword: Boolean(activationPassword),
+        hasLicenseKey: Boolean(licenseKey),
       })
     }
   }
