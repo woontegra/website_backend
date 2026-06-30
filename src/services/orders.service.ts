@@ -1006,7 +1006,7 @@ export const ordersAdminService = {
     await prisma.order.update({
       where: { id: order.id },
       data: {
-        status: 'PROCESSING',
+        status: 'PAID',
         paidAt: payDate,
         bankTransferPaymentDate: payDate,
         bankTransferAdminNote: bankNote,
@@ -1055,7 +1055,28 @@ export const ordersAdminService = {
     try {
       await fulfillPaidOrderDelivery(order.id, undefined)
     } catch (e) {
-      console.error('[orders] fulfill after bank confirm failed', e)
+      console.error('[orders] fulfill after bank confirm failed', {
+        orderNo: order.orderNo,
+        orderId: order.id,
+        message: e instanceof Error ? e.message : String(e),
+      })
+    }
+
+    const failedCentral = await prisma.orderItem.findMany({
+      where: { orderId: order.id, licenseServerLastError: { not: null } },
+      select: {
+        productName: true,
+        licenseServerLastError: true,
+        product: { select: { licenseAppCode: true } },
+      },
+    })
+    for (const row of failedCentral) {
+      console.error('[orders] bank confirm central license failed', {
+        orderNo: order.orderNo,
+        productName: row.productName,
+        licenseAppCode: row.product?.licenseAppCode ?? null,
+        error: row.licenseServerLastError,
+      })
     }
 
     return { orderNo: order.orderNo, alreadyPaid: false as const }

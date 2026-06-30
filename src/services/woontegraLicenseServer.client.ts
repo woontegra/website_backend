@@ -22,6 +22,8 @@ export type WebsiteOrderLicenseResponse = {
   mailSent?: boolean
   mailError?: string
   error?: string
+  deliveryType?: 'DESKTOP' | 'SAAS'
+  provisionStatus?: string
 }
 
 export type LicenseServerProgram = {
@@ -264,6 +266,9 @@ export async function requestWebsiteOrderLicense(
   }
 
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  const deliveryType = data.deliveryType === 'SAAS' ? 'SAAS' : data.deliveryType === 'DESKTOP' ? 'DESKTOP' : undefined
+  const provisionStatus = typeof data.provisionStatus === 'string' ? data.provisionStatus : undefined
+
   if (res.status === 409 && data.alreadyExists === true) {
     const licenseKey = typeof data.licenseKey === 'string' ? data.licenseKey : undefined
     if (input.resendCredentials === true) {
@@ -294,13 +299,21 @@ export async function requestWebsiteOrderLicense(
       orderNo: input.orderNo,
       appCode: input.appCode,
       status: res.status,
+      deliveryType,
+      provisionStatus,
       err,
     })
-    return { success: false, error: err }
+    return {
+      success: false,
+      error: err,
+      deliveryType,
+      provisionStatus,
+    }
   }
 
-  return {
+  const mapped: WebsiteOrderLicenseResponse = {
     success: data.success === true,
+    alreadyExists: data.alreadyExists === true,
     orderNo: typeof data.orderNo === 'string' ? data.orderNo : input.orderNo,
     licenseKey: typeof data.licenseKey === 'string' ? data.licenseKey : undefined,
     activationPassword: typeof data.activationPassword === 'string' ? data.activationPassword : undefined,
@@ -308,5 +321,20 @@ export async function requestWebsiteOrderLicense(
     expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : undefined,
     mailSent: data.mailSent === true,
     mailError: typeof data.mailError === 'string' ? data.mailError : undefined,
+    deliveryType,
+    provisionStatus,
   }
+
+  if (mapped.success && deliveryType === 'SAAS') {
+    console.info('[license-server] saas provision response', {
+      orderNo: input.orderNo,
+      appCode: input.appCode,
+      status: res.status,
+      provisionStatus: mapped.provisionStatus ?? null,
+      mailSent: mapped.mailSent === true,
+      alreadyExists: mapped.alreadyExists === true,
+    })
+  }
+
+  return mapped
 }

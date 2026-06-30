@@ -236,7 +236,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
       result: Awaited<ReturnType<typeof requestWebsiteOrderLicense>>,
     ): boolean => {
       if (!result.success) return false
-      if (isSaasCentral) return true
+      if (isSaasCentral || result.deliveryType === 'SAAS') {
+        return result.provisionStatus === 'SUCCESS' || result.provisionStatus === undefined
+      }
       return Boolean(result.licenseKey?.trim())
     }
 
@@ -322,6 +324,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
           unit: u,
           appCode,
           productType: product.productType,
+          deliveryType: result.deliveryType ?? (isSaasCentral ? 'SAAS' : 'DESKTOP'),
+          provisionStatus: result.provisionStatus ?? null,
+          responseStatus: result.success ? 'success' : 'failed',
           error: err,
         })
         break
@@ -330,7 +335,8 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
       const licenseKey = result.licenseKey?.trim() ?? ''
       const activationPassword = result.activationPassword?.trim() ?? ''
       const mailSentByLicenseServer = result.mailSent === true
-      const deliveryType: 'DESKTOP' | 'SAAS' = isSaasCentral ? 'SAAS' : 'DESKTOP'
+      const deliveryType: 'DESKTOP' | 'SAAS' =
+        result.deliveryType === 'SAAS' || isSaasCentral ? 'SAAS' : 'DESKTOP'
 
       await prisma.orderItem.update({
         where: { id: item.id },
@@ -356,6 +362,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         externalOrderNo,
         appCode,
         deliveryType,
+        provisionStatus: result.provisionStatus ?? null,
         mailSentByLicenseServer,
         hasActivationPassword: Boolean(activationPassword),
         hasLicenseKey: Boolean(licenseKey),

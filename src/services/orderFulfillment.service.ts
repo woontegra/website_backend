@@ -98,6 +98,7 @@ function buildMailLinesFromExternalLicenses(
  */
 export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCheck[]): boolean {
   for (const item of items) {
+    if (item.product?.productType === ProductType.SAAS) continue
     const effective = mergeOrderItemDownloadUrl(item)
     if (!effective) {
       console.error('[orders] Paid digital order delivery URL missing', {
@@ -149,10 +150,8 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
-  const externalResult = fresh.downloadEmailSentAt
-    ? { errors: [] as Awaited<ReturnType<typeof ensureExternalLicenseServerOrders>>['errors'], provisioned: [] as ExternalLicenseProvisionSuccess[] }
-    : await ensureExternalLicenseServerOrders(fresh.id)
-  if (!fresh.downloadEmailSentAt && externalResult.errors.length > 0) {
+  const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
+  if (externalResult.errors.length > 0) {
     console.error('[orders] external license server errors', {
       orderId: fresh.id,
       orderNo: fresh.orderNo,
@@ -193,7 +192,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       const allCentralMailSent =
         externalResult.provisioned.length > 0 &&
         externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
-      if (allCentralMailSent && externalResult.errors.length === 0) {
+      const saasProvisionedOk =
+        externalResult.provisioned.some((p) => p.deliveryType === 'SAAS') &&
+        externalResult.errors.length === 0
+      if ((allCentralMailSent || saasProvisionedOk) && externalResult.errors.length === 0) {
         await prisma.order.update({
           where: { id: fresh.id },
           data: { downloadEmailSentAt: new Date() },
