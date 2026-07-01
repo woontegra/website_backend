@@ -5,7 +5,6 @@ import { pickPublicSiteOrigin } from '../lib/mailDeliveryUrl'
 import {
   buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
-  buildMuvekkilKasaSaasLoginHref,
   buildOrderDownloadMailHref,
   mailActionButton,
   mailDownloadButton,
@@ -112,7 +111,6 @@ function formatMailDateTr(iso: string): string {
 
 function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { html: string; text: string } {
   const saas = line.saas!
-  const loginHref = buildMuvekkilKasaSaasLoginHref()
   const rows: { label: string; value: string; mono?: boolean }[] = [
     { label: 'Ürün', value: escapeMailHtml(line.productName) },
     { label: 'Sipariş No', value: escapeMailHtml(orderNo), mono: true },
@@ -131,23 +129,15 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     { label: 'Bitiş tarihi', value: escapeMailHtml(formatMailDateTr(saas.licenseEndDate)) },
   )
 
-  const loginButton = loginHref
-    ? mailActionButton(loginHref, 'Müvekkil Kasa\'ya giriş yap', '#059669')
-    : ''
-  const loginFallback = loginHref
-    ? ''
-    : '<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Giriş bağlantısı ayrıca aktivasyon e-postasında yer alır.</p>'
-  const activationNote = saas.mkActivationMailSent
-    ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Hesap aktivasyonu ve şifre belirleme bağlantısı <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine ayrı bir Müvekkil Kasa aktivasyon e-postası olarak gönderilmiştir.</p>`
-    : `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Hesap aktivasyon bilgileriniz kısa süre içinde <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine iletilecektir.</p>`
+  const loginNote = saas.mkActivationMailSent
+    ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Müvekkil Kasa giriş adresi, kullanıcı adı ve geçici şifreniz <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine gönderilen Müvekkil Kasa aktivasyon e-postasında yer almaktadır.</p>`
+    : `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Müvekkil Kasa giriş bilgileriniz kısa süre içinde <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine iletilecektir.</p>`
 
   const html = `
     <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
       <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;">${escapeMailHtml(line.productName)}</h3>
       ${mailInfoTable(rows)}
-      ${loginButton}
-      ${loginFallback}
-      ${activationNote}
+      ${loginNote}
     </div>`
 
   const textParts = [
@@ -158,10 +148,9 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
     `Başlangıç: ${formatMailDateTr(saas.licenseStartDate)}`,
     `Bitiş: ${formatMailDateTr(saas.licenseEndDate)}`,
-    loginHref ? `Giriş: ${loginHref}` : 'Giriş bağlantısı aktivasyon e-postasında yer alır.',
     saas.mkActivationMailSent
-      ? `Aktivasyon e-postası ${saas.ownerEmail} adresine gönderildi.`
-      : `Aktivasyon e-postası ${saas.ownerEmail} adresine iletilecektir.`,
+      ? `Giriş bilgileri ${saas.ownerEmail} adresine gönderilen Müvekkil Kasa aktivasyon e-postasında yer alır.`
+      : `Giriş bilgileri ${saas.ownerEmail} adresine iletilecektir.`,
   ].filter(Boolean)
 
   return { html, text: textParts.join('\n') }
@@ -198,32 +187,24 @@ async function sendPaidSaasOnlyOrderMail(input: {
   const logoUrl = await resolveMailLogoUrl()
   const safeName = escapeMailHtml(input.customerName.trim() || 'Müşterimiz')
   const sections = input.saasLines.map((l) => buildSaasMailSectionHtml(l, input.orderNo))
-  const loginHref = buildMuvekkilKasaSaasLoginHref()
 
   const bodyHtml = `
     <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
-    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu. Program indirmeniz veya kurulum yapmanız gerekmez; tarayıcınızdan giriş yaparak kullanmaya başlayabilirsiniz.</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu. Giriş adresi, kullanıcı adı ve geçici şifreniz Müvekkil Kasa aktivasyon e-postasında yer almaktadır.</p>
     ${mailBadge('SaaS üyeliği aktif', 'green')}
     ${sections.map((s) => s.html).join('')}
-    ${
-      loginHref
-        ? mailInfoTable([
-            {
-              label: 'Giriş adresi',
-              value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;word-break:break-all;">${escapeMailHtml(loginHref)}</a>`,
-            },
-          ])
-        : ''
-    }
+    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Woontegra müşteri paneli şifreniz ile değil, Müvekkil Kasa aktivasyon e-postasındaki bilgilerle giriş yapabilirsiniz.</p>
     <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Sorularınız için: <a href="mailto:${escapeMailHtml(input.support)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(input.support)}</a></p>`
 
   const textBody = [
     `Merhaba ${input.customerName},`,
     '',
     'Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu.',
-    'Program indirmeniz veya kurulum yapmanız gerekmez.',
+    'Giriş adresi, kullanıcı adı ve geçici şifreniz Müvekkil Kasa aktivasyon e-postasında yer almaktadır.',
     '',
     ...sections.map((s) => s.text),
+    '',
+    'Woontegra müşteri paneli şifreniz ile değil, Müvekkil Kasa aktivasyon e-postasındaki bilgilerle giriş yapabilirsiniz.',
     '',
     `Destek: ${input.support}`,
     '',
