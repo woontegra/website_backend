@@ -68,7 +68,7 @@ export function mailBadge(text: string, tone: 'blue' | 'amber' | 'green' = 'blue
   return `<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:${colors.bg};color:${colors.fg};border:1px solid ${colors.border};">${escapeMailHtml(text)}</span>`
 }
 
-/** Hoş geldin / hesap oluşturma e-postası — logo ve kurumsal üst bilgi alanı */
+/** Hoş geldin / hesap oluşturma e-postası — logo beyaz zemin, başlık gradient altında */
 export function mailWelcomeHtmlDocument(options: {
   title: string
   bodyHtml: string
@@ -77,9 +77,15 @@ export function mailWelcomeHtmlDocument(options: {
 }): string {
   const safeTitle = escapeMailHtml(options.title)
   const logoUrl = options.logoUrl?.trim()
-  const brandBlock = logoUrl
-    ? `<img src="${escapeMailHtml(logoUrl)}" alt="Woontegra" width="150" style="display:block;max-width:150px;height:auto;border:0;outline:none;" />`
-    : `<div style="font-size:20px;font-weight:800;letter-spacing:0.06em;color:#ffffff;">WOONTEGRA</div>`
+  const logoBlock = logoUrl
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">
+        <tr>
+          <td align="center" style="padding:18px 20px;">
+            <img src="${escapeMailHtml(logoUrl)}" alt="Woontegra" width="150" style="display:block;max-width:150px;height:auto;border:0;outline:none;" />
+          </td>
+        </tr>
+      </table>`
+    : `<div style="font-size:20px;font-weight:800;letter-spacing:0.06em;color:#1e40af;">WOONTEGRA</div>`
 
   const footer =
     options.footerHtml ??
@@ -101,22 +107,16 @@ export function mailWelcomeHtmlDocument(options: {
       <td align="center">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dbe3ef;box-shadow:0 8px 32px rgba(15,23,42,0.08);">
           <tr>
-            <td style="background:linear-gradient(135deg,#1e40af 0%,#2563eb 55%,#3b82f6 100%);padding:28px 32px 24px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td align="left">${brandBlock}</td>
-                </tr>
-                <tr>
-                  <td style="padding-top:18px;">
-                    <div style="font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.82);">Müşteri hesabı</div>
-                    <div style="margin-top:6px;font-size:24px;font-weight:700;color:#ffffff;line-height:1.25;">${safeTitle}</div>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:24px 32px 0;background:#ffffff;">${logoBlock}</td>
+          </tr>
+          <tr>
+            <td style="background:linear-gradient(135deg,#1e40af 0%,#2563eb 55%,#3b82f6 100%);padding:22px 32px 24px;">
+              <div style="font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.88);">Woontegra</div>
+              <div style="margin-top:8px;font-size:24px;font-weight:700;color:#ffffff;line-height:1.25;">${safeTitle}</div>
             </td>
           </tr>
           <tr>
-            <td style="padding:28px 32px 8px;">
+            <td style="padding:24px 32px 8px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
                 <tr>
                   <td style="padding:24px 22px;">${options.bodyHtml}</td>

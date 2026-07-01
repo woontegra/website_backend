@@ -75,12 +75,15 @@ export async function getPublicBankTransferDisplay(): Promise<PublicBankTransfer
 }
 
 /** Müşteri ekranları ve e-posta için tam banka satırı; ayar yoksa null */
-export async function getBankTransferCustomerInfo(ctx: {
-  orderNo: string
-  total: number
-  currency: string
-}): Promise<BankTransferCustomerInfo | null> {
-  const pub = await getPublicBankTransferDisplay()
+export async function getBankTransferCustomerInfo(
+  ctx: {
+    orderNo: string
+    total: number
+    currency: string
+  },
+  cachedDisplay?: PublicBankTransferDisplay,
+): Promise<BankTransferCustomerInfo | null> {
+  const pub = cachedDisplay ?? (await getPublicBankTransferDisplay())
   if (!pub.bankTransferEnabled || !pub.iban || !pub.bankName || !pub.accountHolder) return null
   const ibanCompact = compactIban(pub.iban)
   return {

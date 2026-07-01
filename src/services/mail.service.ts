@@ -1,10 +1,11 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { escapeMailHtml, mailBadge, mailHtmlDocument, mailInfoTable, mailWelcomeHtmlDocument } from '../lib/mailHtmlLayout'
-import { pickPublicSiteOrigin } from '../lib/mailDeliveryUrl'
+import { pickBackendPublicOrigin, pickPublicSiteOrigin } from '../lib/mailDeliveryUrl'
 import {
   buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
+  buildMuvekkilKasaSaasLoginHref,
   buildOrderDownloadMailHref,
   mailActionButton,
   mailDownloadButton,
@@ -70,15 +71,25 @@ async function resolveMailLogoUrl(): Promise<string | null> {
   const pub = await settingsService.getPublic()
   const logo = pub.logo?.trim()
   if (!logo) return null
-  if (/^https?:\/\//i.test(logo)) return logo
-  const origin = pickPublicSiteOrigin()
+  if (/^https?:\/\//i.test(logo)) return appendMailLogoCacheBuster(logo, pub.logoUpdatedAt)
+  const origin = logo.startsWith('/uploads/') ? pickBackendPublicOrigin() : pickPublicSiteOrigin()
   if (!origin) return null
-  return `${origin}${logo.startsWith('/') ? logo : `/${logo}`}`
+  const path = logo.startsWith('/') ? logo : `/${logo}`
+  return appendMailLogoCacheBuster(`${origin}${path}`, pub.logoUpdatedAt)
+}
+
+function appendMailLogoCacheBuster(url: string, updatedAt?: string | null): string {
+  if (!updatedAt?.trim()) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}v=${encodeURIComponent(updatedAt.trim())}`
 }
 
 type PaidOrderMailSaasDetails = {
   licenseKey: string | null
   ownerEmail: string
+  ownerUsername: string | null
+  temporaryPassword: string | null
+  loginUrl: string | null
   tenantSlug: string
   tenantName: string
   licenseStartDate: string
@@ -111,14 +122,27 @@ function formatMailDateTr(iso: string): string {
 
 function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { html: string; text: string } {
   const saas = line.saas!
+  const loginHref = saas.loginUrl?.trim() || buildMuvekkilKasaSaasLoginHref()
   const rows: { label: string; value: string; mono?: boolean }[] = [
     { label: 'Ürün', value: escapeMailHtml(line.productName) },
     { label: 'Sipariş No', value: escapeMailHtml(orderNo), mono: true },
   ]
-  if (saas.licenseKey?.trim()) {
-    rows.push({ label: 'Lisans Anahtarı', value: escapeMailHtml(saas.licenseKey.trim()), mono: true })
+  if (loginHref) {
+    rows.push({
+      label: 'Müvekkil Kasa giriş adresi',
+      value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;word-break:break-all;">${escapeMailHtml(loginHref)}</a>`,
+    })
   }
-  rows.push({ label: 'Hesap e-postası', value: escapeMailHtml(saas.ownerEmail) })
+  rows.push({ label: 'Giriş e-postası', value: escapeMailHtml(saas.ownerEmail) })
+  if (saas.ownerUsername?.trim()) {
+    rows.push({ label: 'Kullanıcı adı', value: escapeMailHtml(saas.ownerUsername.trim()), mono: true })
+  }
+  if (saas.temporaryPassword?.trim()) {
+    rows.push({ label: 'Geçici şifre', value: escapeMailHtml(saas.temporaryPassword.trim()), mono: true })
+  }
+  if (saas.licenseKey?.trim()) {
+    rows.push({ label: 'Lisans anahtarı', value: escapeMailHtml(saas.licenseKey.trim()), mono: true })
+  }
   if (saas.tenantName?.trim()) {
     rows.push({ label: 'Büro', value: escapeMailHtml(saas.tenantName.trim()) })
   } else if (saas.tenantSlug?.trim()) {
@@ -129,28 +153,35 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     { label: 'Bitiş tarihi', value: escapeMailHtml(formatMailDateTr(saas.licenseEndDate)) },
   )
 
-  const loginNote = saas.mkActivationMailSent
-    ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Müvekkil Kasa giriş adresi, kullanıcı adı ve geçici şifreniz <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine gönderilen Müvekkil Kasa aktivasyon e-postasında yer almaktadır.</p>`
-    : `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Müvekkil Kasa giriş bilgileriniz kısa süre içinde <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine iletilecektir.</p>`
+  const loginButton = loginHref
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:20px 0 0;">
+        <tr>
+          <td align="center" style="border-radius:10px;background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);">
+            <a href="${escapeMailHtml(loginHref)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Giriş Yap</a>
+          </td>
+        </tr>
+      </table>`
+    : ''
 
   const html = `
     <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
       <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;">${escapeMailHtml(line.productName)}</h3>
       ${mailInfoTable(rows)}
-      ${loginNote}
+      ${loginButton}
     </div>`
 
   const textParts = [
     line.productName,
     `Sipariş No: ${orderNo}`,
-    saas.licenseKey?.trim() ? `Lisans Anahtarı: ${saas.licenseKey.trim()}` : null,
-    `Hesap e-postası: ${saas.ownerEmail}`,
+    loginHref ? `Müvekkil Kasa giriş adresi: ${loginHref}` : null,
+    `Giriş e-postası: ${saas.ownerEmail}`,
+    saas.ownerUsername?.trim() ? `Kullanıcı adı: ${saas.ownerUsername.trim()}` : null,
+    saas.temporaryPassword?.trim() ? `Geçici şifre: ${saas.temporaryPassword.trim()}` : null,
+    saas.licenseKey?.trim() ? `Lisans anahtarı: ${saas.licenseKey.trim()}` : null,
     saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
     `Başlangıç: ${formatMailDateTr(saas.licenseStartDate)}`,
     `Bitiş: ${formatMailDateTr(saas.licenseEndDate)}`,
-    saas.mkActivationMailSent
-      ? `Giriş bilgileri ${saas.ownerEmail} adresine gönderilen Müvekkil Kasa aktivasyon e-postasında yer alır.`
-      : `Giriş bilgileri ${saas.ownerEmail} adresine iletilecektir.`,
+    loginHref ? `Giriş: ${loginHref}` : null,
   ].filter(Boolean)
 
   return { html, text: textParts.join('\n') }
@@ -190,21 +221,22 @@ async function sendPaidSaasOnlyOrderMail(input: {
 
   const bodyHtml = `
     <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
-    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu. Giriş adresi, kullanıcı adı ve geçici şifreniz Müvekkil Kasa aktivasyon e-postasında yer almaktadır.</p>
-    ${mailBadge('SaaS üyeliği aktif', 'green')}
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri web tabanlı üyeliğiniz aktif edildi. Aşağıdaki bilgilerle doğrudan Müvekkil Kasa giriş ekranından oturum açabilirsiniz. Woontegra müşteri paneli şifreniz bu giriş için kullanılmaz.</p>
+    ${mailBadge('Müvekkil Kasa üyeliği aktif', 'green')}
     ${sections.map((s) => s.html).join('')}
-    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Woontegra müşteri paneli şifreniz ile değil, Müvekkil Kasa aktivasyon e-postasındaki bilgilerle giriş yapabilirsiniz.</p>
+    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">İlk girişten sonra şifrenizi değiştirmenizi öneririz.</p>
     <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Sorularınız için: <a href="mailto:${escapeMailHtml(input.support)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(input.support)}</a></p>`
 
   const textBody = [
     `Merhaba ${input.customerName},`,
     '',
-    'Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu.',
-    'Giriş adresi, kullanıcı adı ve geçici şifreniz Müvekkil Kasa aktivasyon e-postasında yer almaktadır.',
+    'Müvekkil Kasa Defteri web tabanlı üyeliğiniz aktif edildi.',
+    'Aşağıdaki bilgilerle Müvekkil Kasa giriş ekranından oturum açabilirsiniz.',
+    'Woontegra müşteri paneli şifreniz bu giriş için kullanılmaz.',
     '',
     ...sections.map((s) => s.text),
     '',
-    'Woontegra müşteri paneli şifreniz ile değil, Müvekkil Kasa aktivasyon e-postasındaki bilgilerle giriş yapabilirsiniz.',
+    'İlk girişten sonra şifrenizi değiştirmenizi öneririz.',
     '',
     `Destek: ${input.support}`,
     '',
@@ -214,10 +246,10 @@ async function sendPaidSaasOnlyOrderMail(input: {
 
   await dispatchMail({
     to: input.customerEmail,
-    subject: `SaaS üyeliğiniz aktif edildi — ${input.orderNo}`,
+    subject: `Müvekkil Kasa üyeliğiniz aktif edildi — ${input.orderNo}`,
     text: textBody,
     html: mailWelcomeHtmlDocument({
-      title: 'Müvekkil Kasa SaaS üyeliğiniz aktif edildi',
+      title: 'Müvekkil Kasa üyeliğiniz aktif edildi',
       bodyHtml,
       logoUrl,
     }),

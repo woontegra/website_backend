@@ -73,20 +73,31 @@ async function buildLocalLicenseRowsForOrder(
     licenseServerLicenseKey: string | null
     product: { licenseRequired: boolean | null; licenseAppCode: string | null } | null
   }>,
+  prefetchedLocalRows?: Array<{
+    id: string
+    licenseKey: string
+    productName: string
+    status: string
+    expiresAt: Date | null
+    maxDevices: number | null
+    createdAt: Date
+  }>,
 ): Promise<CustomerLicenseListItem[]> {
-  const localRows = await prisma.license.findMany({
-    where: { orderId: order.id },
-    orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
-    select: {
-      id: true,
-      licenseKey: true,
-      productName: true,
-      status: true,
-      expiresAt: true,
-      maxDevices: true,
-      createdAt: true,
-    },
-  })
+  const localRows =
+    prefetchedLocalRows ??
+    (await prisma.license.findMany({
+      where: { orderId: order.id },
+      orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+      select: {
+        id: true,
+        licenseKey: true,
+        productName: true,
+        status: true,
+        expiresAt: true,
+        maxDevices: true,
+        createdAt: true,
+      },
+    }))
 
   if (localRows.length > 0) {
     return localRows.map((row) => ({
@@ -491,13 +502,14 @@ export const customersService = {
     }
   },
 
-  async listLicenses(customerId: string): Promise<CustomerLicenseListItem[]> {
+  async listLicenses(customerId: string, customerEmailHint?: string): Promise<CustomerLicenseListItem[]> {
     const orders = await prisma.order.findMany({
       where: {
         ...customerOrderWhere(customerId),
         status: { in: ['PAID', 'PROCESSING'] },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
       include: {
         items: {
           orderBy: { id: 'asc' },
@@ -510,28 +522,71 @@ export const customersService = {
       },
     })
 
+    const licenseOrders = orders.filter((order) =>
+      order.items.some(
+        (item) => item.product?.licenseRequired || Boolean(item.licenseServerLicenseKey?.trim()),
+      ),
+    )
+    if (licenseOrders.length === 0) return []
+
+    const orderIds = licenseOrders.map((o) => o.id)
+    const allLocalLicenses = await prisma.license.findMany({
+      where: { orderId: { in: orderIds } },
+      orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+      select: {
+        orderId: true,
+        id: true,
+        licenseKey: true,
+        productName: true,
+        status: true,
+        expiresAt: true,
+        maxDevices: true,
+        createdAt: true,
+      },
+    })
+    const localByOrderId = new Map<string, typeof allLocalLicenses>()
+    for (const row of allLocalLicenses) {
+      if (!row.orderId) continue
+      const bucket = localByOrderId.get(row.orderId) ?? []
+      bucket.push(row)
+      localByOrderId.set(row.orderId, bucket)
+    }
+
     const rows: CustomerLicenseListItem[] = []
     const orderNoSet = new Set<string>()
 
-    for (const order of orders) {
+    for (const order of licenseOrders) {
       const licenseItems = order.items.filter(
         (item) => item.product?.licenseRequired || Boolean(item.licenseServerLicenseKey?.trim()),
       )
-      if (licenseItems.length === 0) continue
-
       orderNoSet.add(order.orderNo)
-      const localRows = await buildLocalLicenseRowsForOrder(order, licenseItems)
+      const localRows = await buildLocalLicenseRowsForOrder(
+        order,
+        licenseItems,
+        localByOrderId.get(order.id),
+      )
       rows.push(...localRows)
     }
 
-    if (orderNoSet.size === 0) return rows
+    const hasUsableLocal = rows.some(
+      (r) => Boolean(r.licenseKeyMasked?.trim()) && r.status !== 'PENDING',
+    )
+    if (hasUsableLocal) {
+      return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { email: true },
-    })
-    const customerEmail = customer?.email?.trim().toLowerCase() ?? ''
-    if (!customerEmail) return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const customerEmail =
+      customerEmailHint?.trim().toLowerCase() ??
+      (
+        await prisma.customer.findUnique({
+          where: { id: customerId },
+          select: { email: true },
+        })
+      )?.email?.trim().toLowerCase() ??
+      ''
+    if (!customerEmail || orderNoSet.size === 0) {
+      return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    }
 
     const central = await fetchLicenseServerCustomerLicenses(customerEmail)
     if (central.error) {

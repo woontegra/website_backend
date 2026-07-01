@@ -18,6 +18,8 @@ import {
 
 } from './muvekkilKasaSaasProvision.client'
 
+import { buildMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
+
 import {
 
   findActiveCustomerSaasMembership,
@@ -62,6 +64,12 @@ export type MuvekkilKasaSaasProvisionSuccess = {
 
   ownerEmail: string
 
+  ownerUsername: string | null
+
+  temporaryPassword: string | null
+
+  loginUrl: string | null
+
   licenseStartDate: string
 
   licenseEndDate: string
@@ -94,6 +102,12 @@ export type MuvekkilKasaSaasMailLine = {
 
     mkActivationMailSent: boolean
 
+    ownerUsername: string | null
+
+    temporaryPassword: string | null
+
+    loginUrl: string | null
+
   }
 
 }
@@ -101,6 +115,12 @@ export type MuvekkilKasaSaasMailLine = {
 
 
 const PROVISION_NOTES = 'Woontegra Website ödeme sonrası otomatik teslimat'
+
+function resolveMkLoginUrlFromProvision(data: { loginUrl?: string | null }): string | null {
+  const fromApi = data.loginUrl?.trim()
+  if (fromApi) return fromApi
+  return buildMuvekkilKasaSaasLoginHref()
+}
 
 
 
@@ -386,6 +406,12 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
         ownerEmail: membershipMeta?.ownerEmail ?? customerEmail,
 
+        ownerUsername: null,
+
+        temporaryPassword: null,
+
+        loginUrl: buildMuvekkilKasaSaasLoginHref(),
+
         licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
 
         licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
@@ -636,6 +662,12 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
       ownerEmail: data.ownerEmail,
 
+      ownerUsername: data.ownerUsername?.trim() || null,
+
+      temporaryPassword: data.temporaryPassword?.trim() || null,
+
+      loginUrl: resolveMkLoginUrlFromProvision(data),
+
       licenseStartDate: data.licenseStartDate,
 
       licenseEndDate: data.licenseEndDate,
@@ -715,6 +747,12 @@ export function buildMuvekkilKasaSaasMailLines(
           licenseEndDate: s.licenseEndDate,
 
           mkActivationMailSent: s.mailSentByMkSaas,
+
+          ownerUsername: s.ownerUsername,
+
+          temporaryPassword: s.temporaryPassword,
+
+          loginUrl: s.loginUrl,
 
         },
 

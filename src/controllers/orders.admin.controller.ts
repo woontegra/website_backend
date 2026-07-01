@@ -24,6 +24,10 @@ export async function adminListOrders(req: Request, res: Response) {
   const paymentStatus = readQueryString(req.query, 'paymentStatus')
   const dateFrom = readQueryString(req.query, 'dateFrom')
   const dateTo = readQueryString(req.query, 'dateTo')
+  const takeRaw = readQueryString(req.query, 'take')
+  const skipRaw = readQueryString(req.query, 'skip')
+  const take = takeRaw ? Number.parseInt(takeRaw, 10) : undefined
+  const skip = skipRaw ? Number.parseInt(skipRaw, 10) : undefined
   const rows = await ordersAdminService.list({
     status,
     email,
@@ -33,6 +37,8 @@ export async function adminListOrders(req: Request, res: Response) {
     paymentStatus,
     dateFrom,
     dateTo,
+    take: Number.isFinite(take) ? take : undefined,
+    skip: Number.isFinite(skip) ? skip : undefined,
   })
   return res.json({ success: true, data: rows })
 }

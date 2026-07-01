@@ -185,7 +185,7 @@ export async function getOrder(req: Request, res: Response) {
 
 export async function listLicenses(req: Request, res: Response) {
   if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
-  const data = await customersService.listLicenses(req.customer.id)
+  const data = await customersService.listLicenses(req.customer.id, req.customer.email)
   return res.json({ success: true, data })
 }
 

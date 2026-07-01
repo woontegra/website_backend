@@ -36,6 +36,9 @@ export type MuvekkilKasaSaasProvisionResponse = {
   tenantSlug: string
   ownerUserId?: string
   ownerEmail: string
+  ownerUsername?: string
+  temporaryPassword?: string
+  loginUrl?: string
   licenseStartDate: string
   licenseEndDate: string
   licenseKey: string | null

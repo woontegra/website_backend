@@ -116,6 +116,8 @@ function resolveDownloadUrl(p: {
   return u === '' ? null : u
 }
 
+type ActiveLegalDoc = Awaited<ReturnType<typeof findActiveLegal>>
+
 async function findActiveLegal(type: LegalDocumentType) {
   return prisma.legalDocument.findFirst({
     where: { type, isActive: true },
@@ -123,13 +125,28 @@ async function findActiveLegal(type: LegalDocumentType) {
   })
 }
 
-async function resolveLegalContentForSnapshot(
+async function prefetchActiveLegalDocs(types: LegalDocumentType[]): Promise<Map<LegalDocumentType, ActiveLegalDoc>> {
+  const unique = [...new Set(types)]
+  if (unique.length === 0) return new Map()
+  const docs = await prisma.legalDocument.findMany({
+    where: { type: { in: unique }, isActive: true },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const cache = new Map<LegalDocumentType, ActiveLegalDoc>()
+  for (const doc of docs) {
+    if (!cache.has(doc.type)) cache.set(doc.type, doc)
+  }
+  return cache
+}
+
+function resolveLegalContentFromCache(
   type: LegalDocumentType,
-  variant?: LegalDocumentVariant,
-): Promise<{ title: string; content: string; version: number }> {
+  variant: LegalDocumentVariant | undefined,
+  cache: Map<LegalDocumentType, ActiveLegalDoc>,
+): { title: string; content: string; version: number } {
   if (type === LegalDocumentType.DIGITAL_IMMEDIATE_DELIVERY_WAIVER && variant) {
     const fallback = getDefaultLegalDocument(type, variant)
-    const doc = await findActiveLegal(type)
+    const doc = cache.get(type) ?? null
     const title = fallback.title
     const content = fallback.content
     if (doc && doc.content?.trim()) {
@@ -138,11 +155,11 @@ async function resolveLegalContentForSnapshot(
     return { title, content, version: doc?.version ?? 1 }
   }
 
-  const doc = await findActiveLegal(type)
+  const doc = cache.get(type) ?? null
   if (doc?.content?.trim()) {
     return { title: doc.title, content: doc.content, version: doc.version }
   }
-  const fallback = getDefaultLegalDocument(type)
+  const fallback = getDefaultLegalDocument(type, variant)
   const title = doc?.title?.trim() ? doc.title : fallback.title
   if (doc && !doc.content?.trim()) {
     console.warn(`[legal] Order snapshot: active ${type} has empty content; using default body.`)
@@ -231,11 +248,13 @@ async function createLegalSnapshotsForOrder(
   if (ctx.marketingConsent) optional.push(LegalDocumentType.COMMERCIAL_ELECTRONIC_MESSAGE)
   if (ctx.explicitConsent) optional.push(LegalDocumentType.EXPLICIT_CONSENT)
 
+  const specs = buildLegalSnapshotSpecs(ctx.legalFlags)
+  const legalCache = await prefetchActiveLegalDocs([...specs.map((s) => s.type), ...optional])
   const rows: Prisma.OrderLegalSnapshotCreateManyInput[] = []
   const now = new Date()
 
-  for (const spec of buildLegalSnapshotSpecs(ctx.legalFlags)) {
-    const base = await resolveLegalContentForSnapshot(spec.type, spec.variant)
+  for (const spec of specs) {
+    const base = resolveLegalContentFromCache(spec.type, spec.variant, legalCache)
     rows.push({
       orderId,
       documentType: spec.type,
@@ -249,7 +268,7 @@ async function createLegalSnapshotsForOrder(
   }
 
   for (const t of optional) {
-    const base = await resolveLegalContentForSnapshot(t)
+    const base = resolveLegalContentFromCache(t, undefined, legalCache)
     rows.push({
       orderId,
       documentType: t,
@@ -467,9 +486,10 @@ export const ordersService = {
     const paymentProvider =
       input.paymentProvider === 'BANK_TRANSFER' ? PaymentProvider.BANK_TRANSFER : PaymentProvider.PAYTR
 
+    let cachedBankTransferDisplay: Awaited<ReturnType<typeof getPublicBankTransferDisplay>> | undefined
     if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
-      const bankPub = await getPublicBankTransferDisplay()
-      if (!bankPub.bankTransferEnabled) {
+      cachedBankTransferDisplay = await getPublicBankTransferDisplay()
+      if (!cachedBankTransferDisplay.bankTransferEnabled) {
         const err = new Error('BANK_TRANSFER_UNAVAILABLE') as Error & { status: number; publicMessage?: string }
         err.status = 400
         err.publicMessage = 'Havale/EFT ödeme yöntemi şu anda kullanılamıyor.'
@@ -554,43 +574,45 @@ export const ordersService = {
           legalFlags,
         })
 
+        let bankTransferInfo: Awaited<ReturnType<typeof getBankTransferCustomerInfo>> = null
         if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
-          const info = await getBankTransferCustomerInfo({
-            orderNo: order.orderNo,
-            total: Number(order.total),
-            currency: order.currency,
-          })
-          if (info) {
-            try {
+          bankTransferInfo = await getBankTransferCustomerInfo(
+            {
+              orderNo: order.orderNo,
+              total: Number(order.total),
+              currency: order.currency,
+            },
+            cachedBankTransferDisplay,
+          )
+        }
+
+        void (async () => {
+          try {
+            if (paymentProvider === PaymentProvider.BANK_TRANSFER && bankTransferInfo) {
               await mailService.sendBankTransferOrderCreated({
                 customerName: order.customerName,
                 customerEmail: order.customerEmail,
-                info,
+                info: bankTransferInfo,
               })
-            } catch (e) {
-              console.error('[orders] Havale/EFT sipariş bilgilendirme e-postası gönderilemedi', e)
             }
+            await mailService.sendNewOrderAdminNotification({
+              orderNo: order.orderNo,
+              customerName: order.customerName,
+              customerEmail: order.customerEmail,
+              customerPhone: order.customerPhone,
+              total: Number(order.total),
+              currency: order.currency,
+              paymentProvider: order.paymentProvider,
+              items: order.items.map((i) => ({
+                productName: i.productName,
+                quantity: i.quantity,
+                total: Number(i.total),
+              })),
+            })
+          } catch (e) {
+            console.error('[orders] Sipariş oluşturma e-postaları gönderilemedi', e)
           }
-        }
-
-        try {
-          await mailService.sendNewOrderAdminNotification({
-            orderNo: order.orderNo,
-            customerName: order.customerName,
-            customerEmail: order.customerEmail,
-            customerPhone: order.customerPhone,
-            total: Number(order.total),
-            currency: order.currency,
-            paymentProvider: order.paymentProvider,
-            items: order.items.map((i) => ({
-              productName: i.productName,
-              quantity: i.quantity,
-              total: Number(i.total),
-            })),
-          })
-        } catch (e) {
-          console.error('[orders] Admin yeni sipariş bildirimi gönderilemedi', e)
-        }
+        })()
 
         return order
       } catch (e) {
@@ -823,7 +845,12 @@ export type AdminOrderListQuery = {
   paymentStatus?: string
   dateFrom?: string
   dateTo?: string
+  take?: number
+  skip?: number
 }
+
+const ADMIN_ORDERS_DEFAULT_TAKE = 50
+const ADMIN_ORDERS_MAX_TAKE = 200
 
 function parseBankPaymentDateInput(raw: string): Date | null {
   const s = raw.trim()
@@ -912,13 +939,33 @@ export const ordersAdminService = {
       and.push({ createdAt })
     }
 
+    const take = Math.min(Math.max(q.take ?? ADMIN_ORDERS_DEFAULT_TAKE, 1), ADMIN_ORDERS_MAX_TAKE)
+    const skip = Math.max(q.skip ?? 0, 0)
+
     const rows = await prisma.order.findMany({
       where: { AND: and },
       orderBy: { createdAt: 'desc' },
-      include: {
-        items: { orderBy: { id: 'asc' }, select: { productName: true } },
+      take,
+      skip,
+      select: {
+        id: true,
+        orderNo: true,
+        customerName: true,
+        customerEmail: true,
+        total: true,
+        currency: true,
+        status: true,
+        paymentProvider: true,
+        adminNote: true,
+        shippingCarrier: true,
+        shippingTrackingNumber: true,
+        shippingStatus: true,
+        paidAt: true,
+        paymentConfirmedAt: true,
+        createdAt: true,
+        items: { orderBy: { id: 'asc' }, take: 1, select: { productName: true } },
         _count: { select: { items: true } },
-        paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1 },
+        paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
       },
     })
 
