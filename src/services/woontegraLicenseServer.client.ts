@@ -44,6 +44,33 @@ export type LicenseServerProgramCreateInput = {
   isActive?: boolean
 }
 
+const DEFAULT_LICENSE_SERVER_TIMEOUT_MS = 2500
+
+export function licenseServerTimeoutMs(): number {
+  const raw = process.env.LICENSE_SERVER_TIMEOUT_MS?.trim()
+  if (raw) {
+    const n = Number.parseInt(raw, 10)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  return DEFAULT_LICENSE_SERVER_TIMEOUT_MS
+}
+
+async function fetchWithLicenseServerTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const timeoutMs = licenseServerTimeoutMs()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`Lisans sunucusu zaman aşımı (${timeoutMs}ms)`)
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 function baseUrl(): string | null {
   const url = (process.env.LICENSE_SERVER_URL ?? 'http://localhost:4001').replace(/\/$/, '')
   return url || null
@@ -74,7 +101,7 @@ async function licenseServerFetch(
 
   let res: Response
   try {
-    res = await fetch(`${url}${path}`, {
+    res = await fetchWithLicenseServerTimeout(`${url}${path}`, {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -240,7 +267,7 @@ export async function requestWebsiteOrderLicense(
   const endpoint = `${url}/api/integrations/website/order-license`
   let res: Response
   try {
-    res = await fetch(endpoint, {
+    res = await fetchWithLicenseServerTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

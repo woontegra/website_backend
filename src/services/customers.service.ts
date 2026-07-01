@@ -66,6 +66,79 @@ function mapCustomer(c: { id: string; name: string; email: string; phone: string
   }
 }
 
+async function buildLocalLicenseRowsForOrder(
+  order: { id: string; orderNo: string; createdAt: Date },
+  licenseItems: Array<{
+    productName: string
+    licenseServerLicenseKey: string | null
+    product: { licenseRequired: boolean | null; licenseAppCode: string | null } | null
+  }>,
+): Promise<CustomerLicenseListItem[]> {
+  const localRows = await prisma.license.findMany({
+    where: { orderId: order.id },
+    orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
+    select: {
+      id: true,
+      licenseKey: true,
+      productName: true,
+      status: true,
+      expiresAt: true,
+      maxDevices: true,
+      createdAt: true,
+    },
+  })
+
+  if (localRows.length > 0) {
+    return localRows.map((row) => ({
+      id: row.id,
+      licenseKeyMasked: maskLicenseKeyForDisplay(row.licenseKey),
+      productName: row.productName,
+      programName: null,
+      appCode: null,
+      orderNo: order.orderNo,
+      status: row.status,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+      maxDevices: row.maxDevices,
+      createdAt: row.createdAt.toISOString(),
+      source: 'local' as const,
+    }))
+  }
+
+  const itemsWithKeys = licenseItems.filter((item) => item.licenseServerLicenseKey?.trim())
+  if (itemsWithKeys.length > 0) {
+    return itemsWithKeys.map((item) => ({
+      id: null,
+      licenseKeyMasked: maskLicenseKeyForDisplay(item.licenseServerLicenseKey!.trim()),
+      productName: item.productName,
+      programName: null,
+      appCode: item.product?.licenseAppCode ?? null,
+      orderNo: order.orderNo,
+      status: 'ACTIVE',
+      expiresAt: null,
+      maxDevices: null,
+      createdAt: order.createdAt.toISOString(),
+      source: 'local' as const,
+    }))
+  }
+
+  const primary = licenseItems[0]!
+  return [
+    {
+      id: null,
+      licenseKeyMasked: null,
+      productName: primary.productName,
+      programName: null,
+      appCode: primary.product?.licenseAppCode ?? null,
+      orderNo: order.orderNo,
+      status: 'PENDING',
+      expiresAt: null,
+      maxDevices: null,
+      createdAt: order.createdAt.toISOString(),
+      source: 'local' as const,
+    },
+  ]
+}
+
 export const customersService = {
   async register(input: { name: string; email: string; password: string; phone?: string | null }) {
     const email = input.email.trim().toLowerCase()
@@ -431,34 +504,14 @@ export const customersService = {
           select: {
             productName: true,
             licenseServerLicenseKey: true,
-            product: { select: { licenseRequired: true } },
+            product: { select: { licenseRequired: true, licenseAppCode: true } },
           },
         },
       },
     })
 
-    const orderNoSet = new Set(orders.map((o) => o.orderNo))
-    const centralByOrderNo = new Map<string, Awaited<ReturnType<typeof fetchLicenseServerCustomerLicenses>>['licenses']>()
-
-    if (orderNoSet.size > 0) {
-      const customer = await prisma.customer.findUnique({
-        where: { id: customerId },
-        select: { email: true },
-      })
-      const customerEmail = customer?.email?.trim().toLowerCase() ?? ''
-      if (customerEmail) {
-        const central = await fetchLicenseServerCustomerLicenses(customerEmail)
-        for (const lic of central.licenses) {
-          const orderNo = lic.websiteOrderNo?.trim()
-          if (!orderNo || !orderNoSet.has(orderNo)) continue
-          const bucket = centralByOrderNo.get(orderNo) ?? []
-          bucket.push(lic)
-          centralByOrderNo.set(orderNo, bucket)
-        }
-      }
-    }
-
     const rows: CustomerLicenseListItem[] = []
+    const orderNoSet = new Set<string>()
 
     for (const order of orders) {
       const licenseItems = order.items.filter(
@@ -466,8 +519,41 @@ export const customersService = {
       )
       if (licenseItems.length === 0) continue
 
-      const centralMatches = centralByOrderNo.get(order.orderNo) ?? []
-      if (centralMatches.length > 0) {
+      orderNoSet.add(order.orderNo)
+      const localRows = await buildLocalLicenseRowsForOrder(order, licenseItems)
+      rows.push(...localRows)
+    }
+
+    if (orderNoSet.size === 0) return rows
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { email: true },
+    })
+    const customerEmail = customer?.email?.trim().toLowerCase() ?? ''
+    if (!customerEmail) return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+    const central = await fetchLicenseServerCustomerLicenses(customerEmail)
+    if (central.error) {
+      console.warn('[customers] license server fetch skipped or failed', {
+        customerId,
+        error: central.error,
+      })
+      return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    }
+
+    const centralByOrderNo = new Map<string, typeof central.licenses>()
+    for (const lic of central.licenses) {
+      const orderNo = lic.websiteOrderNo?.trim()
+      if (!orderNo || !orderNoSet.has(orderNo)) continue
+      const bucket = centralByOrderNo.get(orderNo) ?? []
+      bucket.push(lic)
+      centralByOrderNo.set(orderNo, bucket)
+    }
+
+    for (const [orderNo, centralMatches] of centralByOrderNo) {
+      const localForOrder = rows.filter((r) => r.orderNo === orderNo)
+      if (localForOrder.length === 0) {
         for (const lic of centralMatches) {
           rows.push({
             id: lic.id ?? null,
@@ -475,7 +561,7 @@ export const customersService = {
             productName: lic.productName,
             programName: lic.programName,
             appCode: lic.appCode || null,
-            orderNo: order.orderNo,
+            orderNo,
             status: lic.status,
             expiresAt: lic.expiresAt || null,
             maxDevices: lic.maxDevices,
@@ -483,75 +569,44 @@ export const customersService = {
             source: 'central',
           })
         }
-        centralByOrderNo.delete(order.orderNo)
         continue
       }
 
-      const localRows = await prisma.license.findMany({
-        where: { orderId: order.id },
-        orderBy: [{ orderItemId: 'asc' }, { unitIndex: 'asc' }],
-        select: {
-          id: true,
-          licenseKey: true,
-          productName: true,
-          status: true,
-          expiresAt: true,
-          maxDevices: true,
-          createdAt: true,
-        },
-      })
+      const hasUsableLocal = localForOrder.some(
+        (r) => Boolean(r.licenseKeyMasked?.trim()) && r.status !== 'PENDING',
+      )
+      if (hasUsableLocal) continue
 
-      if (localRows.length > 0) {
-        for (const row of localRows) {
+      for (let i = 0; i < centralMatches.length; i++) {
+        const lic = centralMatches[i]!
+        const target = localForOrder[i]
+        if (target) {
+          target.id = lic.id ?? null
+          target.licenseKeyMasked = lic.licenseKeyMasked
+          target.productName = lic.productName
+          target.programName = lic.programName
+          target.appCode = lic.appCode || null
+          target.status = lic.status
+          target.expiresAt = lic.expiresAt || null
+          target.maxDevices = lic.maxDevices
+          target.createdAt = lic.createdAt
+          target.source = 'central'
+        } else {
           rows.push({
-            id: row.id,
-            licenseKeyMasked: maskLicenseKeyForDisplay(row.licenseKey),
-            productName: row.productName,
-            programName: null,
-            appCode: null,
-            orderNo: order.orderNo,
-            status: row.status,
-            expiresAt: row.expiresAt?.toISOString() ?? null,
-            maxDevices: row.maxDevices,
-            createdAt: row.createdAt.toISOString(),
-            source: 'local',
+            id: lic.id ?? null,
+            licenseKeyMasked: lic.licenseKeyMasked,
+            productName: lic.productName,
+            programName: lic.programName,
+            appCode: lic.appCode || null,
+            orderNo,
+            status: lic.status,
+            expiresAt: lic.expiresAt || null,
+            maxDevices: lic.maxDevices,
+            createdAt: lic.createdAt,
+            source: 'central',
           })
         }
-        continue
       }
-
-      const itemWithKey = licenseItems.find((item) => item.licenseServerLicenseKey?.trim())
-      if (itemWithKey?.licenseServerLicenseKey?.trim()) {
-        rows.push({
-          id: null,
-          licenseKeyMasked: maskLicenseKeyForDisplay(itemWithKey.licenseServerLicenseKey.trim()),
-          productName: itemWithKey.productName,
-          programName: null,
-          appCode: null,
-          orderNo: order.orderNo,
-          status: 'ACTIVE',
-          expiresAt: null,
-          maxDevices: null,
-          createdAt: order.createdAt.toISOString(),
-          source: 'local',
-        })
-        continue
-      }
-
-      const primary = licenseItems[0]!
-      rows.push({
-        id: null,
-        licenseKeyMasked: null,
-        productName: primary.productName,
-        programName: null,
-        appCode: null,
-        orderNo: order.orderNo,
-        status: 'PENDING',
-        expiresAt: null,
-        maxDevices: null,
-        createdAt: order.createdAt.toISOString(),
-        source: 'local',
-      })
     }
 
     return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
