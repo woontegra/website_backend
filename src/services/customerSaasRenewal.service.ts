@@ -1,4 +1,4 @@
-import { PaymentProvider, Prisma, ProductType } from '@prisma/client'
+import { CustomerSaasMembershipStatus, PaymentProvider, Prisma, ProductType } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import {
   formatLegalCartProductTypes,
@@ -9,7 +9,8 @@ import {
 } from '../lib/orderLegalRequirements'
 import { MUVEKKIL_KASA_SAAS_PRODUCT_CODE } from '../lib/muvekkilKasaSaasProduct'
 import {
-  isSaasRenewalPeriod,
+  ANNUAL_SAAS_RENEWAL_PERIOD,
+  assertAnnualSaasRenewalPeriod,
   renewalDaysForPeriod,
   renewalPeriodLabel,
   renewalPriceForPeriod,
@@ -65,6 +66,15 @@ async function loadMembershipForCustomer(customerId: string, membershipId: strin
     err.status = 400
     throw err
   }
+  const renewableStatuses: CustomerSaasMembershipStatus[] = [
+    CustomerSaasMembershipStatus.ACTIVE,
+    CustomerSaasMembershipStatus.EXPIRED,
+  ]
+  if (!renewableStatuses.includes(membership.status)) {
+    const err = new Error('Bu üyelik şu anda uzatılamaz.') as Error & { status: number }
+    err.status = 400
+    throw err
+  }
   return membership
 }
 
@@ -102,18 +112,14 @@ export async function getSaasRenewQuote(
   membershipId: string,
   renewalPeriodRaw: string,
 ): Promise<SaasRenewQuote> {
-  if (!isSaasRenewalPeriod(renewalPeriodRaw)) {
-    const err = new Error('Geçersiz yenileme dönemi.') as Error & { status: number }
-    err.status = 400
-    throw err
-  }
+  const period = assertAnnualSaasRenewalPeriod(renewalPeriodRaw)
   const membership = await loadMembershipForCustomer(customerId, membershipId)
-  const { product, unitPrice, renewalDays, currency } = await resolveRenewalPricing(membership.productId!, renewalPeriodRaw)
-  const renewalLabel = renewalPeriodLabel(renewalPeriodRaw)
-  const lineLabel = `${product.name} — ${renewalLabel} Uzatma`
+  const { product, unitPrice, renewalDays, currency } = await resolveRenewalPricing(membership.productId!, period)
+  const renewalLabel = renewalPeriodLabel(period)
+  const lineLabel = `${product.name} — 1 Yıllık Uzatma`
   return {
     membershipId: membership.id,
-    renewalPeriod: renewalPeriodRaw,
+    renewalPeriod: period,
     renewalDays,
     renewalLabel,
     productName: product.name,
@@ -138,11 +144,7 @@ export type CreateSaasRenewOrderInput = {
 }
 
 export async function createSaasRenewOrder(input: CreateSaasRenewOrderInput) {
-  if (!isSaasRenewalPeriod(input.renewalPeriod)) {
-    const err = new Error('Geçersiz yenileme dönemi.') as Error & { status: number }
-    err.status = 400
-    throw err
-  }
+  const renewalPeriod = assertAnnualSaasRenewalPeriod(input.renewalPeriod)
 
   const customer = await prisma.customer.findUnique({
     where: { id: input.customerId },
@@ -157,8 +159,8 @@ export async function createSaasRenewOrder(input: CreateSaasRenewOrderInput) {
   }
 
   const membership = await loadMembershipForCustomer(input.customerId, input.membershipId)
-  const quote = await getSaasRenewQuote(input.customerId, membership.id, input.renewalPeriod)
-  const { product, renewalDays } = await resolveRenewalPricing(membership.productId!, input.renewalPeriod)
+  const quote = await getSaasRenewQuote(input.customerId, membership.id, renewalPeriod)
+  const { product, renewalDays } = await resolveRenewalPricing(membership.productId!, renewalPeriod)
 
   const cartProductTypes = [ProductType.SAAS]
   const legalFlags = resolveOrderLegalConsentFlags(cartProductTypes)
@@ -288,7 +290,7 @@ export async function createSaasRenewOrder(input: CreateSaasRenewOrderInput) {
         total: Number(order.total),
         currency: order.currency,
         paymentProvider: order.paymentProvider,
-        renewalPeriod: input.renewalPeriod,
+        renewalPeriod,
         renewalDays,
         renewalLabel: quote.renewalLabel,
         productName: quote.productName,

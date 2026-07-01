@@ -167,30 +167,31 @@ export async function ensureMuvekkilKasaSaasRenewals(orderId: string): Promise<{
 
 
     if (membership.productCode !== MUVEKKIL_KASA_SAAS_PRODUCT_CODE) {
-
       const err = 'Yalnızca Müvekkil Kasa SaaS üyelikleri yenilenebilir.'
-
       errors.push({ orderItemId: item.id, productName: item.productName, error: err })
-
       await prisma.orderItem.update({
-
         where: { id: item.id },
-
         data: { licenseServerLastError: err },
-
       })
-
       continue
-
     }
 
-
-
     const externalOrderId = externalOrderIdForItem(order.orderNo, item.id)
-
     const licenseKey = membership.licenseKey.trim()
 
-
+    const already = item.licenseServerUnitsNotified ?? 0
+    if (already >= 1) {
+      renewed.push({
+        orderItemId: item.id,
+        productName: item.productName,
+        renewStatus: 'already_renewed',
+        licenseKey,
+        newEndDate: membership.licenseEndDate.toISOString(),
+        membershipId: membership.id,
+        mailSentByMkSaas: true,
+      })
+      continue
+    }
 
     if (!isMuvekkilKasaSaasRenewConfigured()) {
 
