@@ -22,17 +22,29 @@ export function buildCustomerLoginPageHref(): string {
   return site ? `${site}/giris` : 'https://woontegra.com/giris'
 }
 
+/** Müvekkil Kasa SaaS web uygulaması giriş adresi (MUVEKKIL_KASA_SAAS_APP_URL). */
+export function buildMuvekkilKasaSaasLoginHref(): string | null {
+  const raw = process.env.MUVEKKIL_KASA_SAAS_APP_URL?.trim()
+  if (!raw) return null
+  const base = raw.replace(/\/$/, '')
+  return base.endsWith('/login') ? base : `${base}/login`
+}
+
 export function buildOrderDownloadMailHref(payload: OrderDownloadTokenPayload): string {
   return buildBrandedOrderDownloadHref(signOrderDownloadToken(payload))
 }
 
 /** HTML e-posta: ham URL göstermeden indirme butonu */
 export function mailDownloadButton(href: string, label = 'Programı İndir'): string {
+  return mailActionButton(href, label, '#2563eb')
+}
+
+export function mailActionButton(href: string, label: string, bg = '#2563eb'): string {
   const safeHref = escapeMailHtml(href)
   const safeLabel = escapeMailHtml(label)
   return `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:20px 0;">
   <tr>
-    <td align="center" style="border-radius:8px;background:#2563eb;">
+    <td align="center" style="border-radius:8px;background:${bg};">
       <a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${safeLabel}</a>
     </td>
   </tr>

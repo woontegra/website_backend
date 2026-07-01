@@ -5,7 +5,9 @@ import { pickPublicSiteOrigin } from '../lib/mailDeliveryUrl'
 import {
   buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
+  buildMuvekkilKasaSaasLoginHref,
   buildOrderDownloadMailHref,
+  mailActionButton,
   mailDownloadButton,
 } from '../lib/mailDownloadLink'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
@@ -75,6 +77,172 @@ async function resolveMailLogoUrl(): Promise<string | null> {
   return `${origin}${logo.startsWith('/') ? logo : `/${logo}`}`
 }
 
+type PaidOrderMailSaasDetails = {
+  licenseKey: string | null
+  ownerEmail: string
+  tenantSlug: string
+  tenantName: string
+  licenseStartDate: string
+  licenseEndDate: string
+  mkActivationMailSent: boolean
+}
+
+type PaidOrderMailLine = {
+  id: string
+  productName: string
+  downloadUrl: string
+  productId?: string
+  licenseKeys?: string[]
+  licenses?: { licenseKey: string; activationPassword?: string }[]
+  licenseId?: string
+  saas?: PaidOrderMailSaasDetails
+}
+
+function isSaasMailLine(line: PaidOrderMailLine): boolean {
+  return line.downloadUrl.startsWith('saas:') && Boolean(line.saas)
+}
+
+function formatMailDateTr(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
+  } catch {
+    return iso
+  }
+}
+
+function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { html: string; text: string } {
+  const saas = line.saas!
+  const loginHref = buildMuvekkilKasaSaasLoginHref()
+  const rows: { label: string; value: string; mono?: boolean }[] = [
+    { label: 'Ürün', value: escapeMailHtml(line.productName) },
+    { label: 'Sipariş No', value: escapeMailHtml(orderNo), mono: true },
+  ]
+  if (saas.licenseKey?.trim()) {
+    rows.push({ label: 'Lisans Anahtarı', value: escapeMailHtml(saas.licenseKey.trim()), mono: true })
+  }
+  rows.push({ label: 'Hesap e-postası', value: escapeMailHtml(saas.ownerEmail) })
+  if (saas.tenantName?.trim()) {
+    rows.push({ label: 'Büro', value: escapeMailHtml(saas.tenantName.trim()) })
+  } else if (saas.tenantSlug?.trim()) {
+    rows.push({ label: 'Büro kodu', value: escapeMailHtml(saas.tenantSlug.trim()), mono: true })
+  }
+  rows.push(
+    { label: 'Başlangıç tarihi', value: escapeMailHtml(formatMailDateTr(saas.licenseStartDate)) },
+    { label: 'Bitiş tarihi', value: escapeMailHtml(formatMailDateTr(saas.licenseEndDate)) },
+  )
+
+  const loginButton = loginHref
+    ? mailActionButton(loginHref, 'Müvekkil Kasa\'ya giriş yap', '#059669')
+    : ''
+  const loginFallback = loginHref
+    ? ''
+    : '<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Giriş bağlantısı ayrıca aktivasyon e-postasında yer alır.</p>'
+  const activationNote = saas.mkActivationMailSent
+    ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Hesap aktivasyonu ve şifre belirleme bağlantısı <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine ayrı bir Müvekkil Kasa aktivasyon e-postası olarak gönderilmiştir.</p>`
+    : `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Hesap aktivasyon bilgileriniz kısa süre içinde <strong>${escapeMailHtml(saas.ownerEmail)}</strong> adresine iletilecektir.</p>`
+
+  const html = `
+    <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
+      <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;">${escapeMailHtml(line.productName)}</h3>
+      ${mailInfoTable(rows)}
+      ${loginButton}
+      ${loginFallback}
+      ${activationNote}
+    </div>`
+
+  const textParts = [
+    line.productName,
+    `Sipariş No: ${orderNo}`,
+    saas.licenseKey?.trim() ? `Lisans Anahtarı: ${saas.licenseKey.trim()}` : null,
+    `Hesap e-postası: ${saas.ownerEmail}`,
+    saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
+    `Başlangıç: ${formatMailDateTr(saas.licenseStartDate)}`,
+    `Bitiş: ${formatMailDateTr(saas.licenseEndDate)}`,
+    loginHref ? `Giriş: ${loginHref}` : 'Giriş bağlantısı aktivasyon e-postasında yer alır.',
+    saas.mkActivationMailSent
+      ? `Aktivasyon e-postası ${saas.ownerEmail} adresine gönderildi.`
+      : `Aktivasyon e-postası ${saas.ownerEmail} adresine iletilecektir.`,
+  ].filter(Boolean)
+
+  return { html, text: textParts.join('\n') }
+}
+
+function buildDesktopInstallSectionHtml(ordersPageHref: string): string {
+  const installHtml = `<ol style="margin:12px 0 0;padding-left:20px;line-height:1.7;color:#334155;font-size:14px;">
+      <li>Programı indirin ve kurun.</li>
+      <li>Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.</li>
+      <li>Lisans anahtarınızı ve aktivasyon şifrenizi girin.</li>
+      <li>Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.</li>
+    </ol>`
+  return `
+      <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a;">Kurulum</h3>
+      ${installHtml}
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Bağlantı çalışmazsa <a href="${escapeHtml(ordersPageHref)}" style="color:#2563eb;text-decoration:none;">Hesabım &gt; Siparişlerim</a> bölümünden programınızı indirebilirsiniz.</p>`
+}
+
+const DESKTOP_INSTALL_TEXT = [
+  'Kurulum:',
+  '1. Programı indirin ve kurun.',
+  '2. Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.',
+  '3. Lisans anahtarınızı ve aktivasyon şifrenizi girin.',
+  '4. Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.',
+]
+
+async function sendPaidSaasOnlyOrderMail(input: {
+  customerName: string
+  customerEmail: string
+  orderNo: string
+  saasLines: PaidOrderMailLine[]
+  support: string
+}) {
+  const logoUrl = await resolveMailLogoUrl()
+  const safeName = escapeMailHtml(input.customerName.trim() || 'Müşterimiz')
+  const sections = input.saasLines.map((l) => buildSaasMailSectionHtml(l, input.orderNo))
+  const loginHref = buildMuvekkilKasaSaasLoginHref()
+
+  const bodyHtml = `
+    <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu. Program indirmeniz veya kurulum yapmanız gerekmez; tarayıcınızdan giriş yaparak kullanmaya başlayabilirsiniz.</p>
+    ${mailBadge('SaaS üyeliği aktif', 'green')}
+    ${sections.map((s) => s.html).join('')}
+    ${
+      loginHref
+        ? mailInfoTable([
+            {
+              label: 'Giriş adresi',
+              value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;word-break:break-all;">${escapeMailHtml(loginHref)}</a>`,
+            },
+          ])
+        : ''
+    }
+    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Sorularınız için: <a href="mailto:${escapeMailHtml(input.support)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(input.support)}</a></p>`
+
+  const textBody = [
+    `Merhaba ${input.customerName},`,
+    '',
+    'Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu.',
+    'Program indirmeniz veya kurulum yapmanız gerekmez.',
+    '',
+    ...sections.map((s) => s.text),
+    '',
+    `Destek: ${input.support}`,
+    '',
+    'İyi çalışmalar,',
+    'Woontegra',
+  ].join('\n')
+
+  await dispatchMail({
+    to: input.customerEmail,
+    subject: `SaaS üyeliğiniz aktif edildi — ${input.orderNo}`,
+    text: textBody,
+    html: mailWelcomeHtmlDocument({
+      title: 'Müvekkil Kasa SaaS üyeliğiniz aktif edildi',
+      bodyHtml,
+      logoUrl,
+    }),
+  })
+}
+
 export const mailService = {
   async sendContactForm(data: {
     name: string
@@ -130,15 +298,7 @@ export const mailService = {
     customerName: string
     customerEmail: string
     orderNo: string
-    lines: {
-      id: string
-      productName: string
-      downloadUrl: string
-      productId?: string
-      licenseKeys?: string[]
-      licenses?: { licenseKey: string; activationPassword?: string }[]
-      licenseId?: string
-    }[]
+    lines: PaidOrderMailLine[]
   }) {
     const support = 'destek@woontegra.com'
     const safeName = escapeHtml(data.customerName)
@@ -151,8 +311,10 @@ export const mailService = {
       return
     }
 
-    for (const l of entries) {
-      if (l.downloadUrl.startsWith('saas:')) continue
+    const saasLines = entries.filter(isSaasMailLine)
+    const desktopLines = entries.filter((l) => !l.downloadUrl.startsWith('saas:'))
+
+    for (const l of desktopLines) {
       if (!resolveDownloadSourceFromRawUrl(l.downloadUrl)) {
         console.error('[mail] sendPaidDownloadOrder: unresolved source after pre-check', {
           orderNo: data.orderNo,
@@ -162,24 +324,31 @@ export const mailService = {
       }
     }
 
+    if (saasLines.length > 0 && desktopLines.length === 0) {
+      await sendPaidSaasOnlyOrderMail({
+        customerName: data.customerName,
+        customerEmail: data.customerEmail,
+        orderNo: data.orderNo,
+        saasLines,
+        support,
+      })
+      return
+    }
+
     const productSectionsHtml: string[] = []
     const productSectionsText: string[] = []
 
-    for (const l of entries) {
+    for (const l of saasLines) {
+      const section = buildSaasMailSectionHtml(l, data.orderNo)
+      productSectionsHtml.push(section.html)
+      productSectionsText.push(section.text)
+    }
+
+    for (const l of desktopLines) {
       const plainName = l.productName
       const licenseEntries: { licenseKey: string; activationPassword?: string }[] =
         l.licenses?.filter((x) => x.licenseKey?.trim()) ??
         (l.licenseKeys ?? []).filter((k) => k?.trim()).map((k) => ({ licenseKey: k }))
-
-      if (l.downloadUrl.startsWith('saas:')) {
-        const saasNote =
-          'Müvekkil Kasa SaaS hesabınız hazırlandı. Aktivasyon bilgileri e-posta adresinize gönderilecektir.'
-        productSectionsHtml.push(
-          `<div style="margin-bottom:24px;"><h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">${escapeHtml(l.productName)}</h3><p style="margin:0;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(saasNote)}</p></div>`,
-        )
-        productSectionsText.push(`- ${plainName}: ${saasNote}`)
-        continue
-      }
 
       const downloadHref = buildOrderDownloadMailHref({
         orderId: data.orderId,
@@ -240,45 +409,50 @@ export const mailService = {
       return
     }
 
-    const hasDesktopLicenseMail = entries.some(
+    const hasDesktopLicenseMail = desktopLines.some(
       (l) => (l.licenses?.length ?? 0) > 0 || (l.licenseKeys?.length ?? 0) > 0,
     )
+    const hasDesktop = desktopLines.length > 0
     const subject = hasDesktopLicenseMail
       ? 'Woontegra Lisans ve Kurulum Bilgileri'
-      : `Siparişiniz onaylandı — ${data.orderNo}`
+      : hasDesktop
+        ? `Siparişiniz onaylandı — ${data.orderNo}`
+        : `SaaS üyeliğiniz aktif edildi — ${data.orderNo}`
 
-    const installHtml = `<ol style="margin:12px 0 0;padding-left:20px;line-height:1.7;color:#334155;font-size:14px;">
-      <li>Programı indirin ve kurun.</li>
-      <li>Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.</li>
-      <li>Lisans anahtarınızı ve aktivasyon şifrenizi girin.</li>
-      <li>Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.</li>
-    </ol>`
+    const introHtml = hasDesktop
+      ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Sayın ${safeName},</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır. Sipariş numaranız: <strong>${safeOrder}</strong></p>`
+      : `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Merhaba ${safeName},</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu. Sipariş numaranız: <strong>${safeOrder}</strong></p>`
+
+    const installSection = hasDesktop ? buildDesktopInstallSectionHtml(ordersPageHref) : ''
 
     const bodyHtml = `
-      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Sayın ${safeName},</p>
-      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır. Sipariş numaranız: <strong>${safeOrder}</strong></p>
+      ${introHtml}
       ${productSectionsHtml.join('')}
-      <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a;">Kurulum</h3>
-      ${installHtml}
-      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Bağlantı çalışmazsa <a href="${escapeHtml(ordersPageHref)}" style="color:#2563eb;text-decoration:none;">Hesabım &gt; Siparişlerim</a> bölümünden programınızı indirebilirsiniz.</p>
+      ${installSection}
       <p style="margin:16px 0 0;font-size:14px;line-height:1.6;">Destek: <a href="mailto:${support}" style="color:#2563eb;text-decoration:none;">${support}</a></p>
     `
 
+    const textIntro = hasDesktop
+      ? [
+          `Sayın ${data.customerName},`,
+          '',
+          'Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır.',
+          `Sipariş numaranız: ${data.orderNo}`,
+        ]
+      : [
+          `Merhaba ${data.customerName},`,
+          '',
+          'Müvekkil Kasa Defteri web tabanlı hesabınız başarıyla oluşturuldu.',
+          `Sipariş numaranız: ${data.orderNo}`,
+        ]
+
     const textBody = [
-      `Sayın ${data.customerName},`,
-      '',
-      'Satın aldığınız program için lisans ve kurulum bilgileriniz aşağıdadır.',
-      `Sipariş numaranız: ${data.orderNo}`,
+      ...textIntro,
       '',
       ...productSectionsText,
-      '',
-      'Kurulum:',
-      '1. Programı indirin ve kurun.',
-      '2. Programı ilk açtığınızda lisans aktivasyon ekranı gelecektir.',
-      '3. Lisans anahtarınızı ve aktivasyon şifrenizi girin.',
-      '4. Aktivasyon tamamlandıktan sonra programı kullanmaya başlayabilirsiniz.',
-      '',
-      `Alternatif: ${ordersPageHref}`,
+      ...(hasDesktop ? ['', ...DESKTOP_INSTALL_TEXT, '', `Alternatif: ${ordersPageHref}`] : []),
       '',
       `Destek: ${support}`,
       '',
@@ -286,11 +460,13 @@ export const mailService = {
       'Woontegra',
     ].join('\n')
 
+    const docTitle = hasDesktop ? 'Woontegra Lisans ve Kurulum Bilgileri' : 'Müvekkil Kasa SaaS üyeliğiniz aktif edildi'
+
     await dispatchMail({
       to: data.customerEmail,
       subject,
       text: textBody,
-      html: mailHtmlDocument('Woontegra Lisans ve Kurulum Bilgileri', bodyHtml),
+      html: mailHtmlDocument(docTitle, bodyHtml),
     })
   },
 

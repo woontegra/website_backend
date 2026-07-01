@@ -56,6 +56,46 @@ export type MuvekkilKasaSaasProvisionSuccess = {
 
   membershipId?: string
 
+  tenantSlug: string
+
+  tenantName: string
+
+  ownerEmail: string
+
+  licenseStartDate: string
+
+  licenseEndDate: string
+
+}
+
+
+
+export type MuvekkilKasaSaasMailLine = {
+
+  id: string
+
+  productName: string
+
+  downloadUrl: string
+
+  saas: {
+
+    licenseKey: string | null
+
+    ownerEmail: string
+
+    tenantSlug: string
+
+    tenantName: string
+
+    licenseStartDate: string
+
+    licenseEndDate: string
+
+    mkActivationMailSent: boolean
+
+  }
+
 }
 
 
@@ -293,6 +333,13 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
     if (already >= 1) {
 
       let membershipId: string | undefined
+      let membershipMeta: {
+        tenantSlug: string
+        tenantName: string
+        ownerEmail: string
+        licenseStartDate: string
+        licenseEndDate: string
+      } | null = null
 
       if (order.customerId) {
 
@@ -303,6 +350,15 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
         })
 
         membershipId = existingMembership?.id
+        if (existingMembership) {
+          membershipMeta = {
+            tenantSlug: existingMembership.tenantSlug,
+            tenantName: order.companyName?.trim() || order.customerName.trim(),
+            ownerEmail: existingMembership.ownerEmail,
+            licenseStartDate: existingMembership.licenseStartDate.toISOString(),
+            licenseEndDate: existingMembership.licenseEndDate.toISOString(),
+          }
+        }
 
       }
 
@@ -323,6 +379,16 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
         mailSentByMkSaas: true,
 
         membershipId,
+
+        tenantSlug: membershipMeta?.tenantSlug ?? '',
+
+        tenantName: membershipMeta?.tenantName ?? resolveOfficeName(order),
+
+        ownerEmail: membershipMeta?.ownerEmail ?? customerEmail,
+
+        licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
+
+        licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
 
       })
 
@@ -564,6 +630,16 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
       membershipId: membershipId ?? undefined,
 
+      tenantSlug: data.tenantSlug,
+
+      tenantName: officeName,
+
+      ownerEmail: data.ownerEmail,
+
+      licenseStartDate: data.licenseStartDate,
+
+      licenseEndDate: data.licenseEndDate,
+
     })
 
 
@@ -596,7 +672,7 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
 
 
-/** Website ödeme onayı mailinde SaaS satırı (lisans anahtarı gönderilmez). */
+/** Website ödeme onayı mailinde Müvekkil Kasa SaaS satırları. */
 
 export function buildMuvekkilKasaSaasMailLines(
 
@@ -604,23 +680,47 @@ export function buildMuvekkilKasaSaasMailLines(
 
   successes: MuvekkilKasaSaasProvisionSuccess[],
 
-): { id: string; productName: string; downloadUrl: string }[] {
+): MuvekkilKasaSaasMailLine[] {
 
-  const okIds = new Set(successes.map((s) => s.orderItemId))
+  const byItemId = new Map(successes.map((s) => [s.orderItemId, s]))
 
   return items
 
-    .filter((i) => okIds.has(i.id))
+    .filter((i) => byItemId.has(i.id))
 
-    .map((i) => ({
+    .map((i) => {
 
-      id: i.id,
+      const s = byItemId.get(i.id)!
 
-      productName: i.productName,
+      return {
 
-      downloadUrl: 'saas:muvekkil-kasa',
+        id: i.id,
 
-    }))
+        productName: i.productName,
+
+        downloadUrl: 'saas:muvekkil-kasa',
+
+        saas: {
+
+          licenseKey: s.licenseKey,
+
+          ownerEmail: s.ownerEmail,
+
+          tenantSlug: s.tenantSlug,
+
+          tenantName: s.tenantName,
+
+          licenseStartDate: s.licenseStartDate,
+
+          licenseEndDate: s.licenseEndDate,
+
+          mkActivationMailSent: s.mailSentByMkSaas,
+
+        },
+
+      }
+
+    })
 
 }
 
