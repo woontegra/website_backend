@@ -1,5 +1,6 @@
 import { PaymentProvider, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { resolvePaytrFailUrlBase, resolvePaytrSuccessUrlBase } from '../lib/paytrFrontendReturnUrl'
 import { decryptSecret, encryptSecret } from '../utils/secretCrypto'
 
 /** PayTR panelinde kullanılacak callback tam URL’si (log/uyarı için; boş olabilir). */
@@ -34,8 +35,8 @@ function envPaytr(): EffectivePaytrConfig | null {
     merchantSalt,
     testMode: process.env.PAYTR_TEST_MODE === 'true' ? '1' : '0',
     debugOn: process.env.PAYTR_DEBUG_ON === 'true' ? '1' : '0',
-    successUrlBase: (process.env.FRONTEND_SUCCESS_URL || 'http://localhost:5173/siparis-basarili').replace(/\/$/, ''),
-    failUrlBase: (process.env.FRONTEND_FAIL_URL || 'http://localhost:5173/siparis-basarisiz').replace(/\/$/, ''),
+    successUrlBase: resolvePaytrSuccessUrlBase(process.env.FRONTEND_SUCCESS_URL),
+    failUrlBase: resolvePaytrFailUrlBase(process.env.FRONTEND_FAIL_URL),
     source: 'env',
   }
 }
@@ -55,14 +56,8 @@ export async function getEffectivePaytrConfig(): Promise<EffectivePaytrConfig> {
         merchantSalt: salt,
         testMode: row.testMode ? '1' : '0',
         debugOn: row.debugOn ? '1' : '0',
-        successUrlBase: (row.successUrl?.trim() || fromEnv?.successUrlBase || 'http://localhost:5173/siparis-basarili').replace(
-          /\/$/,
-          '',
-        ),
-        failUrlBase: (row.failUrl?.trim() || fromEnv?.failUrlBase || 'http://localhost:5173/siparis-basarisiz').replace(
-          /\/$/,
-          '',
-        ),
+        successUrlBase: resolvePaytrSuccessUrlBase(row.successUrl?.trim() || process.env.FRONTEND_SUCCESS_URL),
+        failUrlBase: resolvePaytrFailUrlBase(row.failUrl?.trim() || process.env.FRONTEND_FAIL_URL),
         source: 'database',
       }
     }
@@ -131,10 +126,20 @@ export async function patchAdminPaytr(body: Record<string, unknown>) {
     patch.callbackUrl = body.callbackUrl === null ? null : String(body.callbackUrl).trim() || null
   }
   if (typeof body.successUrl === 'string' || body.successUrl === null) {
-    patch.successUrl = body.successUrl === null ? null : String(body.successUrl).trim() || null
+    if (body.successUrl === null) {
+      patch.successUrl = null
+    } else {
+      const trimmed = String(body.successUrl).trim()
+      patch.successUrl = trimmed ? resolvePaytrSuccessUrlBase(trimmed) : null
+    }
   }
   if (typeof body.failUrl === 'string' || body.failUrl === null) {
-    patch.failUrl = body.failUrl === null ? null : String(body.failUrl).trim() || null
+    if (body.failUrl === null) {
+      patch.failUrl = null
+    } else {
+      const trimmed = String(body.failUrl).trim()
+      patch.failUrl = trimmed ? resolvePaytrFailUrlBase(trimmed) : null
+    }
   }
 
   const mk = typeof body.merchantKey === 'string' ? body.merchantKey.trim() : undefined

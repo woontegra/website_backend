@@ -185,7 +185,7 @@ export const paytrService = {
     }
     if (paytrCallbackUrlLooksLocalOrPrivate(merchantOkUrl) || paytrCallbackUrlLooksLocalOrPrivate(merchantFailUrl)) {
       console.warn(
-        '[paytr] Başarı/hata yönlendirme adresi localhost görünüyor (tarayıcı testi için normaldir). Canlıda FRONTEND_SUCCESS_URL ve FRONTEND_FAIL_URL kullanın.',
+        '[paytr] Başarı/hata yönlendirme adresi localhost görünüyor (tarayıcı testi için normaldir). Canlıda PUBLIC_SITE_URL / FRONTEND_URL kullanın.',
       )
     }
 
