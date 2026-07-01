@@ -6,6 +6,8 @@ const r = Router()
 
 r.post('/register', c.register)
 r.post('/login', c.login)
+r.post('/forgot-password', c.forgotPassword)
+r.post('/reset-password', c.resetPassword)
 
 r.use(customerAuthMiddleware)
 r.post('/logout', c.logout)

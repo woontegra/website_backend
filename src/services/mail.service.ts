@@ -5,6 +5,7 @@ import { pickBackendPublicOrigin, pickPublicSiteOrigin } from '../lib/mailDelive
 import {
   buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
+  buildCustomerPasswordResetHref,
   buildMuvekkilKasaSaasLoginHref,
   buildOrderDownloadMailHref,
   mailActionButton,
@@ -839,6 +840,49 @@ export const mailService = {
         bodyHtml,
         logoUrl,
         footerHtml,
+      }),
+    })
+  },
+
+  async sendCustomerPasswordResetEmail(data: {
+    customerName: string
+    customerEmail: string
+    plainToken: string
+    expiresMinutes: number
+  }) {
+    const logoUrl = await resolveMailLogoUrl()
+    const safeName = escapeMailHtml(data.customerName.trim() || 'Müşterimiz')
+    const resetHref = buildCustomerPasswordResetHref(data.plainToken)
+    const expiresLabel = `${data.expiresMinutes} dakika`
+
+    const bodyHtml = `
+      <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Şifrenizi sıfırlamak için aşağıdaki butona tıklayın.</p>
+      ${mailActionButton(resetHref, 'Şifremi sıfırla', '#059669')}
+      <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Bu bağlantı <strong>${escapeMailHtml(expiresLabel)}</strong> geçerlidir.</p>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Bu işlemi siz başlatmadıysanız bu e-postayı dikkate almayın.</p>`
+
+    const textBody = [
+      `Merhaba ${data.customerName.trim() || 'Müşterimiz'},`,
+      '',
+      'Şifrenizi sıfırlamak için aşağıdaki bağlantıyı kullanın:',
+      resetHref,
+      '',
+      `Bağlantı ${expiresLabel} geçerlidir.`,
+      '',
+      'Bu işlemi siz başlatmadıysanız bu e-postayı dikkate almayın.',
+      '',
+      'Woontegra',
+    ].join('\n')
+
+    await dispatchMail({
+      to: data.customerEmail,
+      subject: 'Woontegra hesabınız için şifre sıfırlama',
+      text: textBody,
+      html: mailWelcomeHtmlDocument({
+        title: 'Şifre sıfırlama',
+        bodyHtml,
+        logoUrl,
       }),
     })
   },

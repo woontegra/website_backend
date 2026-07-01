@@ -22,6 +22,12 @@ export function buildCustomerLoginPageHref(): string {
   return site ? `${site}/giris` : 'https://woontegra.com/giris'
 }
 
+export function buildCustomerPasswordResetHref(plainToken: string): string {
+  const site = pickPublicSiteOrigin()
+  const base = site ?? 'https://woontegra.com'
+  return `${base}/sifre-sifirla?token=${encodeURIComponent(plainToken)}`
+}
+
 /** Müvekkil Kasa SaaS web uygulaması giriş adresi (MUVEKKIL_KASA_SAAS_APP_URL). */
 export function buildMuvekkilKasaSaasLoginHref(): string | null {
   const raw = process.env.MUVEKKIL_KASA_SAAS_APP_URL?.trim()

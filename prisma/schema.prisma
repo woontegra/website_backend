@@ -287,7 +287,21 @@ model Customer {
   favorites    CustomerFavorite[]
   orders       Order[]
   licenses     License[]
-  saasMemberships CustomerSaasMembership[]
+  saasMemberships       CustomerSaasMembership[]
+  passwordResetTokens   CustomerPasswordResetToken[]
+}
+
+model CustomerPasswordResetToken {
+  id         String    @id @default(uuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([tokenHash])
 }
 
 model CustomerAddress {

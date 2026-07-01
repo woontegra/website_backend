@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { customersService } from '../services/customers.service'
+import { customerPasswordResetService } from '../services/customerPasswordReset.service'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -38,6 +39,41 @@ export async function login(req: Request, res: Response) {
     return res.json({ success: true, data })
   } catch {
     return res.status(401).json({ success: false, message: 'E-posta veya şifre hatalı' })
+  }
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  const body = req.body as Record<string, unknown>
+  const email = readString(body, 'email')
+  if (!email) {
+    return res.status(400).json({ ok: false, message: 'E-posta adresi zorunludur' })
+  }
+  try {
+    const result = await customerPasswordResetService.forgotPassword(email)
+    return res.json(result)
+  } catch (err) {
+    console.error('[customers] forgot-password error', err instanceof Error ? err.message : err)
+    return res.status(500).json({
+      ok: false,
+      message: 'Şifre sıfırlama işlemi şu anda tamamlanamadı. Lütfen daha sonra tekrar deneyin.',
+    })
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const body = req.body as Record<string, unknown>
+  const token = readString(body, 'token')
+  const password = readString(body, 'password')
+  if (!token || !password) {
+    return res.status(400).json({ ok: false, message: 'token ve password zorunludur' })
+  }
+  try {
+    const result = await customerPasswordResetService.resetPassword(token, password)
+    return res.json(result)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Şifre güncellenemedi'
+    const status = msg.includes('Geçersiz veya süresi dolmuş') ? 400 : 400
+    return res.status(status).json({ ok: false, message: msg })
   }
 }
 
@@ -215,9 +251,19 @@ export async function createSaasRenewOrder(req: Request, res: Response) {
   if (!membershipId) return res.status(400).json({ success: false, message: 'Geçersiz üyelik' })
   const body = req.body as Record<string, unknown>
   const renewalPeriod = typeof body.renewalPeriod === 'string' ? body.renewalPeriod.trim() : '12_MONTHS'
-  const rawPm = typeof body.paymentProvider === 'string' ? body.paymentProvider.toUpperCase().replace(/-/g, '_') : ''
+  const rawPm =
+    typeof body.paymentMethod === 'string'
+      ? body.paymentMethod
+      : typeof body.paymentProvider === 'string'
+        ? body.paymentProvider
+        : ''
   const paymentProvider =
-    rawPm === 'BANK_TRANSFER' || rawPm === 'BANK' || rawPm === 'HAVALE' || rawPm === 'EFT' ? 'BANK_TRANSFER' : 'PAYTR'
+    rawPm.toUpperCase().replace(/-/g, '_') === 'BANK_TRANSFER' ||
+    rawPm.toUpperCase() === 'BANK' ||
+    rawPm.toUpperCase() === 'HAVALE' ||
+    rawPm.toUpperCase() === 'EFT'
+      ? 'BANK_TRANSFER'
+      : 'PAYTR'
   const xf = req.headers['x-forwarded-for']
   const ip =
     typeof xf === 'string' && xf.length > 0
