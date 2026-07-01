@@ -22,35 +22,12 @@ function signCustomerToken(id: string, email: string) {
   return jwt.sign({ customerId: id, email }, JWT_SECRET, { audience: 'customer', expiresIn: '7d' })
 }
 
-async function getCustomerEmailOrThrow(customerId: string): Promise<string> {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    select: { email: true },
-  })
-  if (!customer) throw new Error('Hesap bulunamadı')
-  return customer.email.trim().toLowerCase()
-}
-
-function orderAccessWhere(customerId: string, customerEmail: string, orderNo?: string) {
+function customerOrderWhere(customerId: string, orderNo?: string) {
   return {
     archivedAt: null,
+    customerId,
     ...(orderNo ? { orderNo: orderNo.trim() } : {}),
-    OR: [
-      { customerId },
-      {
-        customerId: null,
-        customerEmail: { equals: customerEmail, mode: 'insensitive' as const },
-      },
-    ],
   }
-}
-
-async function linkOrphanOrdersToCustomer(customerId: string, orderIds: string[]) {
-  if (orderIds.length === 0) return
-  await prisma.order.updateMany({
-    where: { id: { in: orderIds }, customerId: null },
-    data: { customerId },
-  })
 }
 
 function collectMaskedLicenseKeysFromOrder(order: {
@@ -317,9 +294,8 @@ export const customersService = {
   },
 
   async listOrders(customerId: string) {
-    const customerEmail = await getCustomerEmailOrThrow(customerId)
     const rows = await prisma.order.findMany({
-      where: orderAccessWhere(customerId, customerEmail),
+      where: customerOrderWhere(customerId),
       orderBy: { createdAt: 'desc' },
       include: {
         paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
@@ -332,10 +308,6 @@ export const customersService = {
         },
       },
     })
-    await linkOrphanOrdersToCustomer(
-      customerId,
-      rows.filter((o) => !o.customerId).map((o) => o.id),
-    )
     return rows.map((o) => {
       const names = o.items.map((i) => i.productName).filter(Boolean)
       const first = names[0]?.trim() ?? 'Ürün'
@@ -361,9 +333,8 @@ export const customersService = {
   },
 
   async getMyOrder(customerId: string, orderNo: string) {
-    const customerEmail = await getCustomerEmailOrThrow(customerId)
     const order = await prisma.order.findFirst({
-      where: orderAccessWhere(customerId, customerEmail, orderNo),
+      where: customerOrderWhere(customerId, orderNo),
       include: {
         items: {
           orderBy: { id: 'asc' },
@@ -376,9 +347,6 @@ export const customersService = {
       const err = new Error('Sipariş bulunamadı') as Error & { status: number }
       err.status = 404
       throw err
-    }
-    if (!order.customerId) {
-      await prisma.order.update({ where: { id: order.id }, data: { customerId } })
     }
     const bankPending =
       order.paymentProvider === PaymentProvider.BANK_TRANSFER && order.status === 'PENDING'
@@ -451,27 +419,9 @@ export const customersService = {
   },
 
   async listLicenses(customerId: string): Promise<CustomerLicenseListItem[]> {
-    const customerEmail = await getCustomerEmailOrThrow(customerId)
-    const central = await fetchLicenseServerCustomerLicenses(customerEmail)
-
-    const centralByOrderNo = new Map<string, typeof central.licenses>()
-    const centralOrphans: typeof central.licenses = []
-    for (const lic of central.licenses) {
-      const orderNo = lic.websiteOrderNo?.trim()
-      if (!orderNo) {
-        centralOrphans.push(lic)
-        continue
-      }
-      const bucket = centralByOrderNo.get(orderNo) ?? []
-      bucket.push(lic)
-      centralByOrderNo.set(orderNo, bucket)
-    }
-
-    const rows: CustomerLicenseListItem[] = []
-
     const orders = await prisma.order.findMany({
       where: {
-        ...orderAccessWhere(customerId, customerEmail),
+        ...customerOrderWhere(customerId),
         status: { in: ['PAID', 'PROCESSING'] },
       },
       orderBy: { createdAt: 'desc' },
@@ -486,6 +436,29 @@ export const customersService = {
         },
       },
     })
+
+    const orderNoSet = new Set(orders.map((o) => o.orderNo))
+    const centralByOrderNo = new Map<string, Awaited<ReturnType<typeof fetchLicenseServerCustomerLicenses>>['licenses']>()
+
+    if (orderNoSet.size > 0) {
+      const customer = await prisma.customer.findUnique({
+        where: { id: customerId },
+        select: { email: true },
+      })
+      const customerEmail = customer?.email?.trim().toLowerCase() ?? ''
+      if (customerEmail) {
+        const central = await fetchLicenseServerCustomerLicenses(customerEmail)
+        for (const lic of central.licenses) {
+          const orderNo = lic.websiteOrderNo?.trim()
+          if (!orderNo || !orderNoSet.has(orderNo)) continue
+          const bucket = centralByOrderNo.get(orderNo) ?? []
+          bucket.push(lic)
+          centralByOrderNo.set(orderNo, bucket)
+        }
+      }
+    }
+
+    const rows: CustomerLicenseListItem[] = []
 
     for (const order of orders) {
       const licenseItems = order.items.filter(
@@ -579,40 +552,6 @@ export const customersService = {
         createdAt: order.createdAt.toISOString(),
         source: 'local',
       })
-    }
-
-    for (const lic of centralOrphans) {
-      rows.push({
-        id: lic.id ?? null,
-        licenseKeyMasked: lic.licenseKeyMasked,
-        productName: lic.productName,
-        programName: lic.programName,
-        appCode: lic.appCode || null,
-        orderNo: lic.websiteOrderNo ?? `central-${lic.id ?? lic.createdAt}`,
-        status: lic.status,
-        expiresAt: lic.expiresAt || null,
-        maxDevices: lic.maxDevices,
-        createdAt: lic.createdAt,
-        source: 'central',
-      })
-    }
-
-    for (const [, leftovers] of centralByOrderNo) {
-      for (const lic of leftovers) {
-        rows.push({
-          id: lic.id ?? null,
-          licenseKeyMasked: lic.licenseKeyMasked,
-          productName: lic.productName,
-          programName: lic.programName,
-          appCode: lic.appCode || null,
-          orderNo: lic.websiteOrderNo ?? `central-${lic.id ?? lic.createdAt}`,
-          status: lic.status,
-          expiresAt: lic.expiresAt || null,
-          maxDevices: lic.maxDevices,
-          createdAt: lic.createdAt,
-          source: 'central',
-        })
-      }
     }
 
     return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
