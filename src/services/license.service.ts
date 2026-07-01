@@ -18,6 +18,7 @@ import {
 } from '../lib/productCode'
 import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
 import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
+import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
@@ -204,13 +205,19 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   const licenseCustomerPhone = order.customerPhone?.trim() || null
 
   for (const item of order.items) {
+    if (isMuvekkilKasaSaasProduct(item.product) || isMuvekkilKasaSaasProduct({ slug: item.productSlug })) {
+      continue
+    }
     if (!isOrderItemEligibleForCentralLicense(item)) continue
     const product = item.product!
     const appCode = normalizeLicenseAppCodeInput(product.licenseAppCode)!
     const isSaasCentral = product.productType === ProductType.SAAS
 
     const qty = 1
-    const already = item.licenseServerUnitsNotified ?? 0
+    let already = item.licenseServerUnitsNotified ?? 0
+    if (!isSaasCentral && already >= qty && !item.licenseServerLicenseKey?.trim() && item.licenseServerLastError?.trim()) {
+      already = 0
+    }
     const downloadUrl = resolveItemDownloadUrlForLicenseServer(item)
     const licenseDays = Math.max(1, product.licenseDays ?? 365)
     const maxDevices = Math.max(1, product.licenseMaxDevices ?? 1)

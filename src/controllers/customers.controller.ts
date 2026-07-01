@@ -189,6 +189,62 @@ export async function listLicenses(req: Request, res: Response) {
   return res.json({ success: true, data })
 }
 
+export async function listSaasMemberships(req: Request, res: Response) {
+  if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
+  const data = await customersService.listSaasMemberships(req.customer.id)
+  return res.json({ success: true, data })
+}
+
+export async function getSaasRenewQuote(req: Request, res: Response) {
+  if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
+  const membershipId = String(req.params.id ?? '').trim()
+  const renewalPeriod = String(req.query.renewalPeriod ?? '12_MONTHS').trim()
+  if (!membershipId) return res.status(400).json({ success: false, message: 'Geçersiz üyelik' })
+  try {
+    const data = await customersService.getSaasRenewQuote(req.customer.id, membershipId, renewalPeriod)
+    return res.json({ success: true, data })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    return res.status(err.status ?? 500).json({ success: false, message: err.message || 'Hata' })
+  }
+}
+
+export async function createSaasRenewOrder(req: Request, res: Response) {
+  if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
+  const membershipId = String(req.params.id ?? '').trim()
+  if (!membershipId) return res.status(400).json({ success: false, message: 'Geçersiz üyelik' })
+  const body = req.body as Record<string, unknown>
+  const renewalPeriod = typeof body.renewalPeriod === 'string' ? body.renewalPeriod.trim() : '12_MONTHS'
+  const rawPm = typeof body.paymentProvider === 'string' ? body.paymentProvider.toUpperCase().replace(/-/g, '_') : ''
+  const paymentProvider =
+    rawPm === 'BANK_TRANSFER' || rawPm === 'BANK' || rawPm === 'HAVALE' || rawPm === 'EFT' ? 'BANK_TRANSFER' : 'PAYTR'
+  const xf = req.headers['x-forwarded-for']
+  const ip =
+    typeof xf === 'string' && xf.length > 0
+      ? xf.split(',')[0].trim().slice(0, 45)
+      : (req.socket.remoteAddress || '').replace(/^::ffff:/, '').slice(0, 45)
+  const ua = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 500) : ''
+  try {
+    const data = await customersService.createSaasRenewOrder({
+      customerId: req.customer.id,
+      membershipId,
+      renewalPeriod,
+      paymentProvider,
+      acceptPreInfo: body.acceptPreInfo === true,
+      acceptDistanceSales: body.acceptDistanceSales === true,
+      acceptKvkk: body.acceptKvkk === true,
+      acceptSaasSubscription: body.acceptSaasSubscription === true,
+      acceptDigitalServiceWaiver: body.acceptDigitalServiceWaiver === true,
+      acceptedIp: ip || null,
+      acceptedUserAgent: ua || null,
+    })
+    return res.status(201).json({ success: true, data })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    return res.status(err.status ?? 500).json({ success: false, message: err.message || 'Sipariş oluşturulamadı' })
+  }
+}
+
 export async function listFavorites(req: Request, res: Response) {
   if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
   const data = await customersService.listFavorites(req.customer.id)

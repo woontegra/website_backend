@@ -8,6 +8,8 @@ import { getBankTransferCustomerInfo } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
 import { resolveOrderPaymentRowStatus } from './orders.service'
 import { fetchLicenseServerCustomerLicenses } from './woontegraLicenseServer.client'
+import { listCustomerSaasMemberships } from './customerSaasMembership.service'
+import { createSaasRenewOrder, getSaasRenewQuote as fetchSaasRenewQuote } from './customerSaasRenewal.service'
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
 const SALT_ROUNDS = 10
@@ -671,5 +673,17 @@ export const customersService = {
   async isFavorite(customerId: string, productId: string): Promise<boolean> {
     const n = await prisma.customerFavorite.count({ where: { customerId, productId } })
     return n > 0
+  },
+
+  async listSaasMemberships(customerId: string) {
+    return listCustomerSaasMemberships(customerId)
+  },
+
+  async getSaasRenewQuote(customerId: string, membershipId: string, renewalPeriod: string) {
+    return fetchSaasRenewQuote(customerId, membershipId, renewalPeriod)
+  },
+
+  async createSaasRenewOrder(input: Parameters<typeof createSaasRenewOrder>[0]) {
+    return createSaasRenewOrder(input)
   },
 }

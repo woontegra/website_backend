@@ -11,6 +11,7 @@ import {
   type OrderLegalConsentFlags,
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
+import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
 import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
@@ -319,6 +320,17 @@ export const ordersService = {
     const byId = new Map(products.map((p) => [p.id, p]))
     const denials: { productId: string; name: string; slug: string | null; reason: string; code: ProductOrderDenial }[] =
       []
+
+    const hasMuvekkilKasaSaas = products.some((p) =>
+      isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
+    )
+    if (hasMuvekkilKasaSaas && !input.customerId?.trim()) {
+      const err = new Error('SAAS_LOGIN_REQUIRED') as Error & { status: number; publicMessage?: string }
+      err.status = 403
+      err.publicMessage = 'SaaS ürün satın almak için müşteri hesabınızla giriş yapmanız gerekir.'
+      throw err
+    }
+
     for (const id of canonicalIds) {
       const p = byId.get(id)
       if (!p) {
@@ -952,6 +964,15 @@ export const ordersAdminService = {
       throw err
     }
     if (order.status === 'PAID' || order.status === 'PROCESSING') {
+      try {
+        await fulfillPaidOrderDelivery(order.id, undefined)
+      } catch (e) {
+        console.error('[orders] fulfill after bank confirm (already paid) failed', {
+          orderNo: order.orderNo,
+          orderId: order.id,
+          message: e instanceof Error ? e.message : String(e),
+        })
+      }
       return { orderNo: order.orderNo, alreadyPaid: true as const }
     }
     if (order.status !== 'PENDING') {

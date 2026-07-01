@@ -162,7 +162,7 @@ export const mailService = {
 
       if (l.downloadUrl.startsWith('saas:')) {
         const saasNote =
-          'Web tabanlı program için kullanım hesabınız ve giriş bilgileriniz Woontegra tarafından e-posta ile paylaşılacaktır.'
+          'Müvekkil Kasa SaaS hesabınız hazırlandı. Aktivasyon bilgileri e-posta adresinize gönderilecektir.'
         productSectionsHtml.push(
           `<div style="margin-bottom:24px;"><h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">${escapeHtml(l.productName)}</h3><p style="margin:0;font-size:14px;line-height:1.6;color:#475569;">${escapeHtml(saasNote)}</p></div>`,
         )

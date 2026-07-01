@@ -287,6 +287,7 @@ model Customer {
   favorites    CustomerFavorite[]
   orders       Order[]
   licenses     License[]
+  saasMemberships CustomerSaasMembership[]
 }
 
 model CustomerAddress {
@@ -320,6 +321,38 @@ model CustomerFavorite {
 
   @@unique([customerId, productId])
   @@index([customerId])
+}
+
+enum CustomerSaasMembershipStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+/// Woontegra Website müşteri hesabına bağlı SaaS üyelik kaydı (MK SaaS provision sonrası).
+model CustomerSaasMembership {
+  id               String                       @id @default(uuid())
+  customerId       String
+  customer         Customer                     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productCode      String
+  tenantId         String                       @unique
+  tenantSlug       String
+  licenseKey       String
+  ownerEmail       String
+  status           CustomerSaasMembershipStatus @default(ACTIVE)
+  licenseStartDate DateTime
+  licenseEndDate   DateTime
+  firstOrderId     String                       @unique
+  lastOrderId      String
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+  renewalOrderItems OrderItem[]
+
+  @@unique([customerId, productCode, tenantId])
+  @@index([customerId])
+  @@index([customerId, productCode, status])
 }
 
 model Product {
@@ -366,6 +399,7 @@ model Product {
   orderItems          OrderItem[]
   favoritedBy         CustomerFavorite[]
   licenses            License[]
+  saasMemberships     CustomerSaasMembership[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   navigationItems     NavigationMenuItem[]
@@ -593,8 +627,13 @@ model OrderItem {
   licenseServerLicenseKey    String?
   /// Mail gönderilene kadar tutulur; gönderim sonrası silinir
   licenseServerActivationPasswordPending String? @db.Text
+  /// SaaS üyelik yenileme satırı — dolu ise provision değil renew akışı
+  saasMembershipId String?
+  saasMembership   CustomerSaasMembership? @relation(fields: [saasMembershipId], references: [id], onDelete: SetNull)
+  saasRenewalDays  Int?
 
   @@index([orderId])
+  @@index([saasMembershipId])
 }
 
 /// Sipariş satırı başına (adet kadar) veya admin manuel — masaüstü / indirilebilir ürün lisansı

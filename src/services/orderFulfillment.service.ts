@@ -13,6 +13,11 @@ import {
   clearExternalLicensePendingPasswords,
   type ExternalLicenseProvisionSuccess,
 } from './license.service'
+import {
+  buildMuvekkilKasaSaasMailLines,
+  ensureMuvekkilKasaSaasOrders,
+} from './muvekkilKasaSaasProvision.service'
+import { ensureMuvekkilKasaSaasRenewals } from './muvekkilKasaSaasRenew.service'
 
 const paidOrderDeliveryItemInclude = {
   product: {
@@ -150,6 +155,24 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
+  const mkSaasResult = await ensureMuvekkilKasaSaasOrders(fresh.id)
+  if (mkSaasResult.errors.length > 0) {
+    console.error('[orders] müvekkil kasa saas provision errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: mkSaasResult.errors,
+    })
+  }
+
+  const mkSaasRenewResult = await ensureMuvekkilKasaSaasRenewals(fresh.id)
+  if (mkSaasRenewResult.errors.length > 0) {
+    console.error('[orders] müvekkil kasa saas renew errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: mkSaasRenewResult.errors,
+    })
+  }
+
   const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
   if (externalResult.errors.length > 0) {
     console.error('[orders] external license server errors', {
@@ -162,11 +185,17 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   if (!fresh.downloadEmailSentAt) {
     const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
     const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
+    const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
 
     const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
     const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
 
-    const allMailCandidates = [...externalMailLines]
+    const allMailCandidates: {
+      id: string
+      productName: string
+      downloadUrl: string
+      licenses?: { licenseKey: string; activationPassword?: string }[]
+    }[] = [...externalMailLines, ...mkSaasMailLines]
     if (localLinesRaw.length > 0) {
       if (!checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
         if (allMailCandidates.length === 0) return
@@ -192,9 +221,14 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       const allCentralMailSent =
         externalResult.provisioned.length > 0 &&
         externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
+      const saasRenewedOk =
+        mkSaasRenewResult.renewed.length > 0 && mkSaasRenewResult.errors.length === 0
       const saasProvisionedOk =
-        externalResult.provisioned.some((p) => p.deliveryType === 'SAAS') &&
-        externalResult.errors.length === 0
+        ((externalResult.provisioned.some((p) => p.deliveryType === 'SAAS') ||
+          mkSaasResult.provisioned.length > 0) &&
+          externalResult.errors.length === 0 &&
+          mkSaasResult.errors.length === 0) ||
+        saasRenewedOk
       if ((allCentralMailSent || saasProvisionedOk) && externalResult.errors.length === 0) {
         await prisma.order.update({
           where: { id: fresh.id },
@@ -204,6 +238,11 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       }
       if (items.some((i) => i.product?.licenseRequired) && externalResult.errors.length > 0) {
         console.error('[orders] central license delivery blocked — provision failed', {
+          orderNo: fresh.orderNo,
+          orderId: fresh.id,
+        })
+      } else if (mkSaasResult.errors.length > 0 || mkSaasRenewResult.errors.length > 0) {
+        console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew failed', {
           orderNo: fresh.orderNo,
           orderId: fresh.id,
         })
