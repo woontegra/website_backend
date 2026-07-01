@@ -12,6 +12,7 @@ import {
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
+import { formatDigitalDeliveryLicenseError } from '../lib/digitalDeliveryErrorLabel'
 import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
@@ -1265,6 +1266,8 @@ export const ordersAdminService = {
               select: {
                 productType: true,
                 licenseRequired: true,
+                slug: true,
+                licenseAppCode: true,
                 downloadUrl: true,
                 downloadFiles: true,
                 downloadMedia: { select: { url: true } },
@@ -1292,10 +1295,15 @@ export const ordersAdminService = {
     const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
     const centralLicenseErrors = order.items
       .filter((i) => i.product?.licenseRequired && i.licenseServerLastError?.trim())
-      .map((i) => ({ productName: i.productName, error: i.licenseServerLastError!.trim() }))
+      .map((i) => ({
+        productName: i.productName,
+        error: i.licenseServerLastError!.trim(),
+        product: i.product,
+      }))
     let digitalDeliveryEmailAlert: string | null = null
     if (paidLike && centralLicenseErrors.length > 0) {
-      digitalDeliveryEmailAlert = `Merkezi lisans oluşturulamadı: ${centralLicenseErrors[0]!.error}`
+      const first = centralLicenseErrors[0]!
+      digitalDeliveryEmailAlert = formatDigitalDeliveryLicenseError(first.product, first.error)
     } else if (paidLike && !order.downloadEmailSentAt && (mailLines.length > 0 || !deliveryCheckOk)) {
       if (!deliveryCheckOk) {
         digitalDeliveryEmailAlert =
