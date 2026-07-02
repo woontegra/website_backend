@@ -83,7 +83,9 @@ function mkLoginUrlLooksLocalOrPrivate(url: string): boolean {
 
 
 function toMkLoginHref(raw: string): string | null {
-  const trimmed = raw.trim()
+  // Env/provision değeri virgülle ayrılmış liste veya sonda virgül/boşluk içerebilir
+  // ("https://x,"); ilk segmenti al ve noktalama/boşlukları temizle.
+  const trimmed = (raw.split(',')[0] ?? '').trim().replace(/[\s,;]+$/, '')
   if (!trimmed) return null
   try {
     const u = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
