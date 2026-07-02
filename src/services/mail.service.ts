@@ -6,10 +6,10 @@ import {
   buildCustomerLoginPageHref,
   buildCustomerOrdersPageHref,
   buildCustomerPasswordResetHref,
-  buildMuvekkilKasaSaasLoginHref,
   buildOrderDownloadMailHref,
   mailActionButton,
   mailDownloadButton,
+  resolveMuvekkilKasaSaasLoginHref,
 } from '../lib/mailDownloadLink'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { settingsService } from './settings.service'
@@ -123,7 +123,8 @@ function formatMailDateTr(iso: string): string {
 
 function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { html: string; text: string } {
   const saas = line.saas!
-  const loginHref = saas.loginUrl?.trim() || buildMuvekkilKasaSaasLoginHref()
+  const loginHref = resolveMuvekkilKasaSaasLoginHref(saas.loginUrl)
+  const ownerEmail = saas.ownerEmail.trim()
   const rows: { label: string; value: string; mono?: boolean }[] = [
     { label: 'Ürün', value: escapeMailHtml(line.productName) },
     { label: 'Sipariş No', value: escapeMailHtml(orderNo), mono: true },
@@ -134,10 +135,7 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
       value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;word-break:break-all;">${escapeMailHtml(loginHref)}</a>`,
     })
   }
-  rows.push({ label: 'Giriş e-postası', value: escapeMailHtml(saas.ownerEmail) })
-  if (saas.ownerUsername?.trim()) {
-    rows.push({ label: 'Kullanıcı adı', value: escapeMailHtml(saas.ownerUsername.trim()), mono: true })
-  }
+  rows.push({ label: 'Kullanıcı adı', value: escapeMailHtml(ownerEmail) })
   if (saas.temporaryPassword?.trim()) {
     rows.push({ label: 'Geçici şifre', value: escapeMailHtml(saas.temporaryPassword.trim()), mono: true })
   }
@@ -154,15 +152,7 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     { label: 'Bitiş tarihi', value: escapeMailHtml(formatMailDateTr(saas.licenseEndDate)) },
   )
 
-  const loginButton = loginHref
-    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:20px 0 0;">
-        <tr>
-          <td align="center" style="border-radius:10px;background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);">
-            <a href="${escapeMailHtml(loginHref)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Giriş Yap</a>
-          </td>
-        </tr>
-      </table>`
-    : ''
+  const loginButton = loginHref ? mailActionButton(loginHref, 'Giriş Yap', '#059669') : ''
 
   const html = `
     <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
@@ -175,8 +165,7 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     line.productName,
     `Sipariş No: ${orderNo}`,
     loginHref ? `Müvekkil Kasa giriş adresi: ${loginHref}` : null,
-    `Giriş e-postası: ${saas.ownerEmail}`,
-    saas.ownerUsername?.trim() ? `Kullanıcı adı: ${saas.ownerUsername.trim()}` : null,
+    `Kullanıcı adı: ${ownerEmail}`,
     saas.temporaryPassword?.trim() ? `Geçici şifre: ${saas.temporaryPassword.trim()}` : null,
     saas.licenseKey?.trim() ? `Lisans anahtarı: ${saas.licenseKey.trim()}` : null,
     saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
@@ -431,7 +420,7 @@ export const mailService = {
       ? 'Woontegra Lisans ve Kurulum Bilgileri'
       : hasDesktop
         ? `Siparişiniz onaylandı — ${data.orderNo}`
-        : `SaaS üyeliğiniz aktif edildi — ${data.orderNo}`
+        : `Müvekkil Kasa üyeliğiniz aktif edildi — ${data.orderNo}`
 
     const introHtml = hasDesktop
       ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Sayın ${safeName},</p>
@@ -474,7 +463,7 @@ export const mailService = {
       'Woontegra',
     ].join('\n')
 
-    const docTitle = hasDesktop ? 'Woontegra Lisans ve Kurulum Bilgileri' : 'Müvekkil Kasa SaaS üyeliğiniz aktif edildi'
+    const docTitle = hasDesktop ? 'Woontegra Lisans ve Kurulum Bilgileri' : 'Müvekkil Kasa üyeliğiniz aktif edildi'
 
     await dispatchMail({
       to: data.customerEmail,
