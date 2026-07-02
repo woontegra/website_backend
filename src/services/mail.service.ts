@@ -137,8 +137,15 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     })
   }
   rows.push({ label: 'Kullanıcı adı', value: escapeMailHtml(ownerEmail) })
-  if (saas.temporaryPassword?.trim()) {
-    rows.push({ label: 'Geçici şifre', value: escapeMailHtml(saas.temporaryPassword.trim()), mono: true })
+  const hasTempPassword = Boolean(saas.temporaryPassword?.trim())
+  if (hasTempPassword) {
+    rows.push({ label: 'Geçici şifre', value: escapeMailHtml(saas.temporaryPassword!.trim()), mono: true })
+  } else {
+    rows.push({
+      label: 'Şifre',
+      value:
+        'Bu hesabın geçici şifresi ilk aktivasyon e-postanızda gönderilmişti; güvenlik gereği tekrar gösterilmez. Şifrenizi bilmiyorsanız giriş ekranındaki “Şifremi unuttum” ile sıfırlayabilirsiniz.',
+    })
   }
   if (saas.musteriNo?.trim()) {
     rows.push({ label: 'Müşteri No', value: escapeMailHtml(saas.musteriNo.trim()), mono: true })
@@ -170,7 +177,9 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     `Sipariş No: ${orderNo}`,
     loginHref ? `Müvekkil Kasa giriş adresi: ${loginHref}` : null,
     `Kullanıcı adı: ${ownerEmail}`,
-    saas.temporaryPassword?.trim() ? `Geçici şifre: ${saas.temporaryPassword.trim()}` : null,
+    hasTempPassword
+      ? `Geçici şifre: ${saas.temporaryPassword!.trim()}`
+      : 'Şifre: Geçici şifreniz ilk aktivasyon e-postanızda gönderilmişti. Bilmiyorsanız giriş ekranındaki "Şifremi unuttum" ile sıfırlayın.',
     saas.musteriNo?.trim() ? `Müşteri No: ${saas.musteriNo.trim()}` : null,
     saas.licenseKey?.trim() ? `Lisans anahtarı: ${saas.licenseKey.trim()}` : null,
     saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
