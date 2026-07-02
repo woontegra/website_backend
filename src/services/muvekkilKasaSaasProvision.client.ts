@@ -42,6 +42,7 @@ export type MuvekkilKasaSaasProvisionResponse = {
   licenseStartDate: string
   licenseEndDate: string
   licenseKey: string | null
+  musteriNo?: string | null
   mailSent?: boolean
   mailError?: string
 }

@@ -70,6 +70,8 @@ export type MuvekkilKasaSaasProvisionSuccess = {
 
   loginUrl: string | null
 
+  musteriNo: string | null
+
   licenseStartDate: string
 
   licenseEndDate: string
@@ -107,6 +109,8 @@ export type MuvekkilKasaSaasMailLine = {
     temporaryPassword: string | null
 
     loginUrl: string | null
+
+    musteriNo: string | null
 
   }
 
@@ -410,6 +414,8 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
         loginUrl: resolveMuvekkilKasaSaasLoginHref(),
 
+        musteriNo: null,
+
         licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
 
         licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
@@ -558,6 +564,7 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
         ownerUsername: null,
         temporaryPassword: null,
         loginUrl: resolveMuvekkilKasaSaasLoginHref(),
+        musteriNo: null,
         licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
         licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
       })
@@ -716,6 +723,8 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
       loginUrl: resolveMkLoginUrlFromProvision(data),
 
+      musteriNo: data.musteriNo ?? null,
+
       licenseStartDate: data.licenseStartDate,
 
       licenseEndDate: data.licenseEndDate,
@@ -801,6 +810,8 @@ export function buildMuvekkilKasaSaasMailLines(
           temporaryPassword: s.temporaryPassword,
 
           loginUrl: s.loginUrl,
+
+          musteriNo: s.musteriNo,
 
         },
 

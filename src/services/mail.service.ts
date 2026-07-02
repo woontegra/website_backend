@@ -91,6 +91,7 @@ type PaidOrderMailSaasDetails = {
   ownerUsername: string | null
   temporaryPassword: string | null
   loginUrl: string | null
+  musteriNo: string | null
   tenantSlug: string
   tenantName: string
   licenseStartDate: string
@@ -139,6 +140,9 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
   if (saas.temporaryPassword?.trim()) {
     rows.push({ label: 'Geçici şifre', value: escapeMailHtml(saas.temporaryPassword.trim()), mono: true })
   }
+  if (saas.musteriNo?.trim()) {
+    rows.push({ label: 'Müşteri No', value: escapeMailHtml(saas.musteriNo.trim()), mono: true })
+  }
   if (saas.licenseKey?.trim()) {
     rows.push({ label: 'Lisans anahtarı', value: escapeMailHtml(saas.licenseKey.trim()), mono: true })
   }
@@ -167,6 +171,7 @@ function buildSaasMailSectionHtml(line: PaidOrderMailLine, orderNo: string): { h
     loginHref ? `Müvekkil Kasa giriş adresi: ${loginHref}` : null,
     `Kullanıcı adı: ${ownerEmail}`,
     saas.temporaryPassword?.trim() ? `Geçici şifre: ${saas.temporaryPassword.trim()}` : null,
+    saas.musteriNo?.trim() ? `Müşteri No: ${saas.musteriNo.trim()}` : null,
     saas.licenseKey?.trim() ? `Lisans anahtarı: ${saas.licenseKey.trim()}` : null,
     saas.tenantName?.trim() ? `Büro: ${saas.tenantName.trim()}` : saas.tenantSlug ? `Büro kodu: ${saas.tenantSlug}` : null,
     `Başlangıç: ${formatMailDateTr(saas.licenseStartDate)}`,
