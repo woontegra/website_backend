@@ -202,6 +202,14 @@ function effectiveProductCoverImage(p: Pick<ProductRow, 'coverImage' | 'coverIma
   return p.coverImage?.trim() || null
 }
 
+/** Kapak görseli yoksa ilk galeri görselini (IMAGE) kapak olarak kullanır. */
+function firstGalleryImageUrl(p: Pick<ProductRow, 'galleryImages'>): string | null {
+  const images = (p.galleryImages ?? [])
+    .filter((g) => g.media.fileType === 'IMAGE' && g.media.url?.trim())
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+  return images[0]?.media.url?.trim() || null
+}
+
 function effectiveDownloadUrlForProduct(p: Pick<ProductRow, 'downloadUrl' | 'downloadMedia' | 'downloadFiles'>): string {
   return resolveProductDeliveryRawUrl({
     downloadUrl: p.downloadUrl,
@@ -308,7 +316,7 @@ function mapPublicList(p: ProductRow): PublicProductListItem {
     version: p.version,
     purchaseEnabled: p.purchaseEnabled,
     licenseMonths: p.licenseMonths,
-    coverImage: effectiveProductCoverImage(p),
+    coverImage: effectiveProductCoverImage(p) ?? firstGalleryImageUrl(p),
     category: publicCategory(p.category ?? undefined),
   }
 }
