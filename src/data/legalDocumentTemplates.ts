@@ -20,11 +20,12 @@ ${SELLER_BLOCK}
 <p>Sepette yer alan kalemler; masaüstü yazılım (indirilebilir kurulum dosyası ve lisans) ve/veya web tabanlı yazılım hizmeti (SaaS abonelik) niteliğindedir. Ürün adı, tipi ve plan bilgisi yukarıdaki listede gösterilir.</p>
 <h2>4. Ürün tipi ve plan</h2>
 <ul>
-<li><strong>Masaüstü (DOWNLOAD):</strong> Kurulum dosyası ve lisans anahtarı ile kullanım; plan: <strong>Ömür Boyu Lisans</strong> (süreli güncelleme/destek koşulları sözleşmede belirtilir).</li>
-<li><strong>SaaS:</strong> İnternet üzerinden erişilen web tabanlı yazılım; plan: <strong>Yıllık Abonelik</strong> (siparişte belirtilen yıl süresi).</li>
+<li><strong>Masaüstü (indirilebilir):</strong> İndirilebilir masaüstü yazılım; kurulum dosyası ve lisans anahtarı ile kullanım; plan: <strong>Ömür Boyu Lisans</strong> (süreli güncelleme/destek koşulları sözleşmede belirtilir).</li>
+<li><strong>Web tabanlı SaaS aboneliği (dijital hizmet):</strong> İnternet üzerinden erişilen web tabanlı yazılım; plan: <strong>Yıllık Abonelik</strong> — <strong>1 yıl kullanım hakkı</strong>.</li>
 </ul>
 <h2>5. Toplam fiyat ve ödeme bilgisi</h2>
 <p><strong>Sipariş numarası:</strong> {{orderNo}}<br/><strong>Ödenecek toplam tutar:</strong> {{orderTotal}} {{currency}}<br/>Fiyatlara KDV dahildir (aksi açıkça belirtilmedikçe). Ödeme; güvenli ödeme altyapısı (kart) veya Havale/EFT ile yapılabilir.</p>
+<p><strong>SaaS / abonelik ürünlerde abonelik bilgileri:</strong><br/><strong>Abonelik süresi:</strong> 1 yıl (yıllık abonelik)<br/><strong>Başlangıç tarihi:</strong> Ödeme onayı ve hesap aktivasyonu sonrası başlar<br/><strong>Bitiş tarihi:</strong> Başlangıç tarihinden itibaren 1 yıl sonra sona erer</p>
 <h2>6. Teslimat / hizmetin ifası</h2>
 <p><strong>Masaüstü ürünler:</strong> Ödeme onayından sonra kurulum dosyası bağlantısı ve lisans bilgileri kayıtlı e-posta adresine iletilir.<br/><strong>SaaS hizmetleri:</strong> Ödeme onayından sonra abonelik aktif edilir; kullanıcı hesabı ve giriş bilgileri e-posta ile paylaşılır.</p>
 <h2>7. Cayma hakkı bilgilendirmesi</h2>
@@ -60,6 +61,7 @@ ${SELLER_BLOCK}
 <h2>4. Ürün / hizmet bilgileri</h2>
 {{productList}}
 <p><strong>Sipariş no:</strong> {{orderNo}} — <strong>Toplam bedel:</strong> {{orderTotal}} {{currency}}</p>
+<p><strong>SaaS / abonelik ürünlerde abonelik bilgileri:</strong><br/><strong>Abonelik süresi:</strong> 1 yıl (yıllık abonelik)<br/><strong>Başlangıç tarihi:</strong> Ödeme onayı ve hesap aktivasyonu sonrası başlar<br/><strong>Bitiş tarihi:</strong> Başlangıç tarihinden itibaren 1 yıl sonra sona erer</p>
 <h2>5. Fiyat ve ödeme</h2>
 <p>Sözleşme bedeli yukarıda gösterilmiştir. Ödeme onayı alınmadan teslimat veya hizmet aktivasyonu yapılmaz. Ödeme aracına ilişkin güvenlik önlemleri ödeme kuruluşu tarafından sağlanır.</p>
 <h2>6. Dijital teslimat / hizmetin ifası</h2>
@@ -187,10 +189,11 @@ ${SELLER_BLOCK}
 <h2>4. Hizmetin kapsamı</h2>
 {{productList}}
 <p><strong>Sipariş no:</strong> {{orderNo}} — <strong>Toplam bedel:</strong> {{orderTotal}} {{currency}}</p>
+<p><strong>Hizmet türü:</strong> Web tabanlı SaaS aboneliği (dijital hizmet)<br/><strong>Abonelik süresi:</strong> 1 yıl (yıllık abonelik)<br/><strong>Başlangıç tarihi:</strong> Ödeme onayı ve hesap aktivasyonu sonrası başlar<br/><strong>Bitiş tarihi:</strong> Başlangıç tarihinden itibaren 1 yıl sonra sona erer</p>
 <h2>5. SaaS abonelik modeli</h2>
 <p>Hizmet, abonelik (subscription) modeli ile sunulur; kullanım hakkı süreli olup mülkiyet devri yapılmaz.</p>
 <h2>6. Yıllık abonelik süresi</h2>
-<p>Abonelik süresi siparişte belirtilen yıl (kullanım süresi) kadardır. Süre bitiminde erişim sona erer; yenileme ayrıca satın alma veya bildirim ile yapılır.</p>
+<p>Abonelik süresi 1 yıldır (siparişte belirtilen yıllık kullanım süresi). <strong>Başlangıç tarihi:</strong> ödeme onayı ve hesap aktivasyonu sonrası başlar. <strong>Bitiş tarihi:</strong> başlangıç tarihinden itibaren 1 yıl sonra sona erer. Süre bitiminde erişim sona erer; yenileme ayrıca satın alma veya bildirim ile yapılır.</p>
 <h2>7. Aboneliğin başlaması</h2>
 <p>Ödeme onayından sonra abonelik aktif edilir; kullanıcı hesabı ve giriş bilgileri Abone’nin e-posta adresine iletilir.</p>
 <h2>8. Ödeme ve fiyat</h2>
@@ -270,6 +273,7 @@ ${SELLER_BLOCK}
 <p><strong>Sipariş:</strong> {{orderNo}}</p>
 <h2>Hizmetler</h2>
 {{productList}}
+<p><strong>Hizmet türü:</strong> Web tabanlı SaaS aboneliği (dijital hizmet)<br/><strong>Abonelik süresi:</strong> 1 yıl (yıllık abonelik)<br/><strong>Başlangıç tarihi:</strong> Ödeme onayı ve hesap aktivasyonu sonrası başlar<br/><strong>Bitiş tarihi:</strong> Başlangıç tarihinden itibaren 1 yıl sonra sona erer</p>
 <h2>Bilgilendirme</h2>
 <p>SaaS (web tabanlı yazılım) hizmetleri elektronik ortamda ifa edilir. Tüketicinin onayı ile ödeme sonrası hizmetin derhâl aktif edilmesi hâlinde, ilgili mevzuat uyarınca cayma hakkı istisnası uygulanabilir.</p>
 <h2>Açık onay beyanı</h2>
