@@ -17,6 +17,7 @@
     "report:download-delivery": "tsx scripts/report-download-delivery.ts",
     "inspect:order-license": "tsx scripts/inspect-order-license.ts",
     "retry:order-fulfillment": "tsx scripts/retry-order-fulfillment.ts",
+    "cleanup:saas-membership": "tsx scripts/cleanup-saas-membership.ts",
     "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },

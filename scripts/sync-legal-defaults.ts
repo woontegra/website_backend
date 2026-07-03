@@ -30,6 +30,8 @@ const SYNC_TYPES: LegalDocumentType[] = [
   'SOFTWARE_LICENSE',
   'SAAS_SUBSCRIPTION',
   'DIGITAL_IMMEDIATE_DELIVERY_WAIVER',
+  'EXPLICIT_CONSENT',
+  'COMMERCIAL_ELECTRONIC_MESSAGE',
 ]
 
 const STALE_PHONE_PATTERNS = [/0531\s*586/i, /05315861755/, /905315861755/, /315861755/]
@@ -143,6 +145,12 @@ function assessContent(type: LegalDocumentType, content: string): { outdated: bo
   }
   if (containsRenderedTry(trimmed)) {
     return { outdated: true, reason: 'TRY para birimi gösterimi içeriyor' }
+  }
+  if (type !== 'DIGITAL_IMMEDIATE_DELIVERY_WAIVER' && (/Masaüstü\s*\(DOWNLOAD\)/i.test(trimmed) || /\bDOWNLOAD\b/.test(trimmed))) {
+    return { outdated: true, reason: 'kullanıcıya görünen DOWNLOAD ifadesi içeriyor' }
+  }
+  if (/profilleme/i.test(trimmed)) {
+    return { outdated: true, reason: 'eski "profilleme" ifadesi içeriyor' }
   }
 
   if (normalizeForCompare(trimmed) === normalizeForCompare(target.content)) {
