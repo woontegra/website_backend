@@ -1,4 +1,10 @@
 import type { Request, Response } from 'express'
+import {
+  getPublicCached,
+  invalidatePublicCache,
+  PUBLIC_NAV_MENU_CACHE,
+  PUBLIC_NAV_MENU_TTL_MS,
+} from '../lib/publicResponseCache'
 import { navigationMenuService, type CreateNav } from '../services/navigationMenu.service'
 
 function validateNav(body: Record<string, unknown>, isPatch: boolean): string | null {
@@ -62,6 +68,7 @@ export async function adminCreate(req: Request, res: Response) {
   const body = req.body as Record<string, unknown>
   try {
     const row = await navigationMenuService.create(bodyToCreateNav(body))
+    invalidatePublicCache(PUBLIC_NAV_MENU_CACHE)
     res.status(201).json({ success: true, data: row })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Kayıt oluşturulamadı'
@@ -113,6 +120,7 @@ export async function adminPatch(req: Request, res: Response) {
     if (body.openInNewTab !== undefined) patch.openInNewTab = Boolean(body.openInNewTab)
 
     const row = await navigationMenuService.update(req.params.id, patch)
+    invalidatePublicCache(PUBLIC_NAV_MENU_CACHE)
     res.json({ success: true, data: row })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Kayıt güncellenemedi'
@@ -134,6 +142,7 @@ export async function adminPatch(req: Request, res: Response) {
 export async function adminDelete(req: Request, res: Response) {
   try {
     await navigationMenuService.delete(req.params.id)
+    invalidatePublicCache(PUBLIC_NAV_MENU_CACHE)
     res.json({ success: true, message: 'Silindi' })
   } catch {
     res.status(500).json({ success: false, message: 'Silinemedi' })
@@ -142,8 +151,16 @@ export async function adminDelete(req: Request, res: Response) {
 
 export async function publicList(_req: Request, res: Response) {
   try {
-    const data = await navigationMenuService.listPublic()
-    res.json({ success: true, data })
+    const payload = await getPublicCached(
+      PUBLIC_NAV_MENU_CACHE,
+      'public',
+      PUBLIC_NAV_MENU_TTL_MS,
+      async () => {
+        const data = await navigationMenuService.listPublic()
+        return { success: true as const, data }
+      },
+    )
+    res.json(payload)
   } catch {
     res.status(500).json({ success: false, message: 'Menü yüklenemedi' })
   }

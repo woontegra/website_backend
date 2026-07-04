@@ -1,5 +1,11 @@
 import { Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
+import {
+  getPublicCached,
+  invalidatePublicCache,
+  PUBLIC_PAGE_CONTENT_CACHE,
+  PUBLIC_PAGE_CONTENT_TTL_MS,
+} from '../lib/publicResponseCache'
 import { PublishImageValidationError, validatePageContentPublishImages } from '../lib/publishImageValidation'
 import { sanitizeImageFields } from '../utils/sanitizeImageFields'
 
@@ -7,19 +13,25 @@ export const pageContentController = {
   async getContent(req: Request, res: Response) {
     try {
       const { pageKey } = req.params
-      const pageContent = await prisma.pageContent.findUnique({
-        where: { pageKey },
-      })
-      
-      if (!pageContent) {
-        return res.json({ success: true, data: null })
-      }
+      const payload = await getPublicCached(
+        PUBLIC_PAGE_CONTENT_CACHE,
+        pageKey,
+        PUBLIC_PAGE_CONTENT_TTL_MS,
+        async () => {
+          const pageContent = await prisma.pageContent.findUnique({
+            where: { pageKey },
+          })
 
-      const parsed = sanitizeImageFields(JSON.parse(pageContent.content))
-      return res.json({
-        success: true,
-        data: parsed,
-      })
+          if (!pageContent) {
+            return { success: true as const, data: null }
+          }
+
+          const parsed = sanitizeImageFields(JSON.parse(pageContent.content))
+          return { success: true as const, data: parsed }
+        },
+      )
+
+      return res.json(payload)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'İçerik yüklenemedi'
       return res.status(500).json({ success: false, message })
@@ -57,8 +69,10 @@ export const pageContentController = {
           content: JSON.stringify(sanitized),
         },
       })
+
+      invalidatePublicCache(PUBLIC_PAGE_CONTENT_CACHE, pageKey)
       
-      return res.json({ 
+      return res.json({
         success: true, 
         data: JSON.parse(pageContent.content) 
       })
