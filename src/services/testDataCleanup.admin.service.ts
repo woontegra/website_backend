@@ -5,6 +5,7 @@ import {
   Prisma,
 } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { lookupMuvekkilKasaSaasByEmail, type MkSaasEmailLookupView } from './muvekkilKasaSaasLookup.client'
 
 export type TestDataCleanupOptions = {
   deleteOrders?: boolean
@@ -80,6 +81,7 @@ export type TestDataCleanupPreview = {
     status: string
     source: string
   }>
+  mkSaasLookup: MkSaasEmailLookupView
   warnings: string[]
 }
 
@@ -98,6 +100,8 @@ export type TestDataCleanupResult = {
   skipped: {
     protectedPaytrOrders: number
   }
+  mkSaasLookupAfterCleanup: MkSaasEmailLookupView | null
+  mkSaasStillRegistered: boolean
   warnings: string[]
 }
 
@@ -231,9 +235,37 @@ async function loadContext(email: string) {
   }
 }
 
+function appendMkSaasWarnings(warnings: string[], mk: MkSaasEmailLookupView): void {
+  if (!mk.configured) {
+    warnings.push(
+      'MK SaaS lookup yapılandırılmamış. Harici tenant durumu kontrol edilemedi; MK admin panelinden manuel kontrol gerekebilir.',
+    )
+    return
+  }
+  if (!mk.reachable) {
+    warnings.push(`MK SaaS API erişilemedi: ${mk.error ?? 'bilinmeyen hata'}`)
+    if (mk.manualCleanupHint) warnings.push(mk.manualCleanupHint)
+    return
+  }
+  if (mk.found) {
+    warnings.push(
+      'Bu e-posta MK SaaS tarafında hâlâ kayıtlı. Tekrar test yapmadan önce MK kaydı temizlenmeli veya Woontegra customerId ile eşleştirilmeli.',
+    )
+    if (mk.manualCleanupHint) warnings.push(mk.manualCleanupHint)
+    for (const rec of mk.records) {
+      if (!rec.tenant) continue
+      const ext = rec.tenant.externalCustomerId?.trim()
+      warnings.push(
+        `MK tenant: ${rec.tenant.tenantSlug} (${rec.tenant.tenantId}) — externalCustomerId: ${ext || '(boş)'} — externalOrderId: ${rec.tenant.externalOrderId ?? '(boş)'}`,
+      )
+    }
+  }
+}
+
 function buildPreviewFromContext(
   email: string,
   ctx: Awaited<ReturnType<typeof loadContext>>,
+  mkSaasLookup: MkSaasEmailLookupView,
 ): TestDataCleanupPreview {
   const { normalizedEmail, customer, userAccount, orders, saasMemberships, websiteLicenses } = ctx
   const protectedOrders = orders.filter((o) => isProtectedPaytrOrder(o))
@@ -272,6 +304,8 @@ function buildPreviewFromContext(
   if (userAccount && (userAccount.role === 'admin' || userAccount.role === 'superadmin')) {
     warnings.push('Bu e-posta bir admin kullanıcı hesabına bağlı. User silme seçeneği dikkatle kullanılmalı.')
   }
+
+  appendMkSaasWarnings(warnings, mkSaasLookup)
 
   return {
     email: email.trim(),
@@ -338,6 +372,7 @@ function buildPreviewFromContext(
       status: l.status,
       source: l.source,
     })),
+    mkSaasLookup,
     warnings,
   }
 }
@@ -361,7 +396,8 @@ export const testDataCleanupAdminService = {
       throw new Error('Geçerli bir e-posta adresi girin')
     }
     const ctx = await loadContext(normalized)
-    return buildPreviewFromContext(email, ctx)
+    const mkSaasLookup = await lookupMuvekkilKasaSaasByEmail(normalized)
+    return buildPreviewFromContext(email, ctx, mkSaasLookup)
   },
 
   async cleanup(input: {
@@ -384,7 +420,8 @@ export const testDataCleanupAdminService = {
     }
 
     const ctx = await loadContext(normalized)
-    const preview = buildPreviewFromContext(input.email, ctx)
+    const mkSaasLookupBefore = await lookupMuvekkilKasaSaasByEmail(normalized)
+    const preview = buildPreviewFromContext(input.email, ctx, mkSaasLookupBefore)
     const force = input.forceRealEmailCleanup === true
 
     if (preview.requiresExtraConfirmation && !force) {
@@ -412,6 +449,8 @@ export const testDataCleanupAdminService = {
         userAccounts: 0,
       },
       skipped: { protectedPaytrOrders: protectedCount },
+      mkSaasLookupAfterCleanup: null,
+      mkSaasStillRegistered: false,
       warnings: [...preview.warnings],
     }
 
@@ -493,6 +532,20 @@ export const testDataCleanupAdminService = {
         result.deleted.userAccounts = 1
       }
     })
+
+    const mkSaasLookupAfterCleanup = await lookupMuvekkilKasaSaasByEmail(normalized)
+    result.mkSaasLookupAfterCleanup = mkSaasLookupAfterCleanup
+    result.mkSaasStillRegistered = mkSaasLookupAfterCleanup.found
+    if (mkSaasLookupAfterCleanup.found) {
+      result.warnings.push(
+        'Woontegra website verileri temizlendi ancak MK SaaS tarafında bu e-posta kayıtlı kalıyor. Aynı e-posta ile tekrar test yaparsanız duplicate e-posta (409) hatası alırsınız.',
+      )
+      appendMkSaasWarnings(result.warnings, mkSaasLookupAfterCleanup)
+    } else if (mkSaasLookupAfterCleanup.reachable) {
+      result.warnings.push(
+        'Woontegra temizliği tamamlandı. MK SaaS tarafında bu e-posta için kayıt görünmüyor; aynı e-posta ile yeni test provision denenebilir.',
+      )
+    }
 
     return result
   },
