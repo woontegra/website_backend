@@ -48,6 +48,7 @@ import { saasMembershipsAdminRoutes } from './routes/saasMemberships.admin.route
 import { downloadStatsAdminRoutes } from './routes/downloadStats.admin.routes'
 import { customersAdminRoutes } from './routes/customers.admin.routes'
 import { adminSidebarBadgesRoutes } from './routes/sidebarBadges.admin.routes'
+import { testDataCleanupAdminRoutes } from './routes/testDataCleanup.admin.routes'
 import { licenseProgramsAdminRoutes } from './routes/licensePrograms.admin.routes'
 import { paymentsPublicRoutes } from './routes/payments.public.routes'
 import { navigationMenuPublicRoutes } from './routes/navigationMenu.public.routes'
@@ -192,6 +193,7 @@ app.use('/api/admin', saasMembershipsAdminRoutes)
 app.use('/api/admin', downloadStatsAdminRoutes)
 app.use('/api/admin', customersAdminRoutes)
 app.use('/api/admin', adminSidebarBadgesRoutes)
+app.use('/api/admin', testDataCleanupAdminRoutes)
 app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
