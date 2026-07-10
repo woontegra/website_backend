@@ -295,6 +295,58 @@ function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
+type OrderItemDeliveryRef = {
+  licenseServerLastError: string | null
+  downloadUrl?: string | null
+  product?: {
+    licenseRequired?: boolean
+    productType?: ProductType
+    slug?: string | null
+    licenseAppCode?: string | null
+  } | null
+}
+
+export type DeliveryEmailStatus = 'not_sent' | 'partial' | 'complete'
+
+function isDigitalDeliveryOrderItem(item: OrderItemDeliveryRef): boolean {
+  if (item.product?.licenseRequired) return true
+  if (item.product?.productType === ProductType.SAAS) return true
+  if (isMuvekkilKasaSaasProduct(item.product)) return true
+  const url = item.downloadUrl ?? ''
+  if (url.startsWith('saas:')) return true
+  return Boolean(url.trim())
+}
+
+function collectDigitalDeliveryErrors(items: OrderItemDeliveryRef[]) {
+  return items
+    .filter((i) => i.licenseServerLastError?.trim() && isDigitalDeliveryOrderItem(i))
+    .map((i) => ({
+      error: i.licenseServerLastError!.trim(),
+      product: i.product,
+    }))
+}
+
+function resolveDeliveryEmailStatus(order: {
+  downloadEmailSentAt: Date | null
+  items: OrderItemDeliveryRef[]
+}): DeliveryEmailStatus {
+  const hasErrors = collectDigitalDeliveryErrors(order.items).length > 0
+  if (!order.downloadEmailSentAt) return 'not_sent'
+  if (hasErrors) return 'partial'
+  return 'complete'
+}
+
+function deliveryEmailStatusLabel(status: DeliveryEmailStatus): string {
+  switch (status) {
+    case 'not_sent':
+      return 'Henüz gönderilmedi'
+    case 'partial':
+      return 'Bilgilendirme gönderildi (teslimat tamamlanmadı)'
+    case 'complete':
+      return 'Gönderildi'
+  }
+}
+
 type OrderDeliveryView = {
   deliveryState: 'pending' | 'delivered' | 'blocked' | 'not_applicable'
   deliveryMessage: string
@@ -318,12 +370,21 @@ function buildOrderDeliveryView(order: {
   const hasSaas = order.items.some((i) => (i.downloadUrl ?? '').startsWith('saas:'))
   const hasDigital = order.items.some((i) => Boolean(i.downloadUrl?.trim()))
 
-  if (downloadEmailSentAt) {
+  if (downloadEmailSentAt && errors.length === 0) {
     return {
       deliveryState: 'delivered',
       deliveryMessage: hasSaas
         ? 'Web tabanlı ürün erişim bilgileriniz e-posta ile gönderildi.'
         : 'Lisans ve teslimat bilgileriniz e-posta ile gönderildi.',
+      downloadEmailSentAt,
+    }
+  }
+  if (downloadEmailSentAt && errors.length > 0) {
+    return {
+      deliveryState: 'blocked',
+      deliveryMessage: hasSaas
+        ? 'Ödemeniz alındı ve bilgilendirme e-postası gönderildi. Web tabanlı ürün erişiminiz için ek doğrulama gerekiyor; destek ekibimiz en kısa sürede dönüş yapacaktır.'
+        : 'Ödemeniz alındı ve bilgilendirme e-postası gönderildi. Lisans/teslimat için ek işlem gerekiyor; destek ekibimiz en kısa sürede dönüş yapacaktır.',
       downloadEmailSentAt,
     }
   }
@@ -1442,16 +1503,16 @@ export const ordersAdminService = {
     const mailLines = buildPaidDownloadMailLinesFromItems(deliveryItems)
     const deliveryCheckOk = checkOrderDownloadLinesForPaidMail(deliveryItems)
     const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
-    const centralLicenseErrors = order.items
-      .filter((i) => i.product?.licenseRequired && i.licenseServerLastError?.trim())
-      .map((i) => ({
-        productName: i.productName,
-        error: i.licenseServerLastError!.trim(),
-        product: i.product,
-      }))
+    const digitalDeliveryErrors = collectDigitalDeliveryErrors(order.items)
+    const hasDigitalDeliveryItems = order.items.some((i) => isDigitalDeliveryOrderItem(i))
+    const deliveryEmailStatus = resolveDeliveryEmailStatus(order)
+    const canRetryDigitalDelivery =
+      paidLike &&
+      hasDigitalDeliveryItems &&
+      (digitalDeliveryErrors.length > 0 || !order.downloadEmailSentAt)
     let digitalDeliveryEmailAlert: string | null = null
-    if (paidLike && centralLicenseErrors.length > 0) {
-      const first = centralLicenseErrors[0]!
+    if (paidLike && digitalDeliveryErrors.length > 0) {
+      const first = digitalDeliveryErrors[0]!
       digitalDeliveryEmailAlert = formatDigitalDeliveryLicenseError(first.product, first.error)
     } else if (paidLike && !order.downloadEmailSentAt && (mailLines.length > 0 || !deliveryCheckOk)) {
       if (!deliveryCheckOk) {
@@ -1522,6 +1583,9 @@ export const ordersAdminService = {
       currency: order.currency,
       paidAt: order.paidAt?.toISOString() ?? null,
       downloadEmailSentAt: order.downloadEmailSentAt?.toISOString() ?? null,
+      deliveryEmailStatus,
+      deliveryEmailStatusLabel: deliveryEmailStatusLabel(deliveryEmailStatus),
+      canRetryDigitalDelivery,
       digitalDeliveryEmailAlert,
       preInfoAcceptedAt: order.preInfoAcceptedAt?.toISOString() ?? null,
       distanceSalesAcceptedAt: order.distanceSalesAcceptedAt?.toISOString() ?? null,
