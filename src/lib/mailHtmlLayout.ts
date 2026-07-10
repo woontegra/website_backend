@@ -68,6 +68,34 @@ export function mailBadge(text: string, tone: 'blue' | 'amber' | 'green' = 'blue
   return `<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:${colors.bg};color:${colors.fg};border:1px solid ${colors.border};">${escapeMailHtml(text)}</span>`
 }
 
+export function mailCredentialsCard(
+  rows: { label: string; value: string; highlight?: boolean }[],
+): string {
+  const items = rows
+    .map((row) => {
+      const safeLabel = escapeMailHtml(row.label)
+      const safeValue = escapeMailHtml(row.value)
+      const valueStyle = row.highlight
+        ? 'font-size:17px;font-weight:700;font-family:Consolas,Monaco,monospace;color:#0f172a;letter-spacing:0.02em;'
+        : 'font-size:15px;font-weight:600;color:#0f172a;word-break:break-all;'
+      return `<tr>
+        <td style="padding:12px 16px;border-bottom:1px solid #d1fae5;">
+          <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#047857;margin-bottom:6px;">${safeLabel}</div>
+          <div style="${valueStyle}">${safeValue}</div>
+        </td>
+      </tr>`
+    })
+    .join('')
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:18px 0;border:2px solid #6ee7b7;border-radius:12px;overflow:hidden;background:#ecfdf5;">
+    <tr>
+      <td style="padding:14px 16px;background:linear-gradient(135deg,#0f766e 0%,#134e4a 100%);">
+        <div style="font-size:14px;font-weight:700;color:#ffffff;">Giriş bilgileriniz</div>
+      </td>
+    </tr>
+    ${items}
+  </table>`
+}
+
 export function mailLinkCards(
   links: { label: string; href: string; description?: string }[],
 ): string {

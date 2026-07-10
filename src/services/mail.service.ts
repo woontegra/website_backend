@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
-import { escapeMailHtml, mailBadge, mailHtmlDocument, mailInfoTable, mailLinkCards, mailWelcomeHtmlDocument } from '../lib/mailHtmlLayout'
+import { escapeMailHtml, mailBadge, mailCredentialsCard, mailHtmlDocument, mailInfoTable, mailLinkCards, mailWelcomeHtmlDocument } from '../lib/mailHtmlLayout'
 import { pickBackendPublicOrigin, pickPublicSiteOrigin } from '../lib/mailDeliveryUrl'
 import {
   buildCustomerLoginPageHref,
@@ -781,13 +781,11 @@ export const mailService = {
     })
   },
 
-  /** Yeni müşteri kaydı — hoş geldin e-postası (şifre belirleme bağlantısı ile) */
+  /** Yeni müşteri kaydı — hoş geldin e-postası (kayıt sırasında belirlenen giriş bilgileri) */
   async sendCustomerWelcomeEmail(data: {
     customerName: string
     customerEmail: string
-    plainToken: string
-    expiresMinutes: number
-    createdFromOrder?: boolean
+    plainPassword: string
   }) {
     const pub = await settingsService.getPublic()
     const support = String(pub.contactEmail || 'info@woontegra.com').trim() || 'info@woontegra.com'
@@ -798,26 +796,19 @@ export const mailService = {
     const loginHref = buildCustomerLoginPageHref()
     const ordersHref = buildCustomerOrdersPageHref()
     const membershipsHref = buildCustomerMembershipsPageHref()
-    const setPasswordHref = buildCustomerPasswordResetHref(data.plainToken)
-    const expiresLabel =
-      data.expiresMinutes >= 60 && data.expiresMinutes % 60 === 0
-        ? `${data.expiresMinutes / 60} saat`
-        : `${data.expiresMinutes} dakika`
-
-    const orderNote = data.createdFromOrder
-      ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#475569;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;">Bu hesap, Woontegra üzerinden verdiğiniz siparişe bağlı olarak oluşturulmuştur.</p>`
-      : ''
 
     const bodyHtml = `
       <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Woontegra müşteri hesabınız başarıyla oluşturuldu. Bu hesap üzerinden siparişlerinizi, indirme bağlantılarınızı, lisans bilgilerinizi ve web tabanlı ürün aboneliklerinizi takip edebilirsiniz.</p>
-      ${orderNote}
-      <p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#334155;">Hesabınıza güvenli şekilde giriş yapabilmek için aşağıdaki butondan şifrenizi belirleyin.</p>
-      ${mailActionButton(setPasswordHref, 'Şifremi Belirle', '#0f766e')}
-      <p style="margin:0 0 6px;font-size:13px;line-height:1.6;color:#64748b;">Bu bağlantı yalnızca size özeldir ve <strong>${escapeMailHtml(expiresLabel)}</strong> boyunca geçerlidir. Bağlantının süresi dolarsa giriş sayfasındaki &ldquo;Şifremi Unuttum&rdquo; adımından yeni bağlantı talep edebilirsiniz.</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#334155;">Woontegra müşteri hesabınız başarıyla oluşturuldu. Aşağıdaki giriş bilgileriyle hesabınıza giriş yapabilirsiniz.</p>
+      ${mailCredentialsCard([
+        { label: 'Giriş adresi', value: loginHref },
+        { label: 'E-posta', value: data.customerEmail.trim() },
+        { label: 'Şifre', value: data.plainPassword, highlight: true },
+      ])}
+      ${mailActionButton(loginHref, 'Hesabıma Giriş Yap', '#0f766e')}
+      <p style="margin:0 0 6px;font-size:13px;line-height:1.6;color:#64748b;">Şifrenizi daha sonra hesabınızdan değiştirebilirsiniz. Şifrenizi unutursanız giriş sayfasındaki &ldquo;Şifremi Unuttum&rdquo; adımından yeni şifre oluşturabilirsiniz.</p>
       <p style="margin:18px 0 8px;font-size:14px;font-weight:600;color:#0f172a;">Hızlı erişim</p>
       ${mailLinkCards([
-        { label: 'Giriş sayfası', href: loginHref, description: 'Şifrenizi belirledikten sonra buradan oturum açın.' },
         { label: 'Siparişlerim', href: ordersHref, description: 'Sipariş geçmişinizi ve teslimat durumunu görüntüleyin.' },
         { label: 'Üyeliklerim', href: membershipsHref, description: 'Web tabanlı ürün aboneliklerinizi yönetin.' },
         { label: 'Destek', href: `mailto:${support}`, description: support },
@@ -836,17 +827,16 @@ export const mailService = {
     const textBody = [
       `Merhaba ${data.customerName.trim() || 'Müşterimiz'},`,
       '',
-      'Woontegra müşteri hesabınız başarıyla oluşturuldu. Bu hesap üzerinden siparişlerinizi, indirme bağlantılarınızı, lisans bilgilerinizi ve web tabanlı ürün aboneliklerinizi takip edebilirsiniz.',
+      'Woontegra müşteri hesabınız başarıyla oluşturuldu. Aşağıdaki giriş bilgileriyle hesabınıza giriş yapabilirsiniz.',
       '',
-      ...(data.createdFromOrder
-        ? ['Bu hesap, Woontegra üzerinden verdiğiniz siparişe bağlı olarak oluşturulmuştur.', '']
-        : []),
-      'Hesabınıza güvenli şekilde giriş yapabilmek için aşağıdaki bağlantıdan şifrenizi belirleyin:',
-      setPasswordHref,
+      'Giriş bilgileriniz:',
+      `Giriş adresi: ${loginHref}`,
+      `E-posta: ${data.customerEmail.trim()}`,
+      `Şifre: ${data.plainPassword}`,
       '',
-      `Bu bağlantı yalnızca size özeldir ve ${expiresLabel} boyunca geçerlidir. Süresi dolarsa giriş sayfasındaki "Şifremi Unuttum" adımından yeni bağlantı talep edebilirsiniz.`,
+      'Şifrenizi daha sonra hesabınızdan değiştirebilirsiniz. Şifrenizi unutursanız giriş sayfasındaki "Şifremi Unuttum" adımından yeni şifre oluşturabilirsiniz.',
       '',
-      `Giriş sayfası: ${loginHref}`,
+      `Hesabıma giriş: ${loginHref}`,
       `Siparişlerim: ${ordersHref}`,
       `Üyeliklerim: ${membershipsHref}`,
       `Destek: ${support}`,
@@ -860,7 +850,7 @@ export const mailService = {
       subject: 'Woontegra hesabınız oluşturuldu',
       text: textBody,
       html: mailWelcomeHtmlDocument({
-        title: 'Woontegra hesabınız hazır',
+        title: 'Woontegra hesabınız oluşturuldu',
         bodyHtml,
         logoUrl,
         footerHtml,

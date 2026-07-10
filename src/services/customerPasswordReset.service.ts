@@ -7,7 +7,6 @@ export const CUSTOMER_FORGOT_PASSWORD_SUCCESS_MESSAGE =
   'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.'
 
 export const FORGOT_PASSWORD_TOKEN_EXPIRES_MIN = 60
-export const WELCOME_PASSWORD_SET_EXPIRES_MIN = 24 * 60
 const RESET_COOLDOWN_MIN = 5
 const SALT_ROUNDS = 10
 
