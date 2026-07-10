@@ -21,6 +21,11 @@ import {
 import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
 
 import {
+  formatMkOwnerEmailDuplicateError,
+  isMkOwnerEmailDuplicateError,
+} from '../lib/mkSaasDeliveryHelpers'
+
+import {
 
   findActiveCustomerSaasMembership,
 
@@ -119,6 +124,76 @@ export type MuvekkilKasaSaasMailLine = {
 
 
 const PROVISION_NOTES = 'Woontegra Website ödeme sonrası otomatik teslimat'
+
+function provisionSuccessIsMailReady(success: MuvekkilKasaSaasProvisionSuccess): boolean {
+  return Boolean(success.membershipId && success.licenseKey?.trim())
+}
+
+async function linkOrderItemToMembership(orderItemId: string, membershipId: string): Promise<void> {
+  await prisma.orderItem.update({
+    where: { id: orderItemId },
+    data: { saasMembershipId: membershipId },
+  })
+}
+
+async function loadMembershipForExternalOrderId(externalOrderId: string) {
+  return prisma.customerSaasMembership.findUnique({
+    where: { firstOrderId: externalOrderId },
+  })
+}
+
+async function findWoontegraMembershipForCustomerEmail(customerId: string, ownerEmail: string) {
+  const normalized = ownerEmail.trim().toLowerCase()
+  return prisma.customerSaasMembership.findFirst({
+    where: {
+      customerId,
+      productCode: MUVEKKIL_KASA_SAAS_PRODUCT_CODE,
+      ownerEmail: normalized,
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+async function buildProvisionSuccessFromMembership(input: {
+  orderItemId: string
+  productName: string
+  officeName: string
+  customerEmail: string
+  membership: {
+    id: string
+    tenantSlug: string
+    licenseKey: string
+    ownerEmail: string
+    licenseStartDate: Date
+    licenseEndDate: Date
+  }
+  provisionStatus: 'created' | 'already_exists'
+  mailSentByMkSaas: boolean
+  ownerUsername?: string | null
+  temporaryPassword?: string | null
+  loginUrl?: string | null
+  musteriNo?: string | null
+}): Promise<MuvekkilKasaSaasProvisionSuccess> {
+  await linkOrderItemToMembership(input.orderItemId, input.membership.id)
+  return {
+    orderItemId: input.orderItemId,
+    productName: input.productName,
+    deliveryType: 'SAAS',
+    provisionStatus: input.provisionStatus,
+    licenseKey: input.membership.licenseKey.trim() || null,
+    mailSentByMkSaas: input.mailSentByMkSaas,
+    membershipId: input.membership.id,
+    tenantSlug: input.membership.tenantSlug,
+    tenantName: input.officeName,
+    ownerEmail: input.membership.ownerEmail,
+    ownerUsername: input.ownerUsername?.trim() || null,
+    temporaryPassword: input.temporaryPassword?.trim() || null,
+    loginUrl: input.loginUrl ?? resolveMuvekkilKasaSaasLoginHref(),
+    musteriNo: input.musteriNo ?? null,
+    licenseStartDate: input.membership.licenseStartDate.toISOString(),
+    licenseEndDate: input.membership.licenseEndDate.toISOString(),
+  }
+}
 
 function resolveMkLoginUrlFromProvision(data: { loginUrl?: string | null }): string | null {
   return resolveMuvekkilKasaSaasLoginHref(data.loginUrl)
@@ -354,75 +429,37 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
     if (already >= 1) {
 
-      let membershipId: string | undefined
-      let membershipMeta: {
-        tenantSlug: string
-        tenantName: string
-        ownerEmail: string
-        licenseStartDate: string
-        licenseEndDate: string
-      } | null = null
+      const existingMembership = order.customerId
+        ? await loadMembershipForExternalOrderId(externalOrderId)
+        : null
 
-      if (order.customerId) {
-
-        const existingMembership = await prisma.customerSaasMembership.findUnique({
-
-          where: { firstOrderId: externalOrderId },
-
+      if (existingMembership?.licenseKey?.trim()) {
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { licenseServerLastError: null, licenseServerLicenseKey: existingMembership.licenseKey.trim() },
         })
-
-        membershipId = existingMembership?.id
-        if (existingMembership) {
-          membershipMeta = {
-            tenantSlug: existingMembership.tenantSlug,
-            tenantName: order.companyName?.trim() || order.customerName.trim(),
-            ownerEmail: existingMembership.ownerEmail,
-            licenseStartDate: existingMembership.licenseStartDate.toISOString(),
-            licenseEndDate: existingMembership.licenseEndDate.toISOString(),
-          }
-        }
-
+        provisioned.push(
+          await buildProvisionSuccessFromMembership({
+            orderItemId: item.id,
+            productName: item.productName,
+            officeName: resolveOfficeName(order),
+            customerEmail,
+            membership: existingMembership,
+            provisionStatus: 'already_exists',
+            mailSentByMkSaas: true,
+          }),
+        )
+        continue
       }
 
-
-
-      provisioned.push({
-
-        orderItemId: item.id,
-
-        productName: item.productName,
-
-        deliveryType: 'SAAS',
-
-        provisionStatus: 'already_exists',
-
-        licenseKey: item.licenseServerLicenseKey?.trim() || null,
-
-        mailSentByMkSaas: true,
-
-        membershipId,
-
-        tenantSlug: membershipMeta?.tenantSlug ?? '',
-
-        tenantName: membershipMeta?.tenantName ?? resolveOfficeName(order),
-
-        ownerEmail: membershipMeta?.ownerEmail ?? customerEmail,
-
-        ownerUsername: null,
-
-        temporaryPassword: null,
-
-        loginUrl: resolveMuvekkilKasaSaasLoginHref(),
-
-        musteriNo: null,
-
-        licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
-
-        licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
-
-      })
-
-      continue
+      if (item.licenseServerLastError?.trim()) {
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { licenseServerUnitsNotified: 0 },
+        })
+      } else {
+        continue
+      }
 
     }
 
@@ -454,7 +491,9 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
     if (activeMembership) {
 
-      console.warn('[mk-saas-provision] ACTIVE_MEMBERSHIP_EXISTS — renew akışı kullanılmalı; yeni tenant açılmamalı', {
+      const licenseDays = Math.max(1, item.product?.licenseDays ?? 365)
+
+      console.info('[mk-saas-provision] ACTIVE_MEMBERSHIP_EXISTS — yenileme akışına yönlendiriliyor', {
 
         orderNo: order.orderNo,
 
@@ -466,21 +505,21 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
         existingTenantId: activeMembership.tenantId,
 
-        productCode: activeMembership.productCode,
-
       })
-
-      const err =
-
-        'Bu müşteri hesabında aktif Müvekkil Kasa SaaS üyeliği var. Yeni tenant açılmaz; üyelik yenileme akışı kullanılmalı.'
-
-      errors.push({ orderItemId: item.id, productName: item.productName, error: err })
 
       await prisma.orderItem.update({
 
         where: { id: item.id },
 
-        data: { licenseServerLastError: err },
+        data: {
+
+          saasMembershipId: activeMembership.id,
+
+          saasRenewalDays: licenseDays,
+
+          licenseServerLastError: null,
+
+        },
 
       })
 
@@ -525,49 +564,27 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
     })
 
     if (provisionClaim.count === 0) {
-      let membershipId: string | undefined
-      let membershipMeta: {
-        tenantSlug: string
-        tenantName: string
-        ownerEmail: string
-        licenseStartDate: string
-        licenseEndDate: string
-      } | null = null
+      const existingMembership = order.customerId
+        ? await loadMembershipForExternalOrderId(externalOrderId)
+        : null
 
-      if (order.customerId) {
-        const existingMembership = await prisma.customerSaasMembership.findUnique({
-          where: { firstOrderId: externalOrderId },
+      if (existingMembership?.licenseKey?.trim()) {
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { licenseServerLastError: null, licenseServerLicenseKey: existingMembership.licenseKey.trim() },
         })
-        if (existingMembership) {
-          membershipId = existingMembership.id
-          membershipMeta = {
-            tenantSlug: existingMembership.tenantSlug,
-            tenantName: officeName,
-            ownerEmail: existingMembership.ownerEmail,
-            licenseStartDate: existingMembership.licenseStartDate.toISOString(),
-            licenseEndDate: existingMembership.licenseEndDate.toISOString(),
-          }
-        }
+        provisioned.push(
+          await buildProvisionSuccessFromMembership({
+            orderItemId: item.id,
+            productName: item.productName,
+            officeName: officeName,
+            customerEmail,
+            membership: existingMembership,
+            provisionStatus: 'already_exists',
+            mailSentByMkSaas: true,
+          }),
+        )
       }
-
-      provisioned.push({
-        orderItemId: item.id,
-        productName: item.productName,
-        deliveryType: 'SAAS',
-        provisionStatus: 'already_exists',
-        licenseKey: item.licenseServerLicenseKey?.trim() || null,
-        mailSentByMkSaas: true,
-        membershipId,
-        tenantSlug: membershipMeta?.tenantSlug ?? '',
-        tenantName: membershipMeta?.tenantName ?? officeName,
-        ownerEmail: membershipMeta?.ownerEmail ?? customerEmail,
-        ownerUsername: null,
-        temporaryPassword: null,
-        loginUrl: resolveMuvekkilKasaSaasLoginHref(),
-        musteriNo: null,
-        licenseStartDate: membershipMeta?.licenseStartDate ?? paidAt.toISOString(),
-        licenseEndDate: membershipMeta?.licenseEndDate ?? paidAt.toISOString(),
-      })
       continue
     }
 
@@ -629,7 +646,46 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
     if (!result.success) {
 
-      const err = result.error
+      let err = formatMkOwnerEmailDuplicateError(result.error)
+
+      if (
+        isMkOwnerEmailDuplicateError(result.error, result.code) &&
+        order.customerId
+      ) {
+        const linkedMembership = await findWoontegraMembershipForCustomerEmail(
+          order.customerId,
+          customerEmail,
+        )
+        if (linkedMembership?.licenseKey?.trim()) {
+          await prisma.orderItem.update({
+            where: { id: item.id },
+            data: {
+              licenseServerUnitsNotified: 1,
+              licenseServerLastError: null,
+              licenseServerLastNotifiedAt: new Date(),
+              licenseServerLicenseKey: linkedMembership.licenseKey.trim(),
+              saasMembershipId: linkedMembership.id,
+            },
+          })
+          provisioned.push(
+            await buildProvisionSuccessFromMembership({
+              orderItemId: item.id,
+              productName: item.productName,
+              officeName,
+              customerEmail,
+              membership: linkedMembership,
+              provisionStatus: 'already_exists',
+              mailSentByMkSaas: false,
+            }),
+          )
+          console.info('[mk-saas-provision] linked existing Woontegra membership after duplicate email', {
+            orderNo: order.orderNo,
+            orderItemId: item.id,
+            membershipId: linkedMembership.id,
+          })
+          continue
+        }
+      }
 
       errors.push({ orderItemId: item.id, productName: item.productName, error: err })
 
@@ -650,6 +706,8 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
         externalOrderId,
 
         status: result.status ?? null,
+
+        code: result.code ?? null,
 
         error: err,
 
@@ -693,9 +751,11 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
     })
 
+    if (membershipId) {
+      await linkOrderItemToMembership(item.id, membershipId)
+    }
 
-
-    provisioned.push({
+    const successEntry: MuvekkilKasaSaasProvisionSuccess = {
 
       orderItemId: item.id,
 
@@ -729,7 +789,21 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
       licenseEndDate: data.licenseEndDate,
 
-    })
+    }
+
+    if (provisionSuccessIsMailReady(successEntry)) {
+      provisioned.push(successEntry)
+    } else {
+      const err =
+        data.licenseKey?.trim()
+          ? 'Müvekkil Kasa SaaS üyelik kaydı oluşturulamadı.'
+          : 'Müvekkil Kasa SaaS tenant oluşturuldu ancak lisans anahtarı alınamadı.'
+      errors.push({ orderItemId: item.id, productName: item.productName, error: err })
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: { licenseServerLastError: err },
+      })
+    }
 
 
 
@@ -771,7 +845,9 @@ export function buildMuvekkilKasaSaasMailLines(
 
 ): MuvekkilKasaSaasMailLine[] {
 
-  const byItemId = new Map(successes.map((s) => [s.orderItemId, s]))
+  const byItemId = new Map(
+    successes.filter((s) => provisionSuccessIsMailReady(s)).map((s) => [s.orderItemId, s]),
+  )
 
   return items
 

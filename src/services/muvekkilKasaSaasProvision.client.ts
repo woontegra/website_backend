@@ -20,7 +20,7 @@ export type MuvekkilKasaSaasProvisionRequest = {
   }
   licenseDays: number
   licenseStatus: 'AKTIF'
-  demoMu: false
+  demoMu: boolean
   billing?: {
     amount?: number
     currency: string
@@ -47,9 +47,42 @@ export type MuvekkilKasaSaasProvisionResponse = {
   mailError?: string
 }
 
+export type MuvekkilKasaSaasProvisionFailure = {
+  success: false
+  status?: number
+  error: string
+  code?: string
+}
+
 export type MuvekkilKasaSaasProvisionResult =
   | { success: true; data: MuvekkilKasaSaasProvisionResponse }
-  | { success: false; status?: number; error: string }
+  | MuvekkilKasaSaasProvisionFailure
+
+function parseProvisionErrorPayload(parsed: unknown, fallbackText: string): { error: string; code?: string } {
+  if (!parsed || typeof parsed !== 'object' || parsed === null) {
+    return { error: fallbackText || 'Müvekkil Kasa SaaS isteği başarısız.' }
+  }
+  const row = parsed as Record<string, unknown>
+  const message =
+    typeof row.message === 'string' && row.message.trim()
+      ? row.message.trim()
+      : typeof row.error === 'string' && row.error.trim()
+        ? row.error.trim()
+        : fallbackText || 'Müvekkil Kasa SaaS isteği başarısız.'
+  const code =
+    typeof row.code === 'string' && row.code.trim()
+      ? row.code.trim()
+      : typeof row.error === 'string' && row.error.trim() && row.error !== message
+        ? row.error.trim()
+        : undefined
+  return { error: message, code }
+}
+
+function isProvisionSuccessPayload(parsed: unknown): parsed is MuvekkilKasaSaasProvisionResponse {
+  if (!parsed || typeof parsed !== 'object' || parsed === null) return false
+  const row = parsed as Record<string, unknown>
+  return row.ok === true && typeof row.tenantId === 'string' && row.tenantId.trim().length > 0
+}
 
 const HEADER_NAME = 'x-woontegra-website-provision-secret'
 
@@ -101,12 +134,13 @@ export async function requestMuvekkilKasaSaasProvision(
       }
     }
 
+    if (isProvisionSuccessPayload(parsed)) {
+      return { success: true, data: parsed }
+    }
+
     if (!res.ok) {
-      const errMsg =
-        parsed && typeof parsed === 'object' && parsed !== null && 'message' in parsed
-          ? String((parsed as { message: unknown }).message)
-          : text || `HTTP ${res.status}`
-      return { success: false, status: res.status, error: errMsg }
+      const { error, code } = parseProvisionErrorPayload(parsed, text || `HTTP ${res.status}`)
+      return { success: false, status: res.status, error, code }
     }
 
     if (!parsed || typeof parsed !== 'object' || parsed === null || !('ok' in parsed)) {

@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma'
 
 import { MUVEKKIL_KASA_SAAS_PRODUCT_CODE } from '../lib/muvekkilKasaSaasProduct'
 
+import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
+
 import {
 
   isMuvekkilKasaSaasRenewConfigured,
@@ -365,3 +367,45 @@ export async function ensureMuvekkilKasaSaasRenewals(orderId: string): Promise<{
 
 }
 
+/** Website ödeme onayı mailinde yenilenen Müvekkil Kasa SaaS satırları. */
+export async function buildMuvekkilKasaSaasRenewMailLines(
+  items: { id: string; productName: string }[],
+  renewed: MuvekkilKasaSaasRenewSuccess[],
+): Promise<
+  import('./muvekkilKasaSaasProvision.service').MuvekkilKasaSaasMailLine[]
+> {
+  const byItemId = new Map(renewed.filter((r) => r.licenseKey?.trim()).map((r) => [r.orderItemId, r]))
+  const membershipIds = [...new Set([...byItemId.values()].map((r) => r.membershipId))]
+  const memberships = membershipIds.length
+    ? await prisma.customerSaasMembership.findMany({
+        where: { id: { in: membershipIds } },
+      })
+    : []
+  const membershipById = new Map(memberships.map((m) => [m.id, m]))
+
+  return items
+    .filter((i) => byItemId.has(i.id))
+    .map((i) => {
+      const r = byItemId.get(i.id)!
+      const membership = membershipById.get(r.membershipId)
+      return {
+        id: i.id,
+        productName: i.productName,
+        downloadUrl: 'saas:muvekkil-kasa',
+        saas: {
+          licenseKey: r.licenseKey,
+          ownerEmail: membership?.ownerEmail ?? '',
+          tenantSlug: membership?.tenantSlug ?? '',
+          tenantName: membership?.tenantSlug ?? '',
+          licenseStartDate: membership?.licenseStartDate.toISOString() ?? '',
+          licenseEndDate: r.newEndDate,
+          mkActivationMailSent: r.mailSentByMkSaas,
+          ownerUsername: null,
+          temporaryPassword: null,
+          loginUrl: resolveMuvekkilKasaSaasLoginHref(),
+          musteriNo: null,
+        },
+      }
+    })
+    .filter((line) => line.saas.licenseKey?.trim() && line.saas.ownerEmail.trim())
+}

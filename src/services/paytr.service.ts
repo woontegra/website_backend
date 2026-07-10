@@ -9,6 +9,7 @@ import {
   buildPaidDownloadMailLinesFromItems,
   checkOrderDownloadLinesForPaidMail,
   fulfillPaidOrderDelivery,
+  orderNeedsPaidActivationMailRetry,
   type OrderItemForDeliveryCheck,
 } from './orderFulfillment.service'
 import { getEffectivePaytrConfig, resolvePaytrCallbackUrlForLogging } from './paymentSettings.service'
@@ -30,6 +31,38 @@ function paymentAmountKurus(total: Prisma.Decimal | number): number {
 /** PayTR merchant_oid: yalnızca harf ve rakam (tire, alt çizgi vb. yok). */
 export function toPaytrMerchantOid(orderNo: string): string {
   return String(orderNo ?? '').replace(/[^a-zA-Z0-9]/g, '')
+}
+
+const PAYTR_MERCHANT_OID_MAX_LEN = 64
+
+function isPaytrMerchantOidDuplicateError(reason: string): boolean {
+  return /merchant_oid.*(benzersiz|daha once|daha önce|kullanil|kullanıl)/i.test(reason)
+}
+
+/** PayTR her get-token çağrısında benzersiz merchant_oid ister; aynı siparişte yeniden denemeler için R2, R3… eklenir. */
+async function allocatePaytrMerchantOid(orderId: string, orderNo: string): Promise<string> {
+  const base = toPaytrMerchantOid(orderNo)
+  if (!base || base.length < 6) {
+    const err = new Error('Sipariş numarası PayTR için uygun değil') as Error & { status: number }
+    err.status = 500
+    throw err
+  }
+
+  const existing = await prisma.paymentTransaction.findMany({
+    where: { orderId },
+    select: { merchantOid: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  const used = new Set(existing.map((t) => t.merchantOid))
+  if (!used.has(base)) return base
+
+  for (let n = 2; n <= 99; n++) {
+    const candidate = `${base}R${n}`.slice(0, PAYTR_MERCHANT_OID_MAX_LEN)
+    if (!used.has(candidate)) return candidate
+  }
+
+  const fallback = `${base}T${Date.now().toString(36).toUpperCase()}`.replace(/[^A-Z0-9]/g, '').slice(0, PAYTR_MERCHANT_OID_MAX_LEN)
+  return fallback
 }
 
 function buildUserBasket(
@@ -379,12 +412,30 @@ export const paytrService = {
       })
       const paidOrder = await prisma.order.findUnique({
         where: { id: order.id },
-        select: { downloadEmailSentAt: true, orderNo: true },
+        select: {
+          downloadEmailSentAt: true,
+          orderNo: true,
+          items: {
+            select: {
+              id: true,
+              downloadUrl: true,
+              product: { select: { productType: true, licenseRequired: true } },
+            },
+          },
+        },
       })
-      if (paidOrder && !paidOrder.downloadEmailSentAt) {
+      const needsFulfillmentRetry =
+        paidOrder &&
+        (await orderNeedsPaidActivationMailRetry({
+          id: order.id,
+          orderNo: paidOrder.orderNo,
+          downloadEmailSentAt: paidOrder.downloadEmailSentAt,
+          items: paidOrder.items as OrderItemForDeliveryCheck[],
+        }))
+      if (needsFulfillmentRetry) {
         console.info('[paytr] callback: PAID siparişte teslimat maili eksik; fulfillment yeniden deneniyor', {
           merchantOid,
-          orderNo: paidOrder.orderNo,
+          orderNo: paidOrder!.orderNo,
         })
         await fulfillPaidOrderDelivery(order.id, req)
       }

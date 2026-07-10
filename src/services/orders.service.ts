@@ -13,6 +13,11 @@ import {
 import { prisma } from '../lib/prisma'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
 import { formatDigitalDeliveryLicenseError } from '../lib/digitalDeliveryErrorLabel'
+import {
+  hasMkSaasPendingMailSent,
+  resolveSaasDeliveryStatusView,
+  type SaasDeliveryStatusView,
+} from '../lib/mkSaasDeliveryHelpers'
 import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
@@ -306,7 +311,7 @@ type OrderItemDeliveryRef = {
   } | null
 }
 
-export type DeliveryEmailStatus = 'not_sent' | 'partial' | 'complete'
+export type DeliveryEmailStatus = 'not_sent' | 'pending_info' | 'complete' | 'failed'
 
 function isDigitalDeliveryOrderItem(item: OrderItemDeliveryRef): boolean {
   if (item.product?.licenseRequired) return true
@@ -328,22 +333,27 @@ function collectDigitalDeliveryErrors(items: OrderItemDeliveryRef[]) {
 
 function resolveDeliveryEmailStatus(order: {
   downloadEmailSentAt: Date | null
+  adminNote: string | null
   items: OrderItemDeliveryRef[]
 }): DeliveryEmailStatus {
   const hasErrors = collectDigitalDeliveryErrors(order.items).length > 0
-  if (!order.downloadEmailSentAt) return 'not_sent'
-  if (hasErrors) return 'partial'
-  return 'complete'
+  if (order.downloadEmailSentAt && !hasErrors) return 'complete'
+  if (hasMkSaasPendingMailSent(order.adminNote) && !order.downloadEmailSentAt) return 'pending_info'
+  if (hasErrors && hasMkSaasPendingMailSent(order.adminNote)) return 'pending_info'
+  if (hasErrors) return 'failed'
+  return 'not_sent'
 }
 
 function deliveryEmailStatusLabel(status: DeliveryEmailStatus): string {
   switch (status) {
     case 'not_sent':
       return 'Henüz gönderilmedi'
-    case 'partial':
-      return 'Bilgilendirme gönderildi (teslimat tamamlanmadı)'
+    case 'pending_info':
+      return 'Sadece bilgilendirme maili gönderildi'
     case 'complete':
-      return 'Gönderildi'
+      return 'Tam aktivasyon maili gönderildi'
+    case 'failed':
+      return 'Teslimat tamamlanmadı'
   }
 }
 
@@ -1505,11 +1515,29 @@ export const ordersAdminService = {
     const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
     const digitalDeliveryErrors = collectDigitalDeliveryErrors(order.items)
     const hasDigitalDeliveryItems = order.items.some((i) => isDigitalDeliveryOrderItem(i))
-    const deliveryEmailStatus = resolveDeliveryEmailStatus(order)
+    const deliveryEmailStatus = resolveDeliveryEmailStatus({
+      downloadEmailSentAt: order.downloadEmailSentAt,
+      adminNote: order.adminNote,
+      items: order.items,
+    })
+    const saasDeliveryStatus: SaasDeliveryStatusView | null = await resolveSaasDeliveryStatusView({
+      status: order.status,
+      downloadEmailSentAt: order.downloadEmailSentAt,
+      adminNote: order.adminNote,
+      orderNo: order.orderNo,
+      items: order.items.map((i) => ({
+        id: i.id,
+        downloadUrl: i.downloadUrl,
+        licenseServerLastError: i.licenseServerLastError,
+        saasMembershipId: i.saasMembershipId,
+      })),
+    })
     const canRetryDigitalDelivery =
       paidLike &&
       hasDigitalDeliveryItems &&
-      (digitalDeliveryErrors.length > 0 || !order.downloadEmailSentAt)
+      (digitalDeliveryErrors.length > 0 ||
+        !order.downloadEmailSentAt ||
+        hasMkSaasPendingMailSent(order.adminNote))
     let digitalDeliveryEmailAlert: string | null = null
     if (paidLike && digitalDeliveryErrors.length > 0) {
       const first = digitalDeliveryErrors[0]!
@@ -1585,6 +1613,7 @@ export const ordersAdminService = {
       downloadEmailSentAt: order.downloadEmailSentAt?.toISOString() ?? null,
       deliveryEmailStatus,
       deliveryEmailStatusLabel: deliveryEmailStatusLabel(deliveryEmailStatus),
+      saasDeliveryStatus,
       canRetryDigitalDelivery,
       digitalDeliveryEmailAlert,
       preInfoAcceptedAt: order.preInfoAcceptedAt?.toISOString() ?? null,

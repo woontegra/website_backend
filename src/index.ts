@@ -56,6 +56,7 @@ import { legalDocumentsPublicRoutes } from './routes/legalDocuments.public.route
 import { legalDocumentsAdminRoutes } from './routes/legalDocuments.admin.routes'
 import { paymentSettingsAdminRoutes } from './routes/paymentSettings.admin.routes'
 import { customersPublicRoutes } from './routes/customers.public.routes'
+import { saasDemoRequestsPublicRoutes } from './routes/saasDemoRequests.public.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
 import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
@@ -154,6 +155,7 @@ app.use('/api/mail', mailRoutes)
 app.use('/api/public/downloads', downloadsPublicRoutes)
 app.use('/api/downloads', downloadsFreeRoutes)
 app.use('/api/public', cookiesPublicRoutes)
+app.use('/api/public', saasDemoRequestsPublicRoutes)
 app.use('/api/products', productsPublicRoutes)
 app.use('/api', campaignsPublicRoutes)
 app.use('/api/legal-documents', legalDocumentsPublicRoutes)

@@ -316,6 +316,170 @@ async function sendPaidSaasDeliveryPendingMail(input: {
   })
 }
 
+async function sendMkSaasDemoCreatedMail(input: {
+  customerName: string
+  customerEmail: string
+  barAssociation: string
+  productName: string
+  licenseEndDate: Date
+  loginUrl: string | null
+  licenseKey: string
+  ownerEmail: string
+  ownerUsername: string | null
+  temporaryPassword: string | null
+  tenantSlug: string
+  musteriNo: string | null
+  woontegraAccountCreated: boolean
+  woontegraPlainPassword: string | null
+}) {
+  const logoUrl = await resolveMailLogoUrl()
+  const safeName = escapeMailHtml(input.customerName.trim() || 'Müşterimiz')
+  const endLabel = formatMailDateTr(input.licenseEndDate.toISOString())
+  const loginHref = input.loginUrl || resolveMuvekkilKasaSaasLoginHref(null)
+
+  const rows: { label: string; value: string; mono?: boolean }[] = [
+    { label: 'Ürün', value: escapeMailHtml(input.productName) },
+    { label: 'Baro', value: escapeMailHtml(input.barAssociation) },
+    { label: 'E-posta', value: escapeMailHtml(input.ownerEmail) },
+    { label: 'Demo bitiş tarihi', value: escapeMailHtml(endLabel) },
+  ]
+  if (loginHref) {
+    rows.push({
+      label: 'Giriş / erişim adresi',
+      value: `<a href="${escapeMailHtml(loginHref)}" style="color:#2563eb;text-decoration:none;word-break:break-all;">${escapeMailHtml(loginHref)}</a>`,
+    })
+  }
+  const loginUser = input.ownerUsername?.trim() || input.ownerEmail
+  rows.push({ label: 'Kullanıcı adı', value: escapeMailHtml(loginUser) })
+  if (input.temporaryPassword?.trim()) {
+    rows.push({ label: 'Geçici şifre', value: escapeMailHtml(input.temporaryPassword.trim()), mono: true })
+  }
+  if (input.licenseKey.trim()) {
+    rows.push({ label: 'Lisans / erişim anahtarı', value: escapeMailHtml(input.licenseKey.trim()), mono: true })
+  }
+  if (input.musteriNo?.trim()) {
+    rows.push({ label: 'Müşteri No', value: escapeMailHtml(input.musteriNo.trim()), mono: true })
+  }
+  if (input.tenantSlug.trim()) {
+    rows.push({ label: 'Büro kodu', value: escapeMailHtml(input.tenantSlug.trim()), mono: true })
+  }
+
+  const loginButton = loginHref ? mailActionButton(loginHref, 'Demo Paneline Git', '#059669') : ''
+  const woontegraBlock = input.woontegraAccountCreated && input.woontegraPlainPassword?.trim()
+    ? `<p style="margin:16px 0 0;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;line-height:1.55;color:#475569;">Woontegra müşteri hesabınız da oluşturuldu. Üyeliklerinizi <a href="${escapeMailHtml(buildCustomerLoginPageHref())}" style="color:#2563eb;text-decoration:none;">Hesabım</a> bölümünden takip edebilirsiniz. Woontegra giriş şifreniz: <strong style="font-family:ui-monospace,monospace;">${escapeMailHtml(input.woontegraPlainPassword.trim())}</strong></p>`
+    : ''
+
+  const bodyHtml = `
+    <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Müvekkil Kasa Defteri Web Tabanlı demo erişiminiz <strong>7 gün</strong> boyunca aktif edilmiştir.</p>
+    ${mailBadge('Demo erişimi aktif', 'green')}
+    ${mailInfoTable(rows)}
+    ${loginButton}
+    ${woontegraBlock}
+    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#64748b;">Demo süreniz dolduğunda satın alma veya süre uzatma için Woontegra ile iletişime geçebilirsiniz.</p>`
+
+  const textBody = [
+    `Merhaba ${input.customerName},`,
+    '',
+    'Müvekkil Kasa Defteri Web Tabanlı demo erişiminiz 7 gün boyunca aktif edilmiştir.',
+    '',
+    `Ürün: ${input.productName}`,
+    `Baro: ${input.barAssociation}`,
+    `E-posta: ${input.ownerEmail}`,
+    `Demo bitiş tarihi: ${endLabel}`,
+    loginHref ? `Giriş / erişim adresi: ${loginHref}` : null,
+    `Kullanıcı adı: ${loginUser}`,
+    input.temporaryPassword?.trim() ? `Geçici şifre: ${input.temporaryPassword.trim()}` : null,
+    `Lisans / erişim anahtarı: ${input.licenseKey}`,
+    input.musteriNo?.trim() ? `Müşteri No: ${input.musteriNo.trim()}` : null,
+    input.tenantSlug.trim() ? `Büro kodu: ${input.tenantSlug}` : null,
+    input.woontegraAccountCreated && input.woontegraPlainPassword?.trim()
+      ? `Woontegra hesap şifreniz: ${input.woontegraPlainPassword.trim()}`
+      : null,
+    '',
+    'Demo süreniz dolduğunda satın alma veya süre uzatma için Woontegra ile iletişime geçebilirsiniz.',
+    '',
+    'Woontegra',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  await dispatchMail({
+    to: input.customerEmail,
+    subject: 'Müvekkil Kasa Defteri demo erişiminiz oluşturuldu',
+    text: textBody,
+    html: mailWelcomeHtmlDocument({
+      title: 'Demo erişiminiz hazır',
+      bodyHtml,
+      logoUrl,
+    }),
+  })
+}
+
+async function sendMkSaasDemoAdminNotification(input: {
+  fullName: string
+  phone: string
+  email: string
+  barAssociation: string
+  note: string | null
+  demoRef: string
+  licenseEndDate: Date
+  tenantId: string
+  tenantSlug: string
+  licenseKey: string
+  loginUrl: string | null
+}) {
+  const config = await resolveMailConfig()
+  const endLabel = formatMailDateTr(input.licenseEndDate.toISOString())
+  const rows = [
+    { label: 'Ad soyad', value: escapeMailHtml(input.fullName) },
+    { label: 'Telefon', value: escapeMailHtml(input.phone), mono: true },
+    {
+      label: 'E-posta',
+      value: `<a href="mailto:${escapeMailHtml(input.email)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(input.email)}</a>`,
+    },
+    { label: 'Baro', value: escapeMailHtml(input.barAssociation) },
+    { label: 'Demo bitiş', value: escapeMailHtml(endLabel) },
+    { label: 'Demo ref', value: escapeMailHtml(input.demoRef), mono: true },
+    { label: 'Tenant ID', value: escapeMailHtml(input.tenantId), mono: true },
+    { label: 'Tenant slug', value: escapeMailHtml(input.tenantSlug), mono: true },
+    { label: 'Lisans anahtarı', value: escapeMailHtml(input.licenseKey), mono: true },
+  ]
+  if (input.loginUrl?.trim()) {
+    rows.push({ label: 'Giriş URL', value: escapeMailHtml(input.loginUrl.trim()) })
+  }
+  if (input.note?.trim()) {
+    rows.push({ label: 'Not', value: escapeMailHtml(input.note.trim()) })
+  }
+
+  const bodyHtml = `
+    <p style="margin:0 0 10px;font-size:15px;line-height:1.6;color:#334155;">Yeni Müvekkil Kasa SaaS demo talebi oluşturuldu.</p>
+    ${mailInfoTable(rows)}`
+
+  await config.transporter.sendMail({
+    from: config.from,
+    to: config.notifyTo,
+    replyTo: input.email,
+    subject: `MK SaaS demo talebi — ${input.fullName}`,
+    text: [
+      'Yeni Müvekkil Kasa SaaS demo talebi',
+      '',
+      `Ad soyad: ${input.fullName}`,
+      `Telefon: ${input.phone}`,
+      `E-posta: ${input.email}`,
+      `Baro: ${input.barAssociation}`,
+      `Demo bitiş: ${endLabel}`,
+      `Demo ref: ${input.demoRef}`,
+      `Tenant: ${input.tenantSlug} (${input.tenantId})`,
+      `Lisans: ${input.licenseKey}`,
+      input.note?.trim() ? `Not: ${input.note.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    html: mailHtmlDocument('MK SaaS Demo Talebi', bodyHtml),
+  })
+}
+
 export const mailService = {
   async sendPaidSaasDeliveryPendingMail(input: {
     customerName: string
@@ -327,6 +491,41 @@ export const mailService = {
     reason?: string | null
   }) {
     return sendPaidSaasDeliveryPendingMail(input)
+  },
+
+  async sendMkSaasDemoCreatedMail(input: {
+    customerName: string
+    customerEmail: string
+    barAssociation: string
+    productName: string
+    licenseEndDate: Date
+    loginUrl: string | null
+    licenseKey: string
+    ownerEmail: string
+    ownerUsername: string | null
+    temporaryPassword: string | null
+    tenantSlug: string
+    musteriNo: string | null
+    woontegraAccountCreated: boolean
+    woontegraPlainPassword: string | null
+  }) {
+    return sendMkSaasDemoCreatedMail(input)
+  },
+
+  async sendMkSaasDemoAdminNotification(input: {
+    fullName: string
+    phone: string
+    email: string
+    barAssociation: string
+    note: string | null
+    demoRef: string
+    licenseEndDate: Date
+    tenantId: string
+    tenantSlug: string
+    licenseKey: string
+    loginUrl: string | null
+  }) {
+    return sendMkSaasDemoAdminNotification(input)
   },
 
   async sendContactForm(data: {

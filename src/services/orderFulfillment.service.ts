@@ -18,7 +18,15 @@ import {
   buildMuvekkilKasaSaasMailLines,
   ensureMuvekkilKasaSaasOrders,
 } from './muvekkilKasaSaasProvision.service'
-import { ensureMuvekkilKasaSaasRenewals } from './muvekkilKasaSaasRenew.service'
+import {
+  buildMuvekkilKasaSaasRenewMailLines,
+  ensureMuvekkilKasaSaasRenewals,
+} from './muvekkilKasaSaasRenew.service'
+import {
+  appendMkSaasPendingMailAdminNote,
+  hasMkSaasPendingMailSent,
+  isMkSaasOrderItem,
+} from '../lib/mkSaasDeliveryHelpers'
 
 const paidOrderDeliveryItemInclude = {
   product: {
@@ -127,6 +135,37 @@ export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCh
   return true
 }
 
+export async function orderNeedsPaidActivationMailRetry(order: {
+  id: string
+  orderNo: string
+  downloadEmailSentAt: Date | null
+  items: { id: string; downloadUrl: string | null; product: OrderItemForDeliveryCheck['product'] }[]
+}): Promise<boolean> {
+  if (!order.downloadEmailSentAt) return true
+  const mkItems = order.items.filter((i) => isMkSaasOrderItem(i))
+  if (mkItems.length === 0) return false
+  for (const item of mkItems) {
+    const row = await prisma.orderItem.findUnique({
+      where: { id: item.id },
+      select: { licenseServerLastError: true },
+    })
+    if (row?.licenseServerLastError?.trim()) return true
+    const extId = `${order.orderNo}:${item.id}`
+    const membership = await prisma.customerSaasMembership.findUnique({
+      where: { firstOrderId: extId },
+    })
+    if (!membership?.licenseKey?.trim()) return true
+  }
+  return false
+}
+
+async function markMkSaasPendingMailSent(orderId: string, adminNote: string | null): Promise<void> {
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { adminNote: appendMkSaasPendingMailAdminNote(adminNote) },
+  })
+}
+
 /** Havale onayı vb. öncesi: eksik/çözülemeyen teslimat varsa 400 fırlatır. */
 export function assertOrderDownloadLinesResolvableForCustomerMail(items: OrderItemForDeliveryCheck[]): void {
   if (checkOrderDownloadLinesForPaidMail(items)) return
@@ -183,107 +222,48 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     })
   }
 
-  if (!fresh.downloadEmailSentAt) {
-    const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
-    const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
-    const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
+  const shouldSendActivationMail = await orderNeedsPaidActivationMailRetry({
+    id: fresh.id,
+    orderNo: fresh.orderNo,
+    downloadEmailSentAt: fresh.downloadEmailSentAt,
+    items,
+  })
 
-    const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
-    const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
+  const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
+  const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
+  const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
+  const mkSaasRenewMailLines = await buildMuvekkilKasaSaasRenewMailLines(items, mkSaasRenewResult.renewed)
 
-    const allMailCandidates: {
-      id: string
-      productName: string
-      downloadUrl: string
-      licenses?: { licenseKey: string; activationPassword?: string }[]
-    }[] = [...externalMailLines, ...mkSaasMailLines]
-    if (localLinesRaw.length > 0) {
-      if (!checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
-        if (allMailCandidates.length === 0) return
-      } else {
-        const licenseMap = await getLicenseMailEntriesByOrderItemIds(
-          fresh.id,
-          localLinesRaw.map((l) => l.id),
-          freshPasswords,
-        )
-        for (const l of localLinesRaw) {
-          allMailCandidates.push({
-            ...l,
-            licenses: (licenseMap.get(l.id) ?? []).filter(
-              (entry): entry is { licenseKey: string; activationPassword: string } =>
-                Boolean(entry.licenseKey?.trim() && entry.activationPassword?.trim()),
-            ),
-          })
-        }
+  const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
+  const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
+
+  const allMailCandidates: {
+    id: string
+    productName: string
+    downloadUrl: string
+    licenses?: { licenseKey: string; activationPassword?: string }[]
+  }[] = [...externalMailLines, ...mkSaasMailLines, ...mkSaasRenewMailLines]
+
+  if (localLinesRaw.length > 0) {
+    if (checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
+      const licenseMap = await getLicenseMailEntriesByOrderItemIds(
+        fresh.id,
+        localLinesRaw.map((l) => l.id),
+        freshPasswords,
+      )
+      for (const l of localLinesRaw) {
+        allMailCandidates.push({
+          ...l,
+          licenses: (licenseMap.get(l.id) ?? []).filter(
+            (entry): entry is { licenseKey: string; activationPassword: string } =>
+              Boolean(entry.licenseKey?.trim() && entry.activationPassword?.trim()),
+          ),
+        })
       }
     }
+  }
 
-    if (allMailCandidates.length === 0) {
-      const allCentralMailSent =
-        externalResult.provisioned.length > 0 &&
-        externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
-      const saasRenewedOk =
-        mkSaasRenewResult.renewed.length > 0 && mkSaasRenewResult.errors.length === 0
-      const saasProvisionedOk =
-        ((externalResult.provisioned.some((p) => p.deliveryType === 'SAAS') ||
-          mkSaasResult.provisioned.length > 0) &&
-          externalResult.errors.length === 0 &&
-          mkSaasResult.errors.length === 0) ||
-        saasRenewedOk
-      if ((allCentralMailSent || saasProvisionedOk) && externalResult.errors.length === 0) {
-        await prisma.order.update({
-          where: { id: fresh.id },
-          data: { downloadEmailSentAt: new Date() },
-        })
-        return
-      }
-      if (items.some((i) => i.product?.licenseRequired) && externalResult.errors.length > 0) {
-        console.error('[orders] central license delivery blocked — provision failed', {
-          orderNo: fresh.orderNo,
-          orderId: fresh.id,
-        })
-      } else if (mkSaasResult.errors.length > 0 || mkSaasRenewResult.errors.length > 0) {
-        console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew failed', {
-          orderNo: fresh.orderNo,
-          orderId: fresh.id,
-          errors: [...mkSaasResult.errors, ...mkSaasRenewResult.errors],
-        })
-        const saasItems = items.filter(
-          (i) =>
-            i.product?.productType === ProductType.SAAS ||
-            (i.downloadUrl ?? '').startsWith('saas:'),
-        )
-        if (saasItems.length > 0) {
-          try {
-            await mailService.sendPaidSaasDeliveryPendingMail({
-              customerName: fresh.customerName,
-              customerEmail: fresh.customerEmail,
-              orderNo: fresh.orderNo,
-              productNames: saasItems.map((i) => i.productName),
-              support: 'info@woontegra.com',
-              loginHref: resolveMuvekkilKasaSaasLoginHref(),
-              reason: mkSaasResult.errors[0]?.error ?? mkSaasRenewResult.errors[0]?.error ?? null,
-            })
-            await prisma.order.update({
-              where: { id: fresh.id },
-              data: { downloadEmailSentAt: new Date() },
-            })
-          } catch (mailErr) {
-            console.error('[orders] saas delivery pending mail failed', {
-              orderNo: fresh.orderNo,
-              error: mailErr instanceof Error ? mailErr.message : mailErr,
-            })
-          }
-        }
-      } else if (items.length > 0) {
-        console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
-          orderNo: fresh.orderNo,
-          orderId: fresh.id,
-        })
-      }
-      return
-    }
-
+  if (shouldSendActivationMail && allMailCandidates.length > 0) {
     for (const line of allMailCandidates) {
       if (line.downloadUrl.startsWith('saas:')) continue
       const rawForSource = items.find((i) => i.id === line.id)
@@ -318,8 +298,83 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
         where: { orderId: fresh.id, id: { in: externalResult.provisioned.map((p) => p.orderItemId) } },
         data: { licenseServerLastError: null },
       })
+      await prisma.orderItem.updateMany({
+        where: {
+          orderId: fresh.id,
+          id: {
+            in: [
+              ...mkSaasResult.provisioned.map((p) => p.orderItemId),
+              ...mkSaasRenewResult.renewed.map((r) => r.orderItemId),
+            ],
+          },
+        },
+        data: { licenseServerLastError: null },
+      })
     } catch (e) {
       console.error('[orders] paid mail send failed', e)
+    }
+    return
+  }
+
+  if (allMailCandidates.length === 0) {
+    const allCentralMailSent =
+      externalResult.provisioned.length > 0 &&
+      externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
+    const saasRenewedOk =
+      mkSaasRenewResult.renewed.length > 0 && mkSaasRenewResult.errors.length === 0
+    const saasProvisionedOk =
+      mkSaasResult.provisioned.length > 0 &&
+      mkSaasResult.errors.length === 0 &&
+      mkSaasRenewResult.errors.length === 0
+    if (allCentralMailSent && externalResult.errors.length === 0) {
+      await prisma.order.update({
+        where: { id: fresh.id },
+        data: { downloadEmailSentAt: new Date() },
+      })
+      return
+    }
+    if (saasProvisionedOk || saasRenewedOk) {
+      return
+    }
+
+    if (items.some((i) => i.product?.licenseRequired) && externalResult.errors.length > 0) {
+      console.error('[orders] central license delivery blocked — provision failed', {
+        orderNo: fresh.orderNo,
+        orderId: fresh.id,
+      })
+    } else if (mkSaasResult.errors.length > 0 || mkSaasRenewResult.errors.length > 0) {
+      console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew failed', {
+        orderNo: fresh.orderNo,
+        orderId: fresh.id,
+        errors: [...mkSaasResult.errors, ...mkSaasRenewResult.errors],
+      })
+      const saasItems = items.filter(
+        (i) => i.product?.productType === ProductType.SAAS || (i.downloadUrl ?? '').startsWith('saas:'),
+      )
+      if (saasItems.length > 0 && !hasMkSaasPendingMailSent(fresh.adminNote)) {
+        try {
+          await mailService.sendPaidSaasDeliveryPendingMail({
+            customerName: fresh.customerName,
+            customerEmail: fresh.customerEmail,
+            orderNo: fresh.orderNo,
+            productNames: saasItems.map((i) => i.productName),
+            support: 'info@woontegra.com',
+            loginHref: resolveMuvekkilKasaSaasLoginHref(),
+            reason: null,
+          })
+          await markMkSaasPendingMailSent(fresh.id, fresh.adminNote)
+        } catch (mailErr) {
+          console.error('[orders] saas delivery pending mail failed', {
+            orderNo: fresh.orderNo,
+            error: mailErr instanceof Error ? mailErr.message : mailErr,
+          })
+        }
+      }
+    } else if (items.length > 0 && !checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
+      console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
+        orderNo: fresh.orderNo,
+        orderId: fresh.id,
+      })
     }
   }
 
