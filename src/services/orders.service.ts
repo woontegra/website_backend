@@ -31,6 +31,7 @@ import {
 } from './license.service'
 import { renderLegalTemplate } from './legalTemplate.service'
 import { campaignsService } from './campaigns.service'
+import { saveCustomerAddressFromCheckout } from './customerAddressCheckout.service'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -64,6 +65,10 @@ export type CreateOrderInput = {
   acceptedUserAgent?: string | null
   /** Varsayılan kart (PayTR). Havale/EFT siparişinde teslimat admin onayı sonrası. */
   paymentProvider?: 'PAYTR' | 'BANK_TRANSFER'
+  /** Giriş yapmış müşteri checkout adresini adres defterine kaydetmek istiyorsa */
+  saveToAddressBook?: boolean
+  /** Checkout'ta seçili kayıtlı adres (değişmediyse tekrar kayıt oluşturulmaz) */
+  selectedAddressId?: string | null
 }
 
 /** Müşteri tarafında indirme / teslim bağlantısı gösterimi */
@@ -291,7 +296,10 @@ function emailsMatch(a: string, b: string): boolean {
 }
 
 export const ordersService = {
-  async createOrder(input: CreateOrderInput) {
+  async createOrder(input: CreateOrderInput): Promise<{
+    order: Awaited<ReturnType<typeof prisma.order.create>>
+    addressBookWarning?: string
+  }> {
     const lines = input.items.filter((l) => l.productId && l.quantity > 0)
     if (lines.length === 0) {
       const err = new Error('Sepet boş') as Error & { status: number }
@@ -614,7 +622,31 @@ export const ordersService = {
           }
         })()
 
-        return order
+        let addressBookWarning: string | undefined
+        if (input.customerId?.trim() && input.saveToAddressBook) {
+          try {
+            await saveCustomerAddressFromCheckout(input.customerId.trim(), {
+              selectedAddressId: input.selectedAddressId,
+              fullName: input.customerName.trim(),
+              phone: input.customerPhone?.trim() || null,
+              city: input.deliveryCity?.trim() || '',
+              district: input.deliveryDistrict?.trim() || null,
+              addressLine: input.deliveryLine?.trim() || '',
+              taxOffice: input.taxOffice?.trim() || null,
+              taxNumber: input.taxNumber?.trim() || null,
+              companyName: input.companyName?.trim() || null,
+            })
+          } catch (err) {
+            console.error('[orders] checkout address book save failed', {
+              customerId: input.customerId,
+              error: err instanceof Error ? err.message : err,
+            })
+            addressBookWarning =
+              'Adres defterinize kaydedilemedi; siparişiniz oluşturuldu. Adresleri hesabınızdan manuel ekleyebilirsiniz.'
+          }
+        }
+
+        return { order, addressBookWarning }
       } catch (e) {
         if (isUniqueViolation(e)) continue
         throw e

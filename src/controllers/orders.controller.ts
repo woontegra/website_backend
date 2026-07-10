@@ -93,7 +93,7 @@ export async function createOrder(req: Request, res: Response) {
   }
 
   try {
-    const order = await ordersService.createOrder({
+    const result = await ordersService.createOrder({
       items,
       customerName,
       customerEmail,
@@ -118,7 +118,10 @@ export async function createOrder(req: Request, res: Response) {
       acceptedIp: ip || null,
       acceptedUserAgent: ua || null,
       paymentProvider,
+      saveToAddressBook: body.saveToAddressBook === true,
+      selectedAddressId: readString(body, 'selectedAddressId') || null,
     })
+    const order = result.order
     return res.status(201).json({
       success: true,
       data: {
@@ -128,6 +131,7 @@ export async function createOrder(req: Request, res: Response) {
         total: Number(order.total),
         currency: order.currency,
         paymentProvider: order.paymentProvider,
+        ...(result.addressBookWarning ? { addressBookWarning: result.addressBookWarning } : {}),
       },
     })
   } catch (e) {
