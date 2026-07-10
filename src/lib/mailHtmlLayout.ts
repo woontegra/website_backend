@@ -68,6 +68,33 @@ export function mailBadge(text: string, tone: 'blue' | 'amber' | 'green' = 'blue
   return `<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:${colors.bg};color:${colors.fg};border:1px solid ${colors.border};">${escapeMailHtml(text)}</span>`
 }
 
+export function mailLinkCards(
+  links: { label: string; href: string; description?: string }[],
+): string {
+  const cards = links
+    .map((link) => {
+      const safeHref = escapeMailHtml(link.href)
+      const safeLabel = escapeMailHtml(link.label)
+      const desc = link.description
+        ? `<div style="margin-top:4px;font-size:12px;line-height:1.5;color:#64748b;">${escapeMailHtml(link.description)}</div>`
+        : ''
+      return `<tr>
+        <td style="padding:0 0 10px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;">
+            <tr>
+              <td style="padding:14px 16px;">
+                <a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="font-size:14px;font-weight:600;color:#0f766e;text-decoration:none;">${safeLabel}</a>
+                ${desc}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`
+    })
+    .join('')
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:18px 0 6px;">${cards}</table>`
+}
+
 /** Hoş geldin / hesap oluşturma e-postası — logo beyaz zemin, başlık gradient altında */
 export function mailWelcomeHtmlDocument(options: {
   title: string
@@ -110,8 +137,8 @@ export function mailWelcomeHtmlDocument(options: {
             <td style="padding:24px 32px 0;background:#ffffff;">${logoBlock}</td>
           </tr>
           <tr>
-            <td style="background:linear-gradient(135deg,#1e40af 0%,#2563eb 55%,#3b82f6 100%);padding:22px 32px 24px;">
-              <div style="font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.88);">Woontegra</div>
+            <td style="background:linear-gradient(135deg,#0f766e 0%,#134e4a 38%,#1e3a5f 100%);padding:22px 32px 24px;">
+              <div style="font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.9);">Woontegra</div>
               <div style="margin-top:8px;font-size:24px;font-weight:700;color:#ffffff;line-height:1.25;">${safeTitle}</div>
             </td>
           </tr>

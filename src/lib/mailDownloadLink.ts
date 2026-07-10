@@ -48,6 +48,11 @@ export function buildCustomerLoginPageHref(): string {
 
 
 
+export function buildCustomerMembershipsPageHref(): string {
+  const site = pickPublicSiteOrigin()
+  return site ? `${site}/hesabim/uyelikler` : 'https://woontegra.com/hesabim/uyelikler'
+}
+
 export function buildCustomerPasswordResetHref(plainToken: string): string {
 
   const site = pickPublicSiteOrigin()

@@ -6,7 +6,8 @@ import { mailService } from './mail.service'
 export const CUSTOMER_FORGOT_PASSWORD_SUCCESS_MESSAGE =
   'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.'
 
-const RESET_TOKEN_EXPIRES_MIN = 60
+export const FORGOT_PASSWORD_TOKEN_EXPIRES_MIN = 60
+export const WELCOME_PASSWORD_SET_EXPIRES_MIN = 24 * 60
 const RESET_COOLDOWN_MIN = 5
 const SALT_ROUNDS = 10
 
@@ -27,6 +28,34 @@ export function hashCustomerResetToken(plainToken: string): string {
 
 function generatePlainResetToken(): string {
   return randomBytes(32).toString('base64url')
+}
+
+/** Tek kullanımlık şifre belirleme/sıfırlama token'ı oluşturur (hash DB'de saklanır). */
+export async function issueCustomerPasswordSetToken(
+  customerId: string,
+  expiresMinutes: number,
+  options?: { replaceExisting?: boolean },
+): Promise<string> {
+  const plainToken = generatePlainResetToken()
+  const tokenHash = hashCustomerResetToken(plainToken)
+  const expiresAt = new Date(Date.now() + expiresMinutes * 60 * 1000)
+
+  await prisma.$transaction(async (tx) => {
+    if (options?.replaceExisting !== false) {
+      await tx.customerPasswordResetToken.deleteMany({
+        where: { customerId, usedAt: null },
+      })
+    }
+    await tx.customerPasswordResetToken.create({
+      data: {
+        customerId,
+        tokenHash,
+        expiresAt,
+      },
+    })
+  })
+
+  return plainToken
 }
 
 export const customerPasswordResetService = {
@@ -58,29 +87,18 @@ export const customerPasswordResetService = {
       return { ok: true, message: CUSTOMER_FORGOT_PASSWORD_SUCCESS_MESSAGE }
     }
 
-    const plainToken = generatePlainResetToken()
-    const tokenHash = hashCustomerResetToken(plainToken)
-    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRES_MIN * 60 * 1000)
-
-    await prisma.$transaction(async (tx) => {
-      await tx.customerPasswordResetToken.deleteMany({
-        where: { customerId: customer.id, usedAt: null },
-      })
-      await tx.customerPasswordResetToken.create({
-        data: {
-          customerId: customer.id,
-          tokenHash,
-          expiresAt,
-        },
-      })
-    })
+    const plainToken = await issueCustomerPasswordSetToken(
+      customer.id,
+      FORGOT_PASSWORD_TOKEN_EXPIRES_MIN,
+      { replaceExisting: true },
+    )
 
     void mailService
       .sendCustomerPasswordResetEmail({
         customerName: customer.name,
         customerEmail: customer.email,
         plainToken,
-        expiresMinutes: RESET_TOKEN_EXPIRES_MIN,
+        expiresMinutes: FORGOT_PASSWORD_TOKEN_EXPIRES_MIN,
       })
       .catch((err) => {
         console.error('[customers] Şifre sıfırlama e-postası gönderilemedi', {

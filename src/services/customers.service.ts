@@ -6,6 +6,10 @@ import { maskLicenseKeyForDisplay } from '../lib/licenseKey'
 import { resolveCustomerOrderDownloadMeta } from '../lib/customerOrderDownload'
 import { getBankTransferCustomerInfo } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
+import {
+  issueCustomerPasswordSetToken,
+  WELCOME_PASSWORD_SET_EXPIRES_MIN,
+} from './customerPasswordReset.service'
 import { resolveOrderPaymentRowStatus } from './orders.service'
 import { fetchLicenseServerCustomerLicenses } from './woontegraLicenseServer.client'
 import { listCustomerSaasMemberships } from './customerSaasMembership.service'
@@ -171,14 +175,24 @@ export const customersService = {
       const token = signCustomerToken(c.id, c.email)
       const result = { token, customer: mapCustomer(c) }
 
-      void mailService
-        .sendCustomerWelcomeEmail({ customerName: name, customerEmail: email })
-        .catch((err) => {
+      void (async () => {
+        try {
+          const plainToken = await issueCustomerPasswordSetToken(c.id, WELCOME_PASSWORD_SET_EXPIRES_MIN, {
+            replaceExisting: true,
+          })
+          await mailService.sendCustomerWelcomeEmail({
+            customerName: name,
+            customerEmail: email,
+            plainToken,
+            expiresMinutes: WELCOME_PASSWORD_SET_EXPIRES_MIN,
+          })
+        } catch (err) {
           console.error('[customers] Hoş geldin e-postası gönderilemedi', {
             email,
             error: err instanceof Error ? err.message : err,
           })
-        })
+        }
+      })()
 
       return result
     } catch (e) {
