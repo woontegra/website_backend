@@ -5,6 +5,7 @@ import { getClientIp } from '../lib/clientIp'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
+import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
 import { mailService } from './mail.service'
 import {
   ensureExternalLicenseServerOrders,
@@ -245,7 +246,35 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
         console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew failed', {
           orderNo: fresh.orderNo,
           orderId: fresh.id,
+          errors: [...mkSaasResult.errors, ...mkSaasRenewResult.errors],
         })
+        const saasItems = items.filter(
+          (i) =>
+            i.product?.productType === ProductType.SAAS ||
+            (i.downloadUrl ?? '').startsWith('saas:'),
+        )
+        if (saasItems.length > 0) {
+          try {
+            await mailService.sendPaidSaasDeliveryPendingMail({
+              customerName: fresh.customerName,
+              customerEmail: fresh.customerEmail,
+              orderNo: fresh.orderNo,
+              productNames: saasItems.map((i) => i.productName),
+              support: 'info@woontegra.com',
+              loginHref: resolveMuvekkilKasaSaasLoginHref(),
+              reason: mkSaasResult.errors[0]?.error ?? mkSaasRenewResult.errors[0]?.error ?? null,
+            })
+            await prisma.order.update({
+              where: { id: fresh.id },
+              data: { downloadEmailSentAt: new Date() },
+            })
+          } catch (mailErr) {
+            console.error('[orders] saas delivery pending mail failed', {
+              orderNo: fresh.orderNo,
+              error: mailErr instanceof Error ? mailErr.message : mailErr,
+            })
+          }
+        }
       } else if (items.length > 0) {
         console.error('[orders] Paid digital order delivery URL missing — no line URLs', {
           orderNo: fresh.orderNo,

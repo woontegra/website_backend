@@ -206,6 +206,8 @@ export const paytrService = {
       payment_amount: String(paymentAmount),
       user_ip: userIp,
       email,
+      test_mode: testMode,
+      config_source: env.source,
     })
 
     await prisma.paymentTransaction.deleteMany({
@@ -375,6 +377,17 @@ export const paytrService = {
         where: { merchantOid },
         data: { providerRawPayload: rawJson },
       })
+      const paidOrder = await prisma.order.findUnique({
+        where: { id: order.id },
+        select: { downloadEmailSentAt: true, orderNo: true },
+      })
+      if (paidOrder && !paidOrder.downloadEmailSentAt) {
+        console.info('[paytr] callback: PAID siparişte teslimat maili eksik; fulfillment yeniden deneniyor', {
+          merchantOid,
+          orderNo: paidOrder.orderNo,
+        })
+        await fulfillPaidOrderDelivery(order.id, req)
+      }
       console.info('[paytr] callback: sipariş zaten PAID; payload güncellendi', {
         merchantOid,
         orderNo: order.orderNo,

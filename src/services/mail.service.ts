@@ -261,7 +261,74 @@ async function sendPaidSaasOnlyOrderMail(input: {
   })
 }
 
+async function sendPaidSaasDeliveryPendingMail(input: {
+  customerName: string
+  customerEmail: string
+  orderNo: string
+  productNames: string[]
+  support: string
+  loginHref: string | null
+  reason?: string | null
+}) {
+  const logoUrl = await resolveMailLogoUrl()
+  const safeName = escapeMailHtml(input.customerName.trim() || 'Müşterimiz')
+  const products = input.productNames.map((p) => escapeMailHtml(p)).join(', ')
+  const loginBlock = input.loginHref
+    ? mailActionButton(input.loginHref, 'Müvekkil Kasa Giriş', '#059669')
+    : ''
+  const reasonLine = input.reason?.trim()
+    ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#475569;">${escapeMailHtml(input.reason.trim())}</p>`
+    : ''
+
+  const bodyHtml = `
+    <p style="margin:0 0 10px;font-size:16px;line-height:1.55;color:#0f172a;">Merhaba ${safeName},</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Ödemeniz alındı. <strong>${products}</strong> için web tabanlı ürün erişiminiz hazırlanıyor.</p>
+    ${reasonLine}
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">Erişim bilgileriniz kısa süre içinde bu e-posta adresine iletilecektir. Mevcut Müvekkil Kasa hesabınız varsa giriş ekranından oturum açabilirsiniz.</p>
+    ${loginBlock}
+    <p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Sorularınız için: <a href="mailto:${escapeMailHtml(input.support)}" style="color:#2563eb;text-decoration:none;">${escapeMailHtml(input.support)}</a></p>`
+
+  const textBody = [
+    `Merhaba ${input.customerName},`,
+    '',
+    `Ödemeniz alındı. ${input.productNames.join(', ')} için web tabanlı ürün erişiminiz hazırlanıyor.`,
+    input.reason?.trim() ? input.reason.trim() : null,
+    '',
+    'Erişim bilgileriniz kısa süre içinde bu e-posta adresine iletilecektir.',
+    input.loginHref ? `Müvekkil Kasa giriş: ${input.loginHref}` : null,
+    '',
+    `Destek: ${input.support}`,
+    '',
+    'Woontegra',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  await dispatchMail({
+    to: input.customerEmail,
+    subject: `Ödemeniz alındı — ${input.orderNo}`,
+    text: textBody,
+    html: mailWelcomeHtmlDocument({
+      title: 'Ödemeniz alındı',
+      bodyHtml,
+      logoUrl,
+    }),
+  })
+}
+
 export const mailService = {
+  async sendPaidSaasDeliveryPendingMail(input: {
+    customerName: string
+    customerEmail: string
+    orderNo: string
+    productNames: string[]
+    support: string
+    loginHref: string | null
+    reason?: string | null
+  }) {
+    return sendPaidSaasDeliveryPendingMail(input)
+  },
+
   async sendContactForm(data: {
     name: string
     email: string

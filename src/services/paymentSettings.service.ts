@@ -70,6 +70,17 @@ const MASK = '••••••••••••••••'
 
 export async function getAdminPaytrDto() {
   const row = await prisma.paymentSettings.findUnique({ where: { provider: PaymentProvider.PAYTR } })
+  let effectiveTestMode: boolean | null = null
+  let effectiveConfigSource: 'database' | 'env' | null = null
+  try {
+    const effective = await getEffectivePaytrConfig()
+    effectiveTestMode = effective.testMode === '1'
+    effectiveConfigSource = effective.source
+  } catch {
+    effectiveTestMode = null
+    effectiveConfigSource = null
+  }
+
   if (!row) {
     return {
       provider: 'PAYTR',
@@ -83,6 +94,8 @@ export async function getAdminPaytrDto() {
       failUrl: null as string | null,
       debugOn: true,
       callbackPath: '/api/payments/paytr/callback',
+      effectiveTestMode,
+      effectiveConfigSource,
     }
   }
   return {
@@ -97,20 +110,26 @@ export async function getAdminPaytrDto() {
     failUrl: row.failUrl,
     debugOn: row.debugOn,
     callbackPath: '/api/payments/paytr/callback',
+    effectiveTestMode,
+    effectiveConfigSource,
   }
 }
 
 export async function patchAdminPaytr(body: Record<string, unknown>) {
+  const createTestMode = typeof body.testMode === 'boolean' ? body.testMode : true
+  const createIsActive = typeof body.isActive === 'boolean' ? body.isActive : false
+  const createDebugOn = typeof body.debugOn === 'boolean' ? body.debugOn : true
+
   const row = await prisma.paymentSettings.upsert({
     where: { provider: PaymentProvider.PAYTR },
     create: {
       provider: PaymentProvider.PAYTR,
-      isActive: false,
-      testMode: true,
-      merchantId: '',
+      isActive: createIsActive,
+      testMode: createTestMode,
+      merchantId: typeof body.merchantId === 'string' ? body.merchantId.trim() : '',
       merchantKeyEncrypted: '',
       merchantSaltEncrypted: '',
-      debugOn: true,
+      debugOn: createDebugOn,
     },
     update: {},
   })

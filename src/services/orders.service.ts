@@ -295,6 +295,62 @@ function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
+type OrderDeliveryView = {
+  deliveryState: 'pending' | 'delivered' | 'blocked' | 'not_applicable'
+  deliveryMessage: string
+  downloadEmailSentAt: string | null
+}
+
+function buildOrderDeliveryView(order: {
+  status: string
+  downloadEmailSentAt: Date | null
+  items: { productName: string; licenseServerLastError: string | null; downloadUrl: string | null }[]
+}): OrderDeliveryView {
+  const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
+  const downloadEmailSentAt = order.downloadEmailSentAt?.toISOString() ?? null
+  if (!paidLike) {
+    return { deliveryState: 'not_applicable', deliveryMessage: '', downloadEmailSentAt }
+  }
+
+  const errors = order.items
+    .map((i) => i.licenseServerLastError?.trim())
+    .filter((e): e is string => Boolean(e))
+  const hasSaas = order.items.some((i) => (i.downloadUrl ?? '').startsWith('saas:'))
+  const hasDigital = order.items.some((i) => Boolean(i.downloadUrl?.trim()))
+
+  if (downloadEmailSentAt) {
+    return {
+      deliveryState: 'delivered',
+      deliveryMessage: hasSaas
+        ? 'Web tabanlı ürün erişim bilgileriniz e-posta ile gönderildi.'
+        : 'Lisans ve teslimat bilgileriniz e-posta ile gönderildi.',
+      downloadEmailSentAt,
+    }
+  }
+  if (errors.length > 0) {
+    return {
+      deliveryState: 'blocked',
+      deliveryMessage:
+        'Siparişiniz ödendi ancak teslimat için ek kontrol gerekiyor. Ekibimiz bilgilendirildi; kısa süre içinde e-posta ile dönüş yapılacaktır.',
+      downloadEmailSentAt,
+    }
+  }
+  if (hasSaas || hasDigital) {
+    return {
+      deliveryState: 'pending',
+      deliveryMessage: hasSaas
+        ? 'Web tabanlı ürün erişiminiz hazırlanıyor; bilgiler e-posta ile iletilecektir.'
+        : 'Lisans ve teslimat bilgileriniz hazırlanıyor; e-posta ile iletilecektir.',
+      downloadEmailSentAt,
+    }
+  }
+  return {
+    deliveryState: 'not_applicable',
+    deliveryMessage: 'Siparişiniz onaylandı.',
+    downloadEmailSentAt,
+  }
+}
+
 export const ordersService = {
   async createOrder(input: CreateOrderInput): Promise<{
     order: Awaited<ReturnType<typeof prisma.order.create>>
@@ -714,6 +770,7 @@ export const ordersService = {
     }))
     const orderTotal = Number(order.total)
     const currency = order.currency
+    const deliveryView = buildOrderDeliveryView(order)
 
     if (order.status === 'PENDING') {
       const bank = order.paymentProvider === PaymentProvider.BANK_TRANSFER
@@ -771,7 +828,7 @@ export const ordersService = {
       !!viewerCustomerId && !!order.customerId && order.customerId === viewerCustomerId
 
     if (order.status === 'PROCESSING') {
-      const processingMessage = 'Ödemeniz onaylandı. Siparişiniz işleme alındı.'
+      const processingMessage = deliveryView.deliveryMessage || 'Ödemeniz onaylandı. Siparişiniz işleme alındı.'
       if (!emailOk && !ownerOk) {
         return {
           status: 'PROCESSING' as const,
@@ -792,6 +849,9 @@ export const ordersService = {
           requiresEmail: true as const,
           message: 'İndirme veya kullanım bilgileri için siparişteki e-posta adresini doğrulayın.',
           paymentProvider: order.paymentProvider,
+          deliveryState: deliveryView.deliveryState,
+          deliveryMessage: deliveryView.deliveryMessage,
+          downloadEmailSentAt: deliveryView.downloadEmailSentAt,
         }
       }
       return {
@@ -813,6 +873,9 @@ export const ordersService = {
         requiresEmail: false as const,
         message: processingMessage,
         paymentProvider: order.paymentProvider,
+        deliveryState: deliveryView.deliveryState,
+        deliveryMessage: deliveryView.deliveryMessage,
+        downloadEmailSentAt: deliveryView.downloadEmailSentAt,
       }
     }
 
@@ -841,6 +904,9 @@ export const ordersService = {
         paidAt: order.paidAt?.toISOString() ?? null,
         requiresEmail: true as const,
         message: 'İndirme bağlantıları için siparişteki e-posta adresini doğrulayın.',
+        deliveryState: deliveryView.deliveryState,
+        deliveryMessage: deliveryView.deliveryMessage,
+        downloadEmailSentAt: deliveryView.downloadEmailSentAt,
       }
     }
 
@@ -861,6 +927,10 @@ export const ordersService = {
       })),
       paidAt: order.paidAt?.toISOString() ?? null,
       requiresEmail: false as const,
+      message: deliveryView.deliveryMessage || 'Siparişiniz onaylandı.',
+      deliveryState: deliveryView.deliveryState,
+      deliveryMessage: deliveryView.deliveryMessage,
+      downloadEmailSentAt: deliveryView.downloadEmailSentAt,
     }
   },
 }
