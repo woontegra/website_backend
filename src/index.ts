@@ -44,6 +44,9 @@ import { ordersPublicRoutes } from './routes/orders.public.routes'
 import { licensePublicRoutes } from './routes/license.public.routes'
 import { ordersAdminRoutes } from './routes/orders.admin.routes'
 import { licensesAdminRoutes } from './routes/licenses.admin.routes'
+import { saasMembershipsAdminRoutes } from './routes/saasMemberships.admin.routes'
+import { downloadStatsAdminRoutes } from './routes/downloadStats.admin.routes'
+import { customersAdminRoutes } from './routes/customers.admin.routes'
 import { licenseProgramsAdminRoutes } from './routes/licensePrograms.admin.routes'
 import { paymentsPublicRoutes } from './routes/payments.public.routes'
 import { navigationMenuPublicRoutes } from './routes/navigationMenu.public.routes'
@@ -53,6 +56,7 @@ import { paymentSettingsAdminRoutes } from './routes/paymentSettings.admin.route
 import { customersPublicRoutes } from './routes/customers.public.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
+import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
@@ -163,6 +167,19 @@ app.use('/api/navigation-menu', navigationMenuPublicRoutes)
  */
 app.patch('/api/admin/orders/:id', authMiddleware, adminOnly, ordersAdminController.adminUpdateOrder)
 app.delete('/api/admin/orders/:id', authMiddleware, adminOnly, ordersAdminController.adminDeleteOrder)
+app.patch('/api/admin/saas-memberships/:id', authMiddleware, adminOnly, saasMembershipsAdminController.adminPatchSaasMembership)
+app.patch(
+  '/api/admin/saas-memberships/:id/status',
+  authMiddleware,
+  adminOnly,
+  saasMembershipsAdminController.adminPatchSaasMembershipStatus,
+)
+app.patch(
+  '/api/admin/saas-memberships/:id/extend',
+  authMiddleware,
+  adminOnly,
+  saasMembershipsAdminController.adminExtendSaasMembership,
+)
 app.use('/api/admin', cookiesAdminRoutes)
 app.use('/api/admin', productsAdminRoutes)
 app.use('/api/admin', catalogMediaAdminRoutes)
@@ -170,6 +187,9 @@ app.use('/api/admin', productCategoriesAdminRoutes)
 app.use('/api/admin', navigationMenuAdminRoutes)
 app.use('/api/admin', ordersAdminRoutes)
 app.use('/api/admin', licensesAdminRoutes)
+app.use('/api/admin', saasMembershipsAdminRoutes)
+app.use('/api/admin', downloadStatsAdminRoutes)
+app.use('/api/admin', customersAdminRoutes)
 app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
