@@ -723,13 +723,21 @@ export const ordersService = {
 
         void (async () => {
           try {
-            if (paymentProvider === PaymentProvider.BANK_TRANSFER && bankTransferInfo) {
-              await mailService.sendBankTransferOrderCreated({
-                customerName: order.customerName,
-                customerEmail: order.customerEmail,
-                info: bankTransferInfo,
-              })
+            if (paymentProvider !== PaymentProvider.BANK_TRANSFER) {
+              if (paymentProvider === PaymentProvider.PAYTR) {
+                console.info('[orders] PayTR sipariş oluşturuldu; admin maili ödeme callback sonrasına ertelendi', {
+                  orderNo: order.orderNo,
+                })
+              }
+              return
             }
+            if (!bankTransferInfo) return
+
+            await mailService.sendBankTransferOrderCreated({
+              customerName: order.customerName,
+              customerEmail: order.customerEmail,
+              info: bankTransferInfo,
+            })
             await mailService.sendNewOrderAdminNotification({
               orderNo: order.orderNo,
               customerName: order.customerName,

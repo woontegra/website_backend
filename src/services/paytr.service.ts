@@ -13,6 +13,11 @@ import {
   type OrderItemForDeliveryCheck,
 } from './orderFulfillment.service'
 import { getEffectivePaytrConfig, resolvePaytrCallbackUrlForLogging } from './paymentSettings.service'
+import { mailService } from './mail.service'
+import {
+  appendPaytrAdminPaidMailSentNote,
+  hasPaytrAdminPaidMailSent,
+} from '../lib/orderAdminMail'
 
 function paytrHmacBase64(secretKey: string, data: string): string {
   return crypto.createHmac('sha256', secretKey).update(data, 'utf8').digest('base64')
@@ -40,7 +45,7 @@ function isPaytrMerchantOidDuplicateError(reason: string): boolean {
 }
 
 /** PayTR her get-token çağrısında benzersiz merchant_oid ister; aynı siparişte yeniden denemeler için R2, R3… eklenir. */
-async function allocatePaytrMerchantOid(orderId: string, orderNo: string): Promise<string> {
+export async function allocatePaytrMerchantOid(orderId: string, orderNo: string): Promise<string> {
   const base = toPaytrMerchantOid(orderNo)
   if (!base || base.length < 6) {
     const err = new Error('Sipariş numarası PayTR için uygun değil') as Error & { status: number }
@@ -74,6 +79,43 @@ function buildUserBasket(
     i.quantity,
   ])
   return Buffer.from(JSON.stringify(basket), 'utf8').toString('base64')
+}
+
+async function notifyAdminPaytrOrderPaid(orderId: string): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { orderBy: { id: 'asc' } } },
+  })
+  if (!order) return
+  if (hasPaytrAdminPaidMailSent(order.adminNote)) {
+    console.info('[paytr] Admin ödeme bildirimi atlandı (zaten gönderilmiş)', {
+      orderNo: order.orderNo,
+    })
+    return
+  }
+  try {
+    await mailService.sendNewOrderAdminNotification({
+      orderNo: order.orderNo,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      total: Number(order.total),
+      currency: order.currency,
+      paymentProvider: order.paymentProvider,
+      paymentConfirmed: true,
+      items: order.items.map((i) => ({
+        productName: i.productName,
+        quantity: i.quantity,
+        total: Number(i.total),
+      })),
+    })
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { adminNote: appendPaytrAdminPaidMailSentNote(order.adminNote) },
+    })
+  } catch (e) {
+    console.error('[paytr] Admin ödeme bildirimi gönderilemedi', e)
+  }
 }
 
 export function verifyPaytrCallbackHash(
@@ -123,7 +165,12 @@ export const paytrService = {
       throw err
     }
 
-    if (order.status !== 'PENDING') {
+    if (order.status === 'FAILED') {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'PENDING' },
+      })
+    } else if (order.status !== 'PENDING') {
       const err = new Error('Bu sipariş için ödeme başlatılamaz') as Error & { status: number }
       err.status = 400
       throw err
@@ -167,12 +214,7 @@ export const paytrService = {
     const currency = toPaytrCurrency(order.currency)
     const userIp = getClientIp(req)
     const email = order.customerEmail.slice(0, 100)
-    const paytrMerchantOid = toPaytrMerchantOid(order.orderNo)
-    if (!paytrMerchantOid || paytrMerchantOid.length < 6) {
-      const err = new Error('Sipariş numarası PayTR için uygun değil') as Error & { status: number }
-      err.status = 500
-      throw err
-    }
+    const paytrMerchantOid = await allocatePaytrMerchantOid(order.id, order.orderNo)
     const basketRows = order.items.map((i) => ({
       productName: i.productName,
       unitPrice: Number(i.unitPrice),
@@ -243,25 +285,10 @@ export const paytrService = {
       config_source: env.source,
     })
 
-    await prisma.paymentTransaction.deleteMany({
-      where: {
-        orderId: order.id,
-        status: 'PENDING',
-        merchantOid: { not: paytrMerchantOid },
-      },
-    })
-
-    await prisma.paymentTransaction.upsert({
-      where: { merchantOid: paytrMerchantOid },
-      create: {
+    await prisma.paymentTransaction.create({
+      data: {
         orderId: order.id,
         merchantOid: paytrMerchantOid,
-        status: 'PENDING',
-        amount: order.total,
-        currency: order.currency,
-        providerRawPayload: Prisma.JsonNull,
-      },
-      update: {
         status: 'PENDING',
         amount: order.total,
         currency: order.currency,
@@ -494,25 +521,18 @@ export const paytrService = {
       })
 
       await fulfillPaidOrderDelivery(order.id, req)
+      await notifyAdminPaytrOrderPaid(order.id)
 
       return
     }
 
     if (status === 'failed') {
-      await prisma.$transaction(async (tx) => {
-        await tx.paymentTransaction.updateMany({
-          where: { merchantOid },
-          data: {
-            status: 'FAILED',
-            providerRawPayload: rawJson,
-          },
-        })
-        if (order.status === 'PENDING') {
-          await tx.order.update({
-            where: { id: order.id },
-            data: { status: 'FAILED' },
-          })
-        }
+      await prisma.paymentTransaction.updateMany({
+        where: { merchantOid },
+        data: {
+          status: 'FAILED',
+          providerRawPayload: rawJson,
+        },
       })
       console.info('[paytr] callback failed işlendi', {
         merchantOid,

@@ -13,6 +13,7 @@ import {
   resolveMuvekkilKasaSaasLoginHref,
 } from '../lib/mailDownloadLink'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
+import { shouldDeferPaytrAdminMailUntilPaid } from '../lib/orderAdminMail'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -763,20 +764,33 @@ export const mailService = {
     total: number
     currency: string
     paymentProvider: string
+    paymentConfirmed?: boolean
     items: { productName: string; quantity: number; total: number }[]
   }) {
+    if (shouldDeferPaytrAdminMailUntilPaid(data.paymentProvider, data.paymentConfirmed)) {
+      console.info('[mail] PayTR admin bildirimi atlandı (ödeme onaylanmadan gönderilmez)', {
+        orderNo: data.orderNo,
+        paymentProvider: data.paymentProvider,
+      })
+      return
+    }
+
     const config = await resolveMailConfig()
     const amount = `${data.total.toFixed(2)} ${data.currency}`
     const paymentLabel =
       data.paymentProvider === 'BANK_TRANSFER'
         ? 'Havale / EFT'
         : data.paymentProvider === 'PAYTR'
-          ? 'Kart (PayTR)'
+          ? data.paymentConfirmed
+            ? 'Kart (PayTR) — ödeme alındı'
+            : 'Kart (PayTR)'
           : data.paymentProvider
     const paymentBadge =
       data.paymentProvider === 'BANK_TRANSFER'
         ? mailBadge('Havale / EFT — onay bekliyor', 'amber')
-        : mailBadge(paymentLabel, 'blue')
+        : data.paymentProvider === 'PAYTR' && data.paymentConfirmed
+          ? mailBadge(paymentLabel, 'green')
+          : mailBadge(paymentLabel, 'blue')
 
     const itemsRows = data.items
       .map(
@@ -806,7 +820,11 @@ export const mailService = {
     )
 
     const bodyHtml = `
-      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#334155;">Yeni bir sipariş alındı. Detaylar aşağıdadır.</p>
+      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#334155;">${
+        data.paymentConfirmed
+          ? 'Kart ödemesi alındı. Sipariş detayları aşağıdadır.'
+          : 'Yeni bir sipariş alındı. Detaylar aşağıdadır.'
+      }</p>
       ${mailInfoTable(infoRows)}
       <h3 style="margin:20px 0 10px;font-size:15px;color:#0f172a;">Sipariş kalemleri</h3>
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
@@ -830,9 +848,11 @@ export const mailService = {
       from: config.from,
       to: config.notifyTo,
       replyTo: data.customerEmail,
-      subject: `Yeni sipariş — ${data.orderNo}`,
+      subject: data.paymentConfirmed
+        ? `Ödemesi alınan sipariş — ${data.orderNo}`
+        : `Yeni sipariş — ${data.orderNo}`,
       text: [
-        'Yeni sipariş alındı.',
+        data.paymentConfirmed ? 'Kart ödemesi alındı.' : 'Yeni sipariş alındı.',
         '',
         `Sipariş no: ${data.orderNo}`,
         `Müşteri: ${data.customerName}`,
@@ -844,7 +864,7 @@ export const mailService = {
         'Ürünler:',
         ...data.items.map((i) => `- ${i.productName} × ${i.quantity} — ${i.total.toFixed(2)} ${data.currency}`),
       ].join('\n'),
-      html: mailHtmlDocument('Yeni Sipariş', bodyHtml),
+      html: mailHtmlDocument(data.paymentConfirmed ? 'Ödemesi Alınan Sipariş' : 'Yeni Sipariş', bodyHtml),
     })
   },
 

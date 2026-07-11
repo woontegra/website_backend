@@ -263,26 +263,26 @@ export async function createSaasRenewOrder(input: CreateSaasRenewOrderInput) {
             console.error('[saas-renew] Havale bilgilendirme e-postası gönderilemedi', e)
           }
         }
+        try {
+          await mailService.sendNewOrderAdminNotification({
+            orderNo: order.orderNo,
+            customerName: order.customerName,
+            customerEmail: order.customerEmail,
+            customerPhone: order.customerPhone,
+            total: Number(order.total),
+            currency: order.currency,
+            paymentProvider: order.paymentProvider,
+            items: order.items.map((i) => ({
+              productName: i.productName,
+              quantity: i.quantity,
+              total: Number(i.total),
+            })),
+          })
+        } catch (e) {
+          console.error('[saas-renew] Admin bildirimi gönderilemedi', e)
+        }
       }
-
-      try {
-        await mailService.sendNewOrderAdminNotification({
-          orderNo: order.orderNo,
-          customerName: order.customerName,
-          customerEmail: order.customerEmail,
-          customerPhone: order.customerPhone,
-          total: Number(order.total),
-          currency: order.currency,
-          paymentProvider: order.paymentProvider,
-          items: order.items.map((i) => ({
-            productName: i.productName,
-            quantity: i.quantity,
-            total: Number(i.total),
-          })),
-        })
-      } catch (e) {
-        console.error('[saas-renew] Admin bildirimi gönderilemedi', e)
-      }
+      // PayTR uzatma: admin bildirimi ödeme callback sonrası paytr.service içinde gönderilir.
 
       return {
         id: order.id,
