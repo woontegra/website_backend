@@ -561,6 +561,13 @@ model Order {
   acceptedUserAgent         String?
   /// Admin iç notu (müşteri görmez)
   adminNote                 String?       @db.Text
+  /// Mevcut MK SaaS hesabı lisanslama: EXISTING_ACCOUNT_LICENSE
+  mkSaasPurchaseContext     String?       @db.VarChar(64)
+  mkSaasPurchaseSessionId   String?       @db.VarChar(64)
+  mkSaasPurchaseMusteriNo   String?       @db.VarChar(32)
+  mkSaasPurchaseBuroAdi     String?       @db.VarChar(255)
+  mkSaasPurchasePreviousEndDate DateTime?
+  mkSaasPurchaseNewEndDate      DateTime?
   shippingCarrier           String?       @db.VarChar(200)
   shippingTrackingNumber    String?       @db.VarChar(200)
   shippingStatus            String?       @db.VarChar(120)

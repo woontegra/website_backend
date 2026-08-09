@@ -12,6 +12,17 @@ import {
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
+import {
+  isMkSaasExistingAccountOrderContext,
+  MK_SAAS_PURCHASE_CONTEXT_RENEWAL,
+  purchaseContextFromMkToken,
+} from '../lib/mkSaasPurchaseContext'
+import {
+  isMkSaasLicensePurchaseConfigured,
+  requestMkSaasLicensePurchaseBind,
+  requestMkSaasLicensePurchaseResolve,
+} from './mkSaasLicensePurchase.client'
+import type { LicensePurchasePublicView } from './mkSaasLicensePurchase.types'
 import { formatDigitalDeliveryLicenseError } from '../lib/digitalDeliveryErrorLabel'
 import {
   hasMkSaasPendingMailSent,
@@ -74,6 +85,8 @@ export type CreateOrderInput = {
   saveToAddressBook?: boolean
   /** Checkout'ta seçili kayıtlı adres (değişmediyse tekrar kayıt oluşturulmaz) */
   selectedAddressId?: string | null
+  /** MK SaaS mevcut hesap lisanslama (demo → ücretli) */
+  renewalToken?: string | null
 }
 
 /** Müşteri tarafında indirme / teslim bağlantısı gösterimi */
@@ -300,6 +313,39 @@ function emailsMatch(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
+function mkLicensePurchaseSuccessMeta(order: {
+  mkSaasPurchaseContext: string | null
+  mkSaasPurchaseMusteriNo: string | null
+  mkSaasPurchaseBuroAdi: string | null
+  mkSaasPurchasePreviousEndDate: Date | null
+  mkSaasPurchaseNewEndDate: Date | null
+}) {
+  if (!isMkSaasExistingAccountOrderContext(order.mkSaasPurchaseContext)) return {}
+  const isRenewal = order.mkSaasPurchaseContext === MK_SAAS_PURCHASE_CONTEXT_RENEWAL
+  const newEndIso = order.mkSaasPurchaseNewEndDate?.toISOString() ?? null
+  return {
+    mkSaasLicensePurchase: {
+      purchaseContext: order.mkSaasPurchaseContext,
+      purpose: isRenewal ? ('LICENSE_RENEWAL' as const) : ('DEMO_CONVERSION' as const),
+      musteriNo: order.mkSaasPurchaseMusteriNo,
+      buroAdi: order.mkSaasPurchaseBuroAdi,
+      previousEndDate: order.mkSaasPurchasePreviousEndDate?.toISOString() ?? null,
+      newEndDate: newEndIso,
+      message: isRenewal
+        ? newEndIso
+          ? `Lisansınız başarıyla yenilendi. Yeni lisans bitiş tarihiniz: ${formatLicenseDateTr(newEndIso)}`
+          : 'Lisansınız başarıyla yenilendi. Mevcut verileriniz korunmuştur.'
+        : 'Lisansınız başarıyla mevcut hesabınıza tanımlandı. Mevcut verileriniz korunmuştur; yeni hesap oluşturulmaz.',
+    },
+  }
+}
+
+function formatLicenseDateTr(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 type OrderItemDeliveryRef = {
   licenseServerLastError: string | null
   downloadUrl?: string | null
@@ -479,7 +525,49 @@ export const ordersService = {
     const hasMuvekkilKasaSaas = products.some((p) =>
       isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
     )
-    if (hasMuvekkilKasaSaas && !input.customerId?.trim()) {
+
+    const renewalToken = input.renewalToken?.trim() || ''
+    let licensePurchaseView: LicensePurchasePublicView | null = null
+    if (renewalToken) {
+      if (!hasMuvekkilKasaSaas) {
+        const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
+        err.status = 400
+        err.publicMessage = 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
+        throw err
+      }
+      const allMkSaas = products.every((p) =>
+        isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
+      )
+      if (!allMkSaas || canonicalIds.length !== 1) {
+        const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
+        err.status = 400
+        err.publicMessage = 'Mevcut hesap lisanslama yalnızca Müvekkil Kasa ürünü ile kullanılabilir.'
+        throw err
+      }
+      if (!isMkSaasLicensePurchaseConfigured()) {
+        const err = new Error('LICENSE_PURCHASE_UNAVAILABLE') as Error & { status: number; publicMessage?: string }
+        err.status = 503
+        err.publicMessage = 'Lisans satın alma hizmeti şu anda kullanılamıyor.'
+        throw err
+      }
+      const resolveResult = await requestMkSaasLicensePurchaseResolve(renewalToken)
+      if (!resolveResult.success) {
+        const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
+        err.status = resolveResult.status === 403 ? 403 : 410
+        err.publicMessage = 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
+        throw err
+      }
+      licensePurchaseView = resolveResult.data
+      const checkoutEmail = input.customerEmail.trim().toLowerCase()
+      if (licensePurchaseView.ownerEmail && checkoutEmail !== licensePurchaseView.ownerEmail) {
+        const err = new Error('CHECKOUT_EMAIL_MISMATCH') as Error & { status: number; publicMessage?: string }
+        err.status = 403
+        err.publicMessage = 'Ödeme e-postası büro hesabı ile eşleşmiyor.'
+        throw err
+      }
+    }
+
+    if (hasMuvekkilKasaSaas && !input.customerId?.trim() && !licensePurchaseView) {
       const err = new Error('SAAS_LOGIN_REQUIRED') as Error & { status: number; publicMessage?: string }
       err.status = 403
       err.publicMessage = 'SaaS ürün satın almak için müşteri hesabınızla giriş yapmanız gerekir.'
@@ -709,6 +797,41 @@ export const ordersService = {
           legalFlags,
         })
 
+        if (licensePurchaseView && renewalToken) {
+          const bindResult = await requestMkSaasLicensePurchaseBind({
+            renewalToken,
+            externalOrderId: order.orderNo,
+            checkoutEmail: input.customerEmail.trim().toLowerCase(),
+          })
+          if (!bindResult.success) {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { status: OrderStatus.CANCELLED },
+            })
+            const err = new Error('LICENSE_PURCHASE_BIND_FAILED') as Error & { status: number; publicMessage?: string }
+            err.status = 409
+            err.publicMessage = 'Satın alma bağlantısı siparişe bağlanamadı. Lütfen Müvekkil Kasa’dan yeni bağlantı oluşturun.'
+            throw err
+          }
+          const bound = bindResult.data
+          const purchaseContext = purchaseContextFromMkToken({
+            purpose: bound.purpose,
+            purchaseContext: bound.purchaseContext,
+          })
+          await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              mkSaasPurchaseContext: purchaseContext,
+              mkSaasPurchaseSessionId: bound.sessionId,
+              mkSaasPurchaseMusteriNo: bound.musteriNo,
+              mkSaasPurchaseBuroAdi: bound.buroAdi,
+              mkSaasPurchasePreviousEndDate: bound.lisansBitisTarihi
+                ? new Date(bound.lisansBitisTarihi)
+                : null,
+            },
+          })
+        }
+
         let bankTransferInfo: Awaited<ReturnType<typeof getBankTransferCustomerInfo>> = null
         if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
           bankTransferInfo = await getBankTransferCustomerInfo(
@@ -850,6 +973,7 @@ export const ordersService = {
     const orderTotal = Number(order.total)
     const currency = order.currency
     const deliveryView = buildOrderDeliveryView(order)
+    const licensePurchaseMeta = mkLicensePurchaseSuccessMeta(order)
 
     if (order.status === 'PENDING') {
       const bank = order.paymentProvider === PaymentProvider.BANK_TRANSFER
@@ -931,6 +1055,7 @@ export const ordersService = {
           deliveryState: deliveryView.deliveryState,
           deliveryMessage: deliveryView.deliveryMessage,
           downloadEmailSentAt: deliveryView.downloadEmailSentAt,
+          ...licensePurchaseMeta,
         }
       }
       return {
@@ -955,6 +1080,7 @@ export const ordersService = {
         deliveryState: deliveryView.deliveryState,
         deliveryMessage: deliveryView.deliveryMessage,
         downloadEmailSentAt: deliveryView.downloadEmailSentAt,
+        ...licensePurchaseMeta,
       }
     }
 
@@ -986,6 +1112,7 @@ export const ordersService = {
         deliveryState: deliveryView.deliveryState,
         deliveryMessage: deliveryView.deliveryMessage,
         downloadEmailSentAt: deliveryView.downloadEmailSentAt,
+        ...licensePurchaseMeta,
       }
     }
 
@@ -1006,10 +1133,14 @@ export const ordersService = {
       })),
       paidAt: order.paidAt?.toISOString() ?? null,
       requiresEmail: false as const,
-      message: deliveryView.deliveryMessage || 'Siparişiniz onaylandı.',
+      message:
+        licensePurchaseMeta.mkSaasLicensePurchase?.message ||
+        deliveryView.deliveryMessage ||
+        'Siparişiniz onaylandı.',
       deliveryState: deliveryView.deliveryState,
       deliveryMessage: deliveryView.deliveryMessage,
       downloadEmailSentAt: deliveryView.downloadEmailSentAt,
+      ...licensePurchaseMeta,
     }
   },
 }
@@ -1639,6 +1770,11 @@ export const ordersAdminService = {
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
       adminNote: order.adminNote,
+      mkSaasPurchaseContext: order.mkSaasPurchaseContext,
+      mkSaasPurchaseMusteriNo: order.mkSaasPurchaseMusteriNo,
+      mkSaasPurchaseBuroAdi: order.mkSaasPurchaseBuroAdi,
+      mkSaasPurchasePreviousEndDate: order.mkSaasPurchasePreviousEndDate?.toISOString() ?? null,
+      mkSaasPurchaseNewEndDate: order.mkSaasPurchaseNewEndDate?.toISOString() ?? null,
       shippingCarrier: order.shippingCarrier,
       shippingTrackingNumber: order.shippingTrackingNumber,
       shippingStatus: order.shippingStatus,

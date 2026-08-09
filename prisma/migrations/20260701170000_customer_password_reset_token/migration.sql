@@ -1,16 +1,20 @@
 -- CreateTable
-CREATE TABLE `CustomerPasswordResetToken` (
-    `id` VARCHAR(191) NOT NULL,
-    `customerId` VARCHAR(191) NOT NULL,
-    `tokenHash` VARCHAR(191) NOT NULL,
-    `expiresAt` DATETIME(3) NOT NULL,
-    `usedAt` DATETIME(3) NULL,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+CREATE TABLE "CustomerPasswordResetToken" (
+    "id" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    INDEX `CustomerPasswordResetToken_customerId_createdAt_idx`(`customerId`, `createdAt`),
-    INDEX `CustomerPasswordResetToken_tokenHash_idx`(`tokenHash`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CONSTRAINT "CustomerPasswordResetToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "CustomerPasswordResetToken_customerId_createdAt_idx" ON "CustomerPasswordResetToken"("customerId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "CustomerPasswordResetToken_tokenHash_idx" ON "CustomerPasswordResetToken"("tokenHash");
 
 -- AddForeignKey
-ALTER TABLE `CustomerPasswordResetToken` ADD CONSTRAINT `CustomerPasswordResetToken_customerId_fkey` FOREIGN KEY (`customerId`) REFERENCES `Customer`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CustomerPasswordResetToken" ADD CONSTRAINT "CustomerPasswordResetToken_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;

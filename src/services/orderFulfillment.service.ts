@@ -19,6 +19,10 @@ import {
   ensureMuvekkilKasaSaasOrders,
 } from './muvekkilKasaSaasProvision.service'
 import {
+  buildMuvekkilKasaSaasLicensePurchaseMailLines,
+  ensureMuvekkilKasaSaasLicensePurchases,
+} from './muvekkilKasaSaasLicensePurchase.service'
+import {
   buildMuvekkilKasaSaasRenewMailLines,
   ensureMuvekkilKasaSaasRenewals,
 } from './muvekkilKasaSaasRenew.service'
@@ -195,6 +199,15 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
+  const mkLicensePurchaseResult = await ensureMuvekkilKasaSaasLicensePurchases(fresh.id)
+  if (mkLicensePurchaseResult.errors.length > 0) {
+    console.error('[orders] müvekkil kasa saas license purchase errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: mkLicensePurchaseResult.errors,
+    })
+  }
+
   const mkSaasResult = await ensureMuvekkilKasaSaasOrders(fresh.id)
   if (mkSaasResult.errors.length > 0) {
     console.error('[orders] müvekkil kasa saas provision errors', {
@@ -233,6 +246,10 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
   const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
   const mkSaasRenewMailLines = await buildMuvekkilKasaSaasRenewMailLines(items, mkSaasRenewResult.renewed)
+  const mkSaasLicensePurchaseMailLines = await buildMuvekkilKasaSaasLicensePurchaseMailLines(
+    items,
+    mkLicensePurchaseResult.licensed,
+  )
 
   const { freshPasswords } = await ensurePaidOrderLicenses(fresh.id)
   const localLinesRaw = buildPaidDownloadMailLinesFromItems(itemsForLocalMail)
@@ -242,7 +259,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     productName: string
     downloadUrl: string
     licenses?: { licenseKey: string; activationPassword?: string }[]
-  }[] = [...externalMailLines, ...mkSaasMailLines, ...mkSaasRenewMailLines]
+  }[] = [...externalMailLines, ...mkSaasMailLines, ...mkSaasRenewMailLines, ...mkSaasLicensePurchaseMailLines]
 
   if (localLinesRaw.length > 0) {
     if (checkOrderDownloadLinesForPaidMail(itemsForLocalMail)) {
@@ -305,6 +322,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
             in: [
               ...mkSaasResult.provisioned.map((p) => p.orderItemId),
               ...mkSaasRenewResult.renewed.map((r) => r.orderItemId),
+              ...mkLicensePurchaseResult.licensed.map((r) => r.orderItemId),
             ],
           },
         },
@@ -320,6 +338,8 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     const allCentralMailSent =
       externalResult.provisioned.length > 0 &&
       externalResult.provisioned.every((p) => p.mailSentByLicenseServer)
+    const saasLicensedOk =
+      mkLicensePurchaseResult.licensed.length > 0 && mkLicensePurchaseResult.errors.length === 0
     const saasRenewedOk =
       mkSaasRenewResult.renewed.length > 0 && mkSaasRenewResult.errors.length === 0
     const saasProvisionedOk =
@@ -333,7 +353,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       })
       return
     }
-    if (saasProvisionedOk || saasRenewedOk) {
+    if (saasLicensedOk || saasProvisionedOk || saasRenewedOk) {
       return
     }
 
@@ -342,11 +362,15 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
         orderNo: fresh.orderNo,
         orderId: fresh.id,
       })
-    } else if (mkSaasResult.errors.length > 0 || mkSaasRenewResult.errors.length > 0) {
-      console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew failed', {
+    } else if (
+      mkSaasResult.errors.length > 0 ||
+      mkSaasRenewResult.errors.length > 0 ||
+      mkLicensePurchaseResult.errors.length > 0
+    ) {
+      console.error('[orders] müvekkil kasa saas delivery blocked — provision/renew/license failed', {
         orderNo: fresh.orderNo,
         orderId: fresh.id,
-        errors: [...mkSaasResult.errors, ...mkSaasRenewResult.errors],
+        errors: [...mkSaasResult.errors, ...mkSaasRenewResult.errors, ...mkLicensePurchaseResult.errors],
       })
       const saasItems = items.filter(
         (i) => i.product?.productType === ProductType.SAAS || (i.downloadUrl ?? '').startsWith('saas:'),

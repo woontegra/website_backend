@@ -120,6 +120,7 @@ export async function createOrder(req: Request, res: Response) {
       paymentProvider,
       saveToAddressBook: body.saveToAddressBook === true,
       selectedAddressId: readString(body, 'selectedAddressId') || null,
+      renewalToken: readString(body, 'renewalToken') || null,
     })
     const order = result.order
     return res.status(201).json({
@@ -141,6 +142,12 @@ export async function createOrder(req: Request, res: Response) {
       err.publicMessage ||
       (err.message === 'BANK_TRANSFER_UNAVAILABLE'
         ? 'Havale/EFT ödeme yöntemi şu anda kullanılamıyor.'
+        : err.message === 'CHECKOUT_EMAIL_MISMATCH'
+          ? 'Ödeme e-postası büro hesabı ile eşleşmiyor.'
+          : err.message === 'LICENSE_PURCHASE_INVALID' ||
+              err.message === 'LICENSE_PURCHASE_BIND_FAILED' ||
+              err.message === 'LICENSE_PURCHASE_UNAVAILABLE'
+            ? err.publicMessage || 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
         : code === 400 && err.message === 'ORDER_ITEMS_INVALID'
           ? 'Sepetinizdeki bazı ürünler artık satın alınamıyor. Lütfen sepetinizi güncelleyip tekrar deneyin.'
           : err.message) ||

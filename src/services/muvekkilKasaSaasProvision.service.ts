@@ -19,6 +19,7 @@ import {
 } from './muvekkilKasaSaasProvision.client'
 
 import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
+import { isMkSaasExistingAccountOrderContext } from '../lib/mkSaasPurchaseContext'
 
 import {
   formatMkOwnerEmailDuplicateError,
@@ -403,7 +404,9 @@ export async function ensureMuvekkilKasaSaasOrders(orderId: string): Promise<{
 
   if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors, provisioned }
 
-
+  if (isMkSaasExistingAccountOrderContext(order.mkSaasPurchaseContext)) {
+    return { errors, provisioned: [] }
+  }
 
   const customerName = resolveOrderCustomerNameForLicense(order)
 
