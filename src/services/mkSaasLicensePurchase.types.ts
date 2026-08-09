@@ -11,7 +11,12 @@ export type LicensePurchasePublicView = {
   lisansBitisTarihi: string | null
   lisansBaslangicTarihi: string | null
   extensionBaseDate: string
+  ownerName: string | null
   ownerEmail: string | null
+  ownerPhone: string | null
+  tenantAdres: string | null
+  tenantVergiNo: string | null
+  tenantVergiDairesi: string | null
   expiresAt: string
   status: string
   boundExternalOrderId: string | null

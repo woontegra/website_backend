@@ -558,13 +558,6 @@ export const ordersService = {
         throw err
       }
       licensePurchaseView = resolveResult.data
-      const checkoutEmail = input.customerEmail.trim().toLowerCase()
-      if (licensePurchaseView.ownerEmail && checkoutEmail !== licensePurchaseView.ownerEmail) {
-        const err = new Error('CHECKOUT_EMAIL_MISMATCH') as Error & { status: number; publicMessage?: string }
-        err.status = 403
-        err.publicMessage = 'Ödeme e-postası büro hesabı ile eşleşmiyor.'
-        throw err
-      }
     }
 
     if (hasMuvekkilKasaSaas && !input.customerId?.trim() && !licensePurchaseView) {
