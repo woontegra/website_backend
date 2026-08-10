@@ -199,6 +199,9 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   })
   if (!order) return { errors, provisioned }
   if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors, provisioned }
+  if (order.desktopLicensePurchaseContext === 'DESKTOP_LICENSE_RENEWAL') {
+    return { errors, provisioned }
+  }
 
   const licenseCustomerName = resolveOrderCustomerNameForLicense(order)
   const licenseCustomerEmail = order.customerEmail.trim().toLowerCase()

@@ -568,6 +568,14 @@ model Order {
   mkSaasPurchaseBuroAdi     String?       @db.VarChar(255)
   mkSaasPurchasePreviousEndDate DateTime?
   mkSaasPurchaseNewEndDate      DateTime?
+  /// Masaüstü lisans yenileme: DESKTOP_LICENSE_RENEWAL
+  desktopLicensePurchaseContext String?       @db.VarChar(64)
+  desktopLicenseSessionId       String?       @db.VarChar(64)
+  desktopLicenseId              String?       @db.VarChar(64)
+  desktopLicenseKeyMasked       String?       @db.VarChar(64)
+  desktopLicenseCustomerNumber  String?       @db.VarChar(32)
+  desktopLicensePreviousEndDate DateTime?
+  desktopLicenseNewEndDate      DateTime?
   shippingCarrier           String?       @db.VarChar(200)
   shippingTrackingNumber    String?       @db.VarChar(200)
   shippingStatus            String?       @db.VarChar(120)
@@ -711,6 +719,39 @@ model LicenseActivation {
 
   @@unique([licenseId, deviceHash])
   @@index([licenseId])
+}
+
+enum DesktopLicenseRenewalSessionStatus {
+  CREATED
+  BOUND
+  CONSUMED
+  EXPIRED
+}
+
+/// Masaüstü lisans yenileme checkout oturumu (Woontegra Website).
+model DesktopLicenseRenewalSession {
+  id                   String                           @id @default(uuid())
+  tokenHash            String                           @unique
+  licenseId            String?
+  licenseKeyHash       String
+  /// Sunucu tarafı — checkout token'da asla gönderilmez; yalnız fulfill için.
+  targetLicenseKey     String
+  appCode              String
+  productCode          String                           @default("MUVEKKIL_KASA_DESKTOP")
+  deviceHash           String
+  customerNumber       String?
+  customerName         String?
+  licenseExpiresAt     DateTime?
+  purpose              String                           @default("DESKTOP_LICENSE_RENEWAL")
+  status               DesktopLicenseRenewalSessionStatus @default(CREATED)
+  boundExternalOrderId String?                          @unique
+  boundAt              DateTime?
+  consumedAt           DateTime?
+  expiresAt            DateTime
+  createdAt            DateTime                         @default(now())
+
+  @@index([licenseKeyHash, appCode])
+  @@index([status, expiresAt])
 }
 
 model PaymentTransaction {

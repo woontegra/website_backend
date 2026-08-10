@@ -22,6 +22,7 @@ import {
   buildMuvekkilKasaSaasLicensePurchaseMailLines,
   ensureMuvekkilKasaSaasLicensePurchases,
 } from './muvekkilKasaSaasLicensePurchase.service'
+import { ensureDesktopLicenseRenewals } from './desktopLicenseRenewalFulfill.service'
 import {
   buildMuvekkilKasaSaasRenewMailLines,
   ensureMuvekkilKasaSaasRenewals,
@@ -223,6 +224,15 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       orderId: fresh.id,
       orderNo: fresh.orderNo,
       errors: mkSaasRenewResult.errors,
+    })
+  }
+
+  const desktopRenewResult = await ensureDesktopLicenseRenewals(fresh.id)
+  if (desktopRenewResult.errors.length > 0) {
+    console.error('[orders] desktop license renewal errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: desktopRenewResult.errors,
     })
   }
 

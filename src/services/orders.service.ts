@@ -12,6 +12,13 @@ import {
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
+import { isMuvekkilKasaDesktopCentralLicenseProduct } from '../lib/muvekkilKasaDesktopProduct'
+import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext'
+import {
+  bindDesktopLicenseRenewalToken,
+  resolveDesktopLicenseRenewalToken,
+  type DesktopLicenseRenewalPublicView,
+} from './desktopLicenseRenewal.service'
 import {
   isMkSaasExistingAccountOrderContext,
   MK_SAAS_PURCHASE_CONTEXT_RENEWAL,
@@ -525,39 +532,72 @@ export const ordersService = {
     const hasMuvekkilKasaSaas = products.some((p) =>
       isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
     )
+    const hasMuvekkilKasaDesktop = products.some((p) =>
+      isMuvekkilKasaDesktopCentralLicenseProduct({
+        slug: p.slug,
+        licenseAppCode: p.licenseAppCode,
+        licenseRequired: p.licenseRequired,
+        productType: p.productType,
+      }),
+    )
 
     const renewalToken = input.renewalToken?.trim() || ''
     let licensePurchaseView: LicensePurchasePublicView | null = null
+    let desktopLicenseRenewalView: DesktopLicenseRenewalPublicView | null = null
     if (renewalToken) {
-      if (!hasMuvekkilKasaSaas) {
+      if (hasMuvekkilKasaSaas) {
+        const allMkSaas = products.every((p) =>
+          isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
+        )
+        if (!allMkSaas || canonicalIds.length !== 1) {
+          const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
+          err.status = 400
+          err.publicMessage = 'Mevcut hesap lisanslama yalnızca Müvekkil Kasa ürünü ile kullanılabilir.'
+          throw err
+        }
+        if (!isMkSaasLicensePurchaseConfigured()) {
+          const err = new Error('LICENSE_PURCHASE_UNAVAILABLE') as Error & { status: number; publicMessage?: string }
+          err.status = 503
+          err.publicMessage = 'Lisans satın alma hizmeti şu anda kullanılamıyor.'
+          throw err
+        }
+        const resolveResult = await requestMkSaasLicensePurchaseResolve(renewalToken)
+        if (!resolveResult.success) {
+          const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
+          err.status = resolveResult.status === 403 ? 403 : 410
+          err.publicMessage = 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
+          throw err
+        }
+        licensePurchaseView = resolveResult.data
+      } else if (hasMuvekkilKasaDesktop) {
+        const allDesktop = products.every((p) =>
+          isMuvekkilKasaDesktopCentralLicenseProduct({
+            slug: p.slug,
+            licenseAppCode: p.licenseAppCode,
+            licenseRequired: p.licenseRequired,
+            productType: p.productType,
+          }),
+        )
+        if (!allDesktop || canonicalIds.length !== 1) {
+          const err = new Error('DESKTOP_LICENSE_RENEWAL_INVALID') as Error & { status: number; publicMessage?: string }
+          err.status = 400
+          err.publicMessage = 'Lisans yenileme yalnızca Müvekkil Kasa Defteri masaüstü ürünü ile kullanılabilir.'
+          throw err
+        }
+        try {
+          desktopLicenseRenewalView = await resolveDesktopLicenseRenewalToken(renewalToken)
+        } catch {
+          const err = new Error('DESKTOP_LICENSE_RENEWAL_INVALID') as Error & { status: number; publicMessage?: string }
+          err.status = 410
+          err.publicMessage = 'Yenileme bağlantısı geçersiz veya süresi dolmuş.'
+          throw err
+        }
+      } else {
         const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
         err.status = 400
         err.publicMessage = 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
         throw err
       }
-      const allMkSaas = products.every((p) =>
-        isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
-      )
-      if (!allMkSaas || canonicalIds.length !== 1) {
-        const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
-        err.status = 400
-        err.publicMessage = 'Mevcut hesap lisanslama yalnızca Müvekkil Kasa ürünü ile kullanılabilir.'
-        throw err
-      }
-      if (!isMkSaasLicensePurchaseConfigured()) {
-        const err = new Error('LICENSE_PURCHASE_UNAVAILABLE') as Error & { status: number; publicMessage?: string }
-        err.status = 503
-        err.publicMessage = 'Lisans satın alma hizmeti şu anda kullanılamıyor.'
-        throw err
-      }
-      const resolveResult = await requestMkSaasLicensePurchaseResolve(renewalToken)
-      if (!resolveResult.success) {
-        const err = new Error('LICENSE_PURCHASE_INVALID') as Error & { status: number; publicMessage?: string }
-        err.status = resolveResult.status === 403 ? 403 : 410
-        err.publicMessage = 'Satın alma bağlantısı geçersiz veya süresi dolmuş.'
-        throw err
-      }
-      licensePurchaseView = resolveResult.data
     }
 
     if (hasMuvekkilKasaSaas && !input.customerId?.trim() && !licensePurchaseView) {
@@ -823,6 +863,41 @@ export const ordersService = {
                 : null,
             },
           })
+        }
+
+        if (desktopLicenseRenewalView && renewalToken) {
+          try {
+            const bound = await bindDesktopLicenseRenewalToken({
+              renewalToken,
+              externalOrderId: order.orderNo,
+            })
+            await prisma.order.update({
+              where: { id: order.id },
+              data: {
+                desktopLicensePurchaseContext: DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL,
+                desktopLicenseSessionId: bound.sessionId,
+                desktopLicenseId: bound.licenseId,
+                desktopLicenseKeyMasked: bound.licenseKeyMasked,
+                desktopLicenseCustomerNumber: bound.customerNumber,
+                desktopLicensePreviousEndDate: bound.licenseExpiresAt
+                  ? new Date(bound.licenseExpiresAt)
+                  : null,
+              },
+            })
+          } catch {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { status: OrderStatus.CANCELLED },
+            })
+            const err = new Error('DESKTOP_LICENSE_RENEWAL_BIND_FAILED') as Error & {
+              status: number
+              publicMessage?: string
+            }
+            err.status = 409
+            err.publicMessage =
+              'Lisans yenileme bağlantısı siparişe bağlanamadı. Lütfen uygulamadan yeni bağlantı oluşturun.'
+            throw err
+          }
         }
 
         let bankTransferInfo: Awaited<ReturnType<typeof getBankTransferCustomerInfo>> = null

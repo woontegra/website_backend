@@ -365,3 +365,88 @@ export async function requestWebsiteOrderLicense(
 
   return mapped
 }
+
+export type DesktopRenewalOpenResponse = {
+  licenseId?: string
+  customerNumber?: string
+  customerName?: string
+  expiresAt?: string
+}
+
+/** Masaüstü yenileme oturumu — lisans + cihaz doğrulaması (entegrasyon). */
+export async function requestDesktopRenewalOpen(input: {
+  licenseKey: string
+  deviceHash: string
+  appCode: string
+}): Promise<DesktopRenewalOpenResponse> {
+  const result = await licenseServerFetch('/api/integrations/website/desktop-renewal/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      licenseKey: input.licenseKey.trim().toUpperCase(),
+      deviceHash: input.deviceHash.trim(),
+      appCode: input.appCode.trim().toUpperCase(),
+    }),
+  })
+  if (!result.ok) {
+    return {}
+  }
+  const d = result.data
+  return {
+    licenseId: typeof d.licenseId === 'string' ? d.licenseId : undefined,
+    customerNumber: typeof d.customerNumber === 'string' ? d.customerNumber : undefined,
+    customerName: typeof d.customerName === 'string' ? d.customerName : undefined,
+    expiresAt: typeof d.expiresAt === 'string' ? d.expiresAt : undefined,
+  }
+}
+
+export type WebsiteRenewLicenseResponse = {
+  success: boolean
+  alreadyRenewed?: boolean
+  licenseKey?: string
+  previousExpiresAt?: string
+  newExpiresAt?: string
+  error?: string
+}
+
+/** Mevcut masaüstü lisansını uzatır — yeni lisans oluşturmaz (idempotent orderNo). */
+export async function requestWebsiteRenewLicense(input: {
+  orderNo: string
+  licenseKey: string
+  licenseId?: string | null
+  appCode: string
+  licenseDays: number
+}): Promise<WebsiteRenewLicenseResponse> {
+  const result = await licenseServerFetch('/api/integrations/website/renew-license', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderNo: input.orderNo,
+      licenseKey: input.licenseKey.trim().toUpperCase(),
+      licenseId: input.licenseId ?? undefined,
+      appCode: input.appCode.trim().toUpperCase(),
+      licenseDays: Math.max(1, input.licenseDays),
+    }),
+  })
+  if (result.status === 409 && result.data.alreadyRenewed === true) {
+    return {
+      success: true,
+      alreadyRenewed: true,
+      licenseKey: typeof result.data.licenseKey === 'string' ? result.data.licenseKey : input.licenseKey,
+      previousExpiresAt: typeof result.data.previousExpiresAt === 'string' ? result.data.previousExpiresAt : undefined,
+      newExpiresAt: typeof result.data.newExpiresAt === 'string' ? result.data.newExpiresAt : undefined,
+    }
+  }
+  if (!result.ok) {
+    const err = typeof result.data.error === 'string' ? result.data.error : `HTTP ${result.status}`
+    return { success: false, error: err }
+  }
+  return {
+    success: result.data.success === true,
+    alreadyRenewed: result.data.alreadyRenewed === true,
+    licenseKey: typeof result.data.licenseKey === 'string' ? result.data.licenseKey : input.licenseKey,
+    previousExpiresAt: typeof result.data.previousExpiresAt === 'string' ? result.data.previousExpiresAt : undefined,
+    newExpiresAt: typeof result.data.newExpiresAt === 'string' ? result.data.newExpiresAt : undefined,
+    error: typeof result.data.error === 'string' ? result.data.error : undefined,
+  }
+}
