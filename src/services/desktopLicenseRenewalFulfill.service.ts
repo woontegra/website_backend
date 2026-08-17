@@ -1,8 +1,8 @@
-import { prisma } from '../lib/prisma.js'
-import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL, isDesktopLicenseRenewalOrderContext } from '../lib/desktopLicensePurchaseContext.js'
-import { isMuvekkilKasaDesktopCentralLicenseProduct } from '../lib/muvekkilKasaDesktopProduct.js'
-import { fulfillDesktopLicenseRenewal } from './desktopLicenseRenewal.service.js'
-import { isLicenseServerConfigured } from './woontegraLicenseServer.client.js'
+import { prisma } from '../lib/prisma'
+import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL, isDesktopLicenseRenewalOrderContext } from '../lib/desktopLicensePurchaseContext'
+import { isMuvekkilKasaDesktopCentralLicenseProduct } from '../lib/muvekkilKasaDesktopProduct'
+import { fulfillDesktopLicenseRenewal } from './desktopLicenseRenewal.service'
+import { isLicenseServerConfigured } from './woontegraLicenseServer.client'
 
 export type DesktopLicenseRenewalError = {
   orderItemId: string

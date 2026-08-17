@@ -1,16 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { DesktopLicenseRenewalSession, DesktopLicenseRenewalSessionStatus } from '@prisma/client'
-import { prisma } from '../lib/prisma.js'
+import { prisma } from '../lib/prisma'
 import {
   addDaysFromBase,
   computeDesktopExtensionBaseDate,
   estimateDesktopRenewalEndDate,
   maskLicenseKey,
-} from '../lib/desktopLicenseExtend.js'
-import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext.js'
-import { mkDesktopProductPath } from '../lib/muvekkilKasaDesktopProduct.js'
-import { PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP } from '../lib/productCode.js'
-import { requestDesktopRenewalOpen, requestWebsiteRenewLicense } from './woontegraLicenseServer.client.js'
+} from '../lib/desktopLicenseExtend'
+import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext'
+import { mkDesktopProductPath } from '../lib/muvekkilKasaDesktopProduct'
+import { PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP } from '../lib/productCode'
+import { requestDesktopRenewalOpen, requestWebsiteRenewLicense } from './woontegraLicenseServer.client'
 
 const TOKEN_TTL_MS = 20 * 60 * 1000
 const PURPOSE = 'DESKTOP_LICENSE_RENEWAL'

@@ -21,6 +21,12 @@ import { assertLicensedProductSaleReady } from './licensePrograms.service'
 import { normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 import { campaignsService } from './campaigns.service'
 import { resolveProductCampaignPrice, type AppliedCampaignPricing } from '../lib/campaignPricing'
+import {
+  isMuvekkilKasaSaasProduct,
+  MUVEKKIL_KASA_SAAS_PRODUCT_CODE,
+} from '../lib/muvekkilKasaSaasProduct'
+
+const MK_SAAS_CANONICAL_PUBLIC_SLUG = 'muvekkil-kasa-defteri-web-tabanli'
 
 const categorySelect = { id: true, name: true, slug: true, isActive: true } as const
 const mediaTiny = { id: true, url: true, fileType: true, originalName: true, fileSize: true } as const
@@ -205,7 +211,7 @@ function effectiveProductCoverImage(p: Pick<ProductRow, 'coverImage' | 'coverIma
 /** Kapak görseli yoksa ilk galeri görselini (IMAGE) kapak olarak kullanır. */
 function firstGalleryImageUrl(p: Pick<ProductRow, 'galleryImages'>): string | null {
   const images = (p.galleryImages ?? [])
-    .filter((g) => g.media.fileType === 'IMAGE' && g.media.url?.trim())
+    .filter((g) => g.media?.fileType === 'IMAGE' && g.media.url?.trim())
     .sort((a, b) => a.sortOrder - b.sortOrder)
   return images[0]?.media.url?.trim() || null
 }
@@ -380,7 +386,7 @@ async function mapPublicDetailWithCampaigns(p: ProductRow): Promise<PublicProduc
 
 function mapPublicDetail(p: ProductRow): PublicProductDetail {
   const gallery: PublicProductGalleryImage[] = (p.galleryImages ?? [])
-    .filter((g) => g.media.fileType === 'IMAGE')
+    .filter((g) => g.media?.fileType === 'IMAGE')
     .map((g) => ({
       id: g.id,
       url: g.media.url,
@@ -668,6 +674,37 @@ const publicListWhere: Prisma.ProductWhereInput = {
   OR: [{ categoryId: null }, { category: { isActive: true } }],
 }
 
+async function findPublicProductRowBySlug(slug: string) {
+  const normalized = slug.trim().toLowerCase()
+  if (!normalized) return null
+
+  const direct = await prisma.product.findFirst({
+    where: { slug: normalized, ...publicListWhere },
+    select: productPublicSelect,
+  })
+  if (direct) return direct
+
+  if (!isMuvekkilKasaSaasProduct({ slug: normalized })) return null
+
+  const byCode = await prisma.product.findMany({
+    where: {
+      ...publicListWhere,
+      licenseAppCode: MUVEKKIL_KASA_SAAS_PRODUCT_CODE,
+    },
+    select: productPublicSelect,
+  })
+  if (byCode.length === 0) return null
+  if (byCode.length === 1) return byCode[0]
+
+  const canonical = byCode.find((row) => row.slug === MK_SAAS_CANONICAL_PUBLIC_SLUG)
+  if (canonical) return canonical
+
+  console.error('[products] MK SaaS licenseAppCode çakışması: birden fazla aktif ürün', {
+    slugs: byCode.map((row) => row.slug),
+  })
+  return null
+}
+
 export const productsService = {
   async listAdmin(q?: AdminProductListQuery): Promise<AdminProductDto[]> {
     const where: Prisma.ProductWhereInput = {}
@@ -726,10 +763,7 @@ export const productsService = {
   },
 
   async getPublicBySlug(slug: string): Promise<PublicProductDetail | null> {
-    const p = await prisma.product.findFirst({
-      where: { slug, ...publicListWhere },
-      select: productPublicSelect,
-    })
+    const p = await findPublicProductRowBySlug(slug)
     return p ? mapPublicDetailWithCampaigns(p as unknown as ProductRow) : null
   },
 

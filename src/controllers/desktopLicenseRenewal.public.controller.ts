@@ -4,7 +4,7 @@ import {
   issueDesktopLicenseRenewalLink,
   previewDesktopLicenseRenewal,
   resolveDesktopLicenseRenewalToken,
-} from '../services/desktopLicenseRenewal.service.js'
+} from '../services/desktopLicenseRenewal.service'
 
 function publicMessageForCode(code: string): string {
   switch (code) {
