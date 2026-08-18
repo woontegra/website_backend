@@ -812,3 +812,31 @@ model DownloadStat {
   @@unique([productKey, variant])
   @@index([productKey])
 }
+
+/// Site Builder çalışma durumu — ticaret / lisans modellerinden bağımsız.
+/// Public site hâlâ PageContent.content okur; bu tablo taslağı tutar.
+model BuilderPageState {
+  id                 String                 @id @default(uuid())
+  pageKey            String                 @unique
+  draftContent       String                 @db.Text
+  draftUpdatedAt     DateTime
+  publishedAt        DateTime?
+  publishedRevision  Int?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  revisions          BuilderPageRevision[]
+}
+
+/// Başarılı yayınların sürüm kaydı. pageKey PageContent ile aynı anahtarı kullanır; FK yoktur.
+model BuilderPageRevision {
+  id              String           @id @default(uuid())
+  pageKey         String
+  content         String           @db.Text
+  revision        Int
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  pageState       BuilderPageState @relation(fields: [pageKey], references: [pageKey], onDelete: Cascade)
+
+  @@unique([pageKey, revision])
+  @@index([pageKey, createdAt])
+}

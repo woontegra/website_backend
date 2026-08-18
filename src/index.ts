@@ -36,6 +36,7 @@ import { productsAdminRoutes } from './routes/products.admin.routes'
 import { productsPublicRoutes } from './routes/products.public.routes'
 import { campaignsPublicRoutes } from './routes/campaigns.public.routes'
 import { campaignsAdminRoutes } from './routes/campaigns.admin.routes'
+import { builderPagesAdminRoutes } from './routes/builderPages.admin.routes'
 import { catalogMediaAdminRoutes } from './routes/catalogMedia.admin.routes'
 import { productCategoriesAdminRoutes } from './routes/productCategories.admin.routes'
 import { productCategoriesPublicRoutes } from './routes/productCategories.public.routes'
@@ -204,6 +205,7 @@ app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
+app.use('/api/admin', builderPagesAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   const r2 = getR2ConfigStatus()

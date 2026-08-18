@@ -20,6 +20,7 @@
     "test:desktop-license-renewal": "tsx scripts/desktop-license-renewal-quality.ts",
     "cleanup:saas-membership": "tsx scripts/cleanup-saas-membership.ts",
     "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
+    "test:builder-pages": "tsx --test src/services/builderPages.service.test.ts src/routes/builderPages.admin.routes.test.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },
   "prisma": {
