@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
   googleMapsEmbed: '',
   defaultTitle: 'Woontegra | Yazılım, Dijital Ticaret ve Teknoloji Çözümleri',
   defaultDescription:
-    'Yazılım geliştirme, SaaS, e-ticaret, web tasarım, marka ve patent vekilliği, oyun geliştirme.',
+    'Yazılım geliştirme, SaaS, e-ticaret, web tasarım, marka danışmanlığı, oyun geliştirme.',
   defaultKeywords: '[]',
   canonicalUrl: 'https://woontegra.com',
   ogTitle: '',
