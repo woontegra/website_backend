@@ -7,3 +7,6 @@ coverage
 *.log
 backups/
 storage/
+# Local-only partner invite helper (never commit)
+scripts/create-partner-invite-local.cjs
+

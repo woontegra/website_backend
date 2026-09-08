@@ -12,6 +12,7 @@ import {
   orderNeedsPaidActivationMailRetry,
   type OrderItemForDeliveryCheck,
 } from './orderFulfillment.service'
+import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 import { getEffectivePaytrConfig, resolvePaytrCallbackUrlForLogging } from './paymentSettings.service'
 import { mailService } from './mail.service'
 import {
@@ -465,6 +466,9 @@ export const paytrService = {
           orderNo: paidOrder!.orderNo,
         })
         await fulfillPaidOrderDelivery(order.id, req)
+      } else {
+        // Fulfillment gerekmese bile başarısız kalmış komisyonu güvenli yeniden dene (idempotent).
+        await safeProcessAffiliateCommissionForOrder(order.id)
       }
       console.info('[paytr] callback: sipariş zaten PAID; payload güncellendi', {
         merchantOid,

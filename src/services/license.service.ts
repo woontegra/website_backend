@@ -309,7 +309,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
 
     for (let u = already; u < qty; u++) {
       const externalOrderNo = `${order.orderNo}:${item.id}:${u}`
-      const result = await requestWebsiteOrderLicense({
+      let result = await requestWebsiteOrderLicense({
         customerName: licenseCustomerName,
         customerEmail: licenseCustomerEmail,
         customerPhone: licenseCustomerPhone,
@@ -319,6 +319,31 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         licenseDays,
         maxDevices,
       })
+
+      // Timeout sonrası merkezi kayıt oluşmuş olabilir: 409 → tek sefer resendCredentials
+      if (
+        !centralProvisionSucceeded(result) &&
+        result.alreadyExists === true &&
+        !isSaasCentral
+      ) {
+        console.warn('[license-server] provision alreadyExists; resendCredentials once', {
+          orderNo: order.orderNo,
+          orderItemId: item.id,
+          appCode,
+          hasLicenseKey: Boolean(result.licenseKey?.trim()),
+        })
+        result = await requestWebsiteOrderLicense({
+          customerName: licenseCustomerName,
+          customerEmail: licenseCustomerEmail,
+          customerPhone: licenseCustomerPhone,
+          appCode,
+          orderNo: externalOrderNo,
+          downloadUrl,
+          licenseDays,
+          maxDevices,
+          resendCredentials: true,
+        })
+      }
 
       if (!centralProvisionSucceeded(result)) {
         const err = mapLicenseServerProvisionError(result.error)

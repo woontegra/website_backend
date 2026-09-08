@@ -36,6 +36,9 @@ import { productsAdminRoutes } from './routes/products.admin.routes'
 import { productsPublicRoutes } from './routes/products.public.routes'
 import { campaignsPublicRoutes } from './routes/campaigns.public.routes'
 import { campaignsAdminRoutes } from './routes/campaigns.admin.routes'
+import { affiliatePartnersAdminRoutes } from './routes/affiliatePartners.admin.routes'
+import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public.routes'
+import { partnerPortalRoutes } from './routes/partnerPortal.routes'
 import { builderPagesAdminRoutes } from './routes/builderPages.admin.routes'
 import { catalogMediaAdminRoutes } from './routes/catalogMedia.admin.routes'
 import { productCategoriesAdminRoutes } from './routes/productCategories.admin.routes'
@@ -85,6 +88,10 @@ function parseCorsOrigins(): string[] {
       'http://localhost:4174',
       'http://127.0.0.1:5173',
       'http://localhost:5173',
+      'http://127.0.0.1:5174',
+      'http://localhost:5174',
+      'http://127.0.0.1:5175',
+      'http://localhost:5175',
     ]
     for (const origin of localPreviewOrigins) {
       if (!origins.includes(origin)) origins.push(origin)
@@ -170,6 +177,8 @@ app.use('/api/customers', customersPublicRoutes)
 app.use('/api/payments', paymentsPublicRoutes)
 app.use('/api/product-categories', productCategoriesPublicRoutes)
 app.use('/api/navigation-menu', navigationMenuPublicRoutes)
+app.use('/api', affiliateReferralPublicRoutes)
+app.use('/api/partner', partnerPortalRoutes)
 /**
  * Sipariş güncelleme / silme — doğrudan app seviyesinde kayıtlı.
  * Bazı ortamlarda yalnızca `app.use('/api/admin', router)` zinciriyle tanımlanan PATCH/DELETE eşleşmeyebiliyor (404 "Endpoint bulunamadı").
@@ -205,6 +214,7 @@ app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
+app.use('/api/admin', affiliatePartnersAdminRoutes)
 app.use('/api/admin', builderPagesAdminRoutes)
 
 app.get('/api/health', (_req, res) => {

@@ -21,6 +21,7 @@
     "cleanup:saas-membership": "tsx scripts/cleanup-saas-membership.ts",
     "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
     "test:builder-pages": "tsx --test src/services/builderPages.service.test.ts src/routes/builderPages.admin.routes.test.ts",
+    "test:affiliate-partners": "tsx --test src/lib/affiliatePartners.test.ts src/lib/affiliateCommissionMatch.test.ts src/lib/affiliateCommissionEvaluate.test.ts src/services/affiliateReporting.service.test.ts src/services/affiliateCommission.service.test.ts src/services/affiliateCommission.scenarios.test.ts src/services/affiliatePartnerAuth.service.test.ts src/lib/orderCheckoutIdempotency.test.ts src/services/affiliatePayout.service.test.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },
   "prisma": {

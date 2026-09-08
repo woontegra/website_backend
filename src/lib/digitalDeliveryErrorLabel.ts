@@ -1,5 +1,5 @@
-import { isMuvekkilKasaSaasProduct, type MuvekkilKasaSaasProductRef } from './muvekkilKasaSaasProduct'
 import { formatMkOwnerEmailDuplicateError } from './mkSaasDeliveryHelpers'
+import { isMuvekkilKasaSaasProduct, type MuvekkilKasaSaasProductRef } from './muvekkilKasaSaasProduct'
 
 export function formatDigitalDeliveryLicenseError(
   product: MuvekkilKasaSaasProductRef | null | undefined,
@@ -7,7 +7,7 @@ export function formatDigitalDeliveryLicenseError(
 ): string {
   const normalized = formatMkOwnerEmailDuplicateError(error)
   if (isMuvekkilKasaSaasProduct(product)) {
-    return `Müvekkil Kasa SaaS üyeliği oluşturulamadı: ${normalized}`
+    return `Ödeme alındı, lisans oluşturulamadı: Müvekkil Kasa SaaS — ${normalized}`
   }
-  return `Merkezi lisans oluşturulamadı: ${error}`
+  return `Ödeme alındı, lisans oluşturulamadı: ${normalized}`
 }

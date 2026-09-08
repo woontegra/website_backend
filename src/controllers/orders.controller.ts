@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import { readReferralCodeFromRequest } from '../lib/affiliateCookies'
 import { ordersService } from '../services/orders.service'
 import { isIndividualBillingType, validateTurkishIdentityNumber } from '../lib/turkishIdentityNumber'
 
@@ -121,9 +122,11 @@ export async function createOrder(req: Request, res: Response) {
       saveToAddressBook: body.saveToAddressBook === true,
       selectedAddressId: readString(body, 'selectedAddressId') || null,
       renewalToken: readString(body, 'renewalToken') || null,
+      affiliateReferralCode: readReferralCodeFromRequest(req),
+      checkoutIdempotencyKey: readString(body, 'checkoutIdempotencyKey') || null,
     })
     const order = result.order
-    return res.status(201).json({
+    return res.status(result.reused ? 200 : 201).json({
       success: true,
       data: {
         orderNo: order.orderNo,
@@ -132,6 +135,7 @@ export async function createOrder(req: Request, res: Response) {
         total: Number(order.total),
         currency: order.currency,
         paymentProvider: order.paymentProvider,
+        reused: result.reused === true,
         ...(result.addressBookWarning ? { addressBookWarning: result.addressBookWarning } : {}),
       },
     })

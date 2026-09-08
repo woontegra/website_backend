@@ -5,6 +5,7 @@ import { getClientIp } from '../lib/clientIp'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
+import { resolveLiveProductMailDownloadHref } from '../lib/liveProductDownload'
 import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
 import { mailService } from './mail.service'
 import {
@@ -27,6 +28,7 @@ import {
   buildMuvekkilKasaSaasRenewMailLines,
   ensureMuvekkilKasaSaasRenewals,
 } from './muvekkilKasaSaasRenew.service'
+import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 import {
   appendMkSaasPendingMailAdminNote,
   hasMkSaasPendingMailSent,
@@ -38,6 +40,8 @@ const paidOrderDeliveryItemInclude = {
     select: {
       productType: true,
       licenseRequired: true,
+      licenseAppCode: true,
+      slug: true,
       downloadUrl: true,
       downloadFiles: true,
       downloadMedia: { select: { url: true } },
@@ -52,6 +56,8 @@ export type OrderItemForDeliveryCheck = {
   product: {
     productType: ProductType
     licenseRequired: boolean
+    licenseAppCode?: string | null
+    slug?: string | null
     downloadUrl: string | null
     downloadFiles?: unknown
     downloadMedia: { url: string } | null
@@ -86,7 +92,12 @@ export function buildPaidDownloadMailLinesFromItems(
 function buildMailLinesFromExternalLicenses(
   provisioned: ExternalLicenseProvisionSuccess[],
   items: OrderItemForDeliveryCheck[],
-): { id: string; productName: string; downloadUrl: string; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
+): {
+  id: string
+  productName: string
+  downloadUrl: string
+  licenses: { licenseKey: string; activationPassword?: string }[]
+}[] {
   const itemById = new Map(items.map((i) => [i.id, i]))
   return provisioned
     .filter(
@@ -296,12 +307,12 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       const rawForSource = items.find((i) => i.id === line.id)
         ? mergeOrderItemDownloadUrl(items.find((i) => i.id === line.id)!)
         : line.downloadUrl
-      if (!resolveDownloadSourceFromRawUrl(rawForSource)) {
-        console.error('[orders] paid mail blocked — unresolvable download URL', {
+      const liveHref = resolveLiveProductMailDownloadHref(rawForSource)
+      if (!liveHref && !resolveDownloadSourceFromRawUrl(rawForSource)) {
+        console.error('[orders] paid mail — download file missing on product; mail will warn instead of broken link', {
           orderNo: fresh.orderNo,
           productName: line.productName,
         })
-        return
       }
     }
 
@@ -426,4 +437,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       },
     })
   }
+
+  // Affiliate komisyon: lisans/e-posta sonrası; hata ödeme akışını engellemez.
+  await safeProcessAffiliateCommissionForOrder(fresh.id)
 }

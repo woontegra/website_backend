@@ -4,6 +4,7 @@ import { PaymentProvider, Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { maskLicenseKeyForDisplay } from '../lib/licenseKey'
 import { resolveCustomerOrderDownloadMeta } from '../lib/customerOrderDownload'
+import { resolveCustomerFacingDownload } from '../lib/liveProductDownload'
 import { getBankTransferCustomerInfo } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
 import { resolveOrderPaymentRowStatus } from './orders.service'
@@ -427,7 +428,19 @@ export const customersService = {
       include: {
         items: {
           orderBy: { id: 'asc' },
-          include: { product: { select: { productType: true, downloadFiles: true } } },
+          include: {
+            product: {
+              select: {
+                productType: true,
+                downloadFiles: true,
+                downloadUrl: true,
+                downloadMedia: { select: { url: true } },
+                licenseAppCode: true,
+                slug: true,
+                licenseRequired: true,
+              },
+            },
+          },
         },
         paymentTransactions: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
@@ -487,8 +500,43 @@ export const customersService = {
       licenseCodesMasked,
       items: order.items.map((i) => {
         const paidDelivery = order.status === 'PAID' || order.status === 'PROCESSING'
-        const downloadUrl = paidDelivery ? i.downloadUrl : null
-        const downloadMeta = paidDelivery && downloadUrl
+        const isSaas = (i.downloadUrl ?? '').startsWith('saas:') || i.product?.productType === 'SAAS'
+        if (!paidDelivery) {
+          return {
+            productName: i.productName,
+            productSlug: i.productSlug,
+            productType: i.product?.productType ?? null,
+            quantity: i.quantity,
+            unitPrice: Number(i.unitPrice),
+            total: Number(i.total),
+            downloadUrl: null,
+            downloadKind: null,
+            downloadLabel: null,
+            downloadButtonLabel: null,
+            downloadUnavailableMessage: null,
+          }
+        }
+        if (isSaas) {
+          return {
+            productName: i.productName,
+            productSlug: i.productSlug,
+            productType: i.product?.productType ?? null,
+            quantity: i.quantity,
+            unitPrice: Number(i.unitPrice),
+            total: Number(i.total),
+            downloadUrl: i.downloadUrl,
+            downloadKind: null,
+            downloadLabel: null,
+            downloadButtonLabel: null,
+            downloadUnavailableMessage: null,
+          }
+        }
+        const facing = resolveCustomerFacingDownload({
+          downloadUrl: i.downloadUrl,
+          product: i.product,
+        })
+        const downloadUrl = facing.href
+        const downloadMeta = downloadUrl
           ? resolveCustomerOrderDownloadMeta({ downloadUrl, product: i.product })
           : null
         return {
@@ -502,6 +550,7 @@ export const customersService = {
           downloadKind: downloadMeta?.downloadKind ?? null,
           downloadLabel: downloadMeta?.downloadLabel ?? null,
           downloadButtonLabel: downloadMeta?.downloadButtonLabel ?? null,
+          downloadUnavailableMessage: facing.unavailableMessage,
         }
       }),
     }

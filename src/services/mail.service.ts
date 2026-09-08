@@ -7,12 +7,14 @@ import {
   buildCustomerMembershipsPageHref,
   buildCustomerOrdersPageHref,
   buildCustomerPasswordResetHref,
-  buildOrderDownloadMailHref,
   mailActionButton,
   mailDownloadButton,
   resolveMuvekkilKasaSaasLoginHref,
 } from '../lib/mailDownloadLink'
-import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
+import {
+  DOWNLOAD_FILE_UNAVAILABLE_TR,
+  resolveLiveProductMailDownloadHref,
+} from '../lib/liveProductDownload'
 import { shouldDeferPaytrAdminMailUntilPaid } from '../lib/orderAdminMail'
 import { settingsService } from './settings.service'
 
@@ -599,16 +601,6 @@ export const mailService = {
     const saasLines = entries.filter(isSaasMailLine)
     const desktopLines = entries.filter((l) => !l.downloadUrl.startsWith('saas:'))
 
-    for (const l of desktopLines) {
-      if (!resolveDownloadSourceFromRawUrl(l.downloadUrl)) {
-        console.error('[mail] sendPaidDownloadOrder: unresolved source after pre-check', {
-          orderNo: data.orderNo,
-          productName: l.productName,
-        })
-        return
-      }
-    }
-
     if (saasLines.length > 0 && desktopLines.length === 0) {
       await sendPaidSaasOnlyOrderMail({
         customerName: data.customerName,
@@ -635,12 +627,11 @@ export const mailService = {
         l.licenses?.filter((x) => x.licenseKey?.trim()) ??
         (l.licenseKeys ?? []).filter((k) => k?.trim()).map((k) => ({ licenseKey: k }))
 
-      const downloadHref = buildOrderDownloadMailHref({
-        orderId: data.orderId,
-        orderItemId: l.id,
-        productId: l.productId,
-        licenseId: l.licenseId,
-      })
+      const downloadHref = resolveLiveProductMailDownloadHref(l.downloadUrl)
+      const downloadSectionHtml = downloadHref
+        ? `${mailDownloadButton(downloadHref, 'Programı İndir')}
+          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Program dosyasını güvenilir kaynaktan indirin. Bağlantı ürün kaydındaki güncel sürümü gösterir.</p>`
+        : `<p style="margin:12px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:14px;line-height:1.6;color:#9a3412;">${escapeMailHtml(DOWNLOAD_FILE_UNAVAILABLE_TR)}</p>`
 
       const licenseRows: { label: string; value: string; mono?: boolean }[] = [
         { label: 'Program', value: escapeMailHtml(l.productName) },
@@ -669,8 +660,7 @@ export const mailService = {
         <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
           ${licenseTable}
           <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
-          ${mailDownloadButton(downloadHref, 'Programı İndir')}
-          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantısı ödeme onayınıza özel oluşturulmuştur. Linki üçüncü kişilerle paylaşmayınız.</p>
+          ${downloadSectionHtml}
         </div>`)
 
       const textLicense =
@@ -685,7 +675,9 @@ export const mailService = {
           : `Program: ${plainName}`
 
       productSectionsText.push(
-        `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
+        downloadHref
+          ? `${textLicense}\nProgramı İndir: ${downloadHref}`
+          : `${textLicense}\n${DOWNLOAD_FILE_UNAVAILABLE_TR}`,
       )
     }
 
@@ -968,20 +960,18 @@ export const mailService = {
 
     let downloadSectionHtml = ''
     let downloadText = ''
-    const orderId = data.orderId ?? data.licenseId ?? null
-    const orderItemId = data.orderItemId ?? data.licenseId ?? null
-    if (orderId && orderItemId && resolveDownloadSourceFromRawUrl(data.downloadUrl)) {
-      const href = buildOrderDownloadMailHref({
-        orderId,
-        orderItemId,
-        productId: data.productId ?? undefined,
-        licenseId: data.licenseId ?? undefined,
-      })
+    const href = resolveLiveProductMailDownloadHref(data.downloadUrl)
+    if (href) {
       downloadSectionHtml = `
         <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
         ${mailDownloadButton(href, 'Programı İndir')}
-        <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantınız ödeme onayınıza özel oluşturulmuştur. Bağlantı çalışmazsa Woontegra hesabınızdan sipariş detayına girerek programı indirebilirsiniz.</p>`
+        <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Program dosyasını güvenilir kaynaktan indirin. Bağlantı ürün kaydındaki güncel sürümü gösterir. Hesabınızdan da indirebilirsiniz.</p>`
       downloadText = `Programı İndir: ${href}`
+    } else {
+      downloadSectionHtml = `
+        <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
+        <p style="margin:12px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:14px;line-height:1.6;color:#9a3412;">${escapeMailHtml(DOWNLOAD_FILE_UNAVAILABLE_TR)}</p>`
+      downloadText = DOWNLOAD_FILE_UNAVAILABLE_TR
     }
 
     const orderLine = data.orderNo

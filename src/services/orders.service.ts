@@ -38,6 +38,14 @@ import {
 } from '../lib/mkSaasDeliveryHelpers'
 import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
+import {
+  deriveDiscountRatePercent,
+  resolveMaxDiscountPolicy,
+} from '../lib/affiliateDiscountPolicy'
+import {
+  isAffiliateSelfReferral,
+  resolveAffiliateLinkByCode,
+} from '../lib/affiliateCheckoutResolve'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
 import {
@@ -47,6 +55,7 @@ import {
   fulfillPaidOrderDelivery,
   type OrderItemForDeliveryCheck,
 } from './orderFulfillment.service'
+import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 import {
   adminResetLicenseActivations,
   adminSetLicenseMaxDevices,
@@ -55,6 +64,9 @@ import {
 import { renderLegalTemplate } from './legalTemplate.service'
 import { campaignsService } from './campaigns.service'
 import { saveCustomerAddressFromCheckout } from './customerAddressCheckout.service'
+import {
+  normalizeCheckoutIdempotencyKey,
+} from '../lib/orderCheckoutIdempotency'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -94,6 +106,10 @@ export type CreateOrderInput = {
   selectedAddressId?: string | null
   /** MK SaaS mevcut hesap lisanslama (demo → ücretli) */
   renewalToken?: string | null
+  /** wt_aff_ref çerezinden okunan iş ortağı bağlantı kodu */
+  affiliateReferralCode?: string | null
+  /** Checkout istemci işlem anahtarı (yeniden denemelerde aynı) */
+  checkoutIdempotencyKey?: string | null
 }
 
 /** Müşteri tarafında indirme / teslim bağlantısı gösterimi */
@@ -479,12 +495,24 @@ export const ordersService = {
   async createOrder(input: CreateOrderInput): Promise<{
     order: Awaited<ReturnType<typeof prisma.order.create>>
     addressBookWarning?: string
+    reused?: boolean
   }> {
     const lines = input.items.filter((l) => l.productId && l.quantity > 0)
     if (lines.length === 0) {
       const err = new Error('Sepet boş') as Error & { status: number }
       err.status = 400
       throw err
+    }
+
+    const checkoutIdempotencyKey = normalizeCheckoutIdempotencyKey(input.checkoutIdempotencyKey)
+    if (checkoutIdempotencyKey) {
+      const existing = await prisma.order.findUnique({
+        where: { checkoutIdempotencyKey },
+        include: { items: true },
+      })
+      if (existing) {
+        return { order: existing as Awaited<ReturnType<typeof prisma.order.create>>, reused: true }
+      }
     }
 
     const mergedRaw = new Map<string, number>()
@@ -674,6 +702,24 @@ export const ordersService = {
       productType: ProductType
     }[] = []
 
+    let affiliateSnapshot: Awaited<ReturnType<typeof resolveAffiliateLinkByCode>> = null
+    const referralCode = input.affiliateReferralCode?.trim()
+    if (referralCode) {
+      affiliateSnapshot = await resolveAffiliateLinkByCode(referralCode)
+      if (
+        affiliateSnapshot &&
+        isAffiliateSelfReferral(
+          { email: affiliateSnapshot.partnerEmail, phone: affiliateSnapshot.partnerPhone },
+          { email: input.customerEmail, phone: input.customerPhone },
+        )
+      ) {
+        affiliateSnapshot = null
+      }
+    }
+
+    let campaignDiscountRateSnapshot = 0
+    let effectiveCustomerDiscountRate = 0
+
     for (const p of products) {
       if ((p.currency || 'TRY').trim() !== currency) {
         const err = new Error('Sepette farklı para biriminde ürün olamaz') as Error & { status: number }
@@ -697,14 +743,33 @@ export const ordersService = {
         { productType: p.productType, licenseRequired: p.licenseRequired, name: p.name },
         qty,
       )
-      const { unitPrice } = await campaignsService.resolveProductUnitPrice({
+      const listPrice = Number(p.price)
+      const { unitPrice: campaignUnitPrice } = await campaignsService.resolveProductUnitPrice({
         id: p.id,
         categoryId: p.categoryId,
         productType: p.productType,
-        price: Number(p.price),
+        price: listPrice,
         purchaseEnabled: p.purchaseEnabled,
       })
-      const unit = new Prisma.Decimal(unitPrice)
+      const campaignRatePercent = deriveDiscountRatePercent(listPrice, campaignUnitPrice)
+      const affiliateRatePercent =
+        affiliateSnapshot && affiliateSnapshot.productId === p.id
+          ? affiliateSnapshot.customerDiscountRate
+          : 0
+      const priced = resolveMaxDiscountPolicy({
+        listPriceTl: listPrice,
+        campaignRatePercent,
+        affiliateRatePercent,
+        campaignEffectivePriceTl: campaignUnitPrice,
+      })
+      if (affiliateSnapshot && affiliateSnapshot.productId === p.id) {
+        campaignDiscountRateSnapshot = Math.max(campaignDiscountRateSnapshot, priced.campaignRatePercent)
+        effectiveCustomerDiscountRate = Math.max(
+          effectiveCustomerDiscountRate,
+          priced.appliedCustomerDiscountRate,
+        )
+      }
+      const unit = new Prisma.Decimal(priced.unitPriceTl)
       const lineTotal = new Prisma.Decimal(Number(unit) * qty)
       subtotal = subtotal.add(lineTotal)
       lineSnapshots.push({
@@ -793,6 +858,13 @@ export const ordersService = {
             explicitConsentAt: input.explicitConsent ? now : null,
             acceptedIp: input.acceptedIp?.trim() || null,
             acceptedUserAgent: input.acceptedUserAgent?.trim()?.slice(0, 500) || null,
+            affiliateLinkId: affiliateSnapshot?.linkId ?? null,
+            affiliatePartnerId: affiliateSnapshot?.partnerId ?? null,
+            affiliateCode: affiliateSnapshot?.code ?? null,
+            affiliateCustomerDiscountRate: affiliateSnapshot?.customerDiscountRate ?? null,
+            campaignDiscountRateSnapshot: affiliateSnapshot ? campaignDiscountRateSnapshot : null,
+            effectiveCustomerDiscountRate: affiliateSnapshot ? effectiveCustomerDiscountRate : null,
+            checkoutIdempotencyKey,
             items: {
               create: lineSnapshots.map((l) => ({
                 productId: l.productId,
@@ -974,7 +1046,18 @@ export const ordersService = {
 
         return { order, addressBookWarning }
       } catch (e) {
-        if (isUniqueViolation(e)) continue
+        if (isUniqueViolation(e)) {
+          if (checkoutIdempotencyKey) {
+            const raced = await prisma.order.findUnique({
+              where: { checkoutIdempotencyKey },
+              include: { items: true },
+            })
+            if (raced) {
+              return { order: raced as Awaited<ReturnType<typeof prisma.order.create>>, reused: true }
+            }
+          }
+          continue
+        }
         throw e
       }
     }
@@ -1391,23 +1474,6 @@ export const ordersAdminService = {
       err.status = 400
       throw err
     }
-    if (order.status === 'PAID' || order.status === 'PROCESSING') {
-      try {
-        await fulfillPaidOrderDelivery(order.id, undefined)
-      } catch (e) {
-        console.error('[orders] fulfill after bank confirm (already paid) failed', {
-          orderNo: order.orderNo,
-          orderId: order.id,
-          message: e instanceof Error ? e.message : String(e),
-        })
-      }
-      return { orderNo: order.orderNo, alreadyPaid: true as const }
-    }
-    if (order.status !== 'PENDING') {
-      const err = new Error('Bu sipariş durumunda ödeme onayı verilemez') as Error & { status: number }
-      err.status = 400
-      throw err
-    }
 
     const bankNote = input.bankNote.trim()
     if (!bankNote) {
@@ -1421,8 +1487,6 @@ export const ordersAdminService = {
       err.status = 400
       throw err
     }
-
-    const paymentConfirmedAt = new Date()
     const adminId = input.adminUserId.trim()
     if (!adminId) {
       const err = new Error('Admin oturumu bulunamadı') as Error & { status: number }
@@ -1442,6 +1506,7 @@ export const ordersAdminService = {
                 downloadUrl: true,
                 downloadFiles: true,
                 downloadMedia: { select: { url: true } },
+                licenseRequired: true,
               },
             },
           },
@@ -1452,8 +1517,84 @@ export const ordersAdminService = {
       deliveryCtx.items as unknown as OrderItemForDeliveryCheck[],
     )
 
-    await prisma.order.update({
-      where: { id: order.id },
+    const paymentConfirmedAt = new Date()
+
+    const finishDelivery = async (alreadyPaid: boolean) => {
+      try {
+        await fulfillPaidOrderDelivery(order.id, undefined)
+      } catch (e) {
+        console.error('[orders] fulfill after bank confirm failed', {
+          orderNo: order.orderNo,
+          orderId: order.id,
+          alreadyPaid,
+          message: e instanceof Error ? e.message : String(e),
+        })
+      }
+
+      const failedCentral = await prisma.orderItem.findMany({
+        where: { orderId: order.id, licenseServerLastError: { not: null } },
+        select: {
+          productName: true,
+          licenseServerLastError: true,
+          product: { select: { licenseAppCode: true, licenseRequired: true } },
+        },
+      })
+      const licenseErrors = failedCentral.filter(
+        (r) => r.product?.licenseRequired || Boolean(r.licenseServerLastError?.trim()),
+      )
+      for (const row of licenseErrors) {
+        console.error('[orders] bank confirm central license failed', {
+          orderNo: order.orderNo,
+          productName: row.productName,
+          licenseAppCode: row.product?.licenseAppCode ?? null,
+          error: row.licenseServerLastError,
+        })
+      }
+
+      return {
+        orderNo: order.orderNo,
+        alreadyPaid,
+        paymentConfirmedAt: (await prisma.order.findUnique({ where: { id: order.id }, select: { paymentConfirmedAt: true } }))
+          ?.paymentConfirmedAt?.toISOString() ?? null,
+        licenseDeliveryOk: licenseErrors.length === 0,
+        licenseDeliveryAlert:
+          licenseErrors.length > 0
+            ? `Ödeme alındı, lisans oluşturulamadı: ${licenseErrors[0]!.licenseServerLastError}`
+            : null,
+      }
+    }
+
+    if (order.status === 'PAID' || order.status === 'PROCESSING') {
+      // İkinci onay / timeout yeniden deneme: komisyon-mail çoğaltma yok; eksik onay alanlarını tamamla
+      if (!order.paymentConfirmedAt) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            paidAt: order.paidAt ?? payDate,
+            bankTransferPaymentDate: order.bankTransferPaymentDate ?? payDate,
+            bankTransferAdminNote: order.bankTransferAdminNote || bankNote,
+            bankTransferReference: order.bankTransferReference || input.reference?.trim() || null,
+            paymentConfirmedAt,
+            paymentConfirmedById: order.paymentConfirmedById || adminId,
+          },
+        })
+      }
+      return finishDelivery(true)
+    }
+
+    if (order.status !== 'PENDING') {
+      const err = new Error('Bu sipariş durumunda ödeme onayı verilemez') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+
+    // Yarış güvenli: yalnız PENDING → PAID tek geçiş
+    const claimed = await prisma.order.updateMany({
+      where: {
+        id: order.id,
+        status: 'PENDING',
+        paymentProvider: PaymentProvider.BANK_TRANSFER,
+      },
       data: {
         status: 'PAID',
         paidAt: payDate,
@@ -1464,6 +1605,16 @@ export const ordersAdminService = {
         paymentConfirmedById: adminId,
       },
     })
+
+    if (claimed.count !== 1) {
+      const again = await prisma.order.findFirst({ where: { id: order.id, archivedAt: null } })
+      if (again && (again.status === 'PAID' || again.status === 'PROCESSING')) {
+        return finishDelivery(true)
+      }
+      const err = new Error('Bu sipariş durumunda ödeme onayı verilemez') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
 
     console.warn(
       '[audit] bank-transfer-confirmed',
@@ -1501,34 +1652,7 @@ export const ordersAdminService = {
       console.error('[orders] bank approval notice mail failed', e)
     }
 
-    try {
-      await fulfillPaidOrderDelivery(order.id, undefined)
-    } catch (e) {
-      console.error('[orders] fulfill after bank confirm failed', {
-        orderNo: order.orderNo,
-        orderId: order.id,
-        message: e instanceof Error ? e.message : String(e),
-      })
-    }
-
-    const failedCentral = await prisma.orderItem.findMany({
-      where: { orderId: order.id, licenseServerLastError: { not: null } },
-      select: {
-        productName: true,
-        licenseServerLastError: true,
-        product: { select: { licenseAppCode: true } },
-      },
-    })
-    for (const row of failedCentral) {
-      console.error('[orders] bank confirm central license failed', {
-        orderNo: order.orderNo,
-        productName: row.productName,
-        licenseAppCode: row.product?.licenseAppCode ?? null,
-        error: row.licenseServerLastError,
-      })
-    }
-
-    return { orderNo: order.orderNo, alreadyPaid: false as const }
+    return finishDelivery(false)
   },
 
   async archive(orderId: string) {
