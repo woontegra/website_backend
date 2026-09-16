@@ -7,11 +7,17 @@ import {
 
 export type SaveCheckoutAddressInput = CustomerAddressFingerprintInput & {
   selectedAddressId?: string | null
+  /** When true, create/update and force this row as the customer's default address. */
+  setAsDefault?: boolean
 }
 
 export type SaveCheckoutAddressResult =
   | { ok: true; status: 'saved'; addressId: string }
-  | { ok: true; status: 'skipped_unchanged' | 'skipped_duplicate' | 'skipped_incomplete' | 'skipped_disabled' }
+  | {
+      ok: true
+      status: 'skipped_unchanged' | 'skipped_duplicate' | 'skipped_incomplete' | 'skipped_disabled'
+      addressId?: string
+    }
 
 function buildAddressTitle(city: string, district?: string | null): string {
   const c = city.trim()
@@ -43,6 +49,7 @@ export async function saveCustomerAddressFromCheckout(
     companyName: input.companyName?.trim() || null,
   }
   const fingerprint = customerAddressFingerprint(payload)
+  const setAsDefault = input.setAsDefault === true
 
   const existingRows = await prisma.customerAddress.findMany({
     where: { customerId },
@@ -53,16 +60,46 @@ export async function saveCustomerAddressFromCheckout(
   if (selectedId) {
     const selected = existingRows.find((row) => row.id === selectedId)
     if (selected && customerAddressMatchesFingerprint(selected, fingerprint)) {
-      return { ok: true, status: 'skipped_unchanged' }
+      if (setAsDefault && !selected.isDefault) {
+        await prisma.$transaction(async (tx) => {
+          await tx.customerAddress.updateMany({ where: { customerId }, data: { isDefault: false } })
+          await tx.customerAddress.update({ where: { id: selected.id }, data: { isDefault: true } })
+        })
+        return { ok: true, status: 'saved', addressId: selected.id }
+      }
+      return { ok: true, status: 'skipped_unchanged', addressId: selected.id }
     }
   }
 
-  if (existingRows.some((row) => customerAddressMatchesFingerprint(row, fingerprint))) {
-    return { ok: true, status: 'skipped_duplicate' }
+  const match = existingRows.find((row) => customerAddressMatchesFingerprint(row, fingerprint))
+  if (match) {
+    if (setAsDefault) {
+      await prisma.$transaction(async (tx) => {
+        await tx.customerAddress.updateMany({ where: { customerId }, data: { isDefault: false } })
+        await tx.customerAddress.update({
+          where: { id: match.id },
+          data: {
+            title: buildAddressTitle(city, payload.district),
+            fullName: payload.fullName,
+            phone: payload.phone,
+            city: payload.city,
+            district: payload.district,
+            addressLine: payload.addressLine,
+            postalCode: payload.postalCode,
+            taxOffice: payload.taxOffice,
+            taxNumber: payload.taxNumber,
+            companyName: payload.companyName,
+            isDefault: true,
+          },
+        })
+      })
+      return { ok: true, status: 'saved', addressId: match.id }
+    }
+    return { ok: true, status: 'skipped_duplicate', addressId: match.id }
   }
 
   const hasDefault = existingRows.some((row) => row.isDefault)
-  const isDefault = !hasDefault
+  const isDefault = setAsDefault || !hasDefault
 
   const created = await prisma.$transaction(async (tx) => {
     if (isDefault) {

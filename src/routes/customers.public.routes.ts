@@ -17,6 +17,7 @@ r.patch('/me/password', c.patchPassword)
 
 r.get('/me/addresses', c.listAddresses)
 r.post('/me/addresses', c.createAddress)
+r.post('/me/addresses/save-default-from-checkout', c.saveDefaultAddressFromCheckout)
 r.patch('/me/addresses/:id', c.patchAddress)
 r.delete('/me/addresses/:id', c.deleteAddress)
 

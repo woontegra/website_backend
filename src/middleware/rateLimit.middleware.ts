@@ -73,7 +73,14 @@ export function createLicensePublicRateLimiter() {
     windowMs: 15 * 60 * 1000,
     max,
     message: { success: false, message: 'Çok fazla deneme. Lütfen bir süre sonra tekrar deneyin.' },
-    skip: (req) => isSmokeTestBypass(req),
+    skip: (req) => {
+      // Production: only explicit smoke bypass (which is disabled in production via isSmokeTestMode).
+      if (isSmokeTestBypass(req)) return true
+      // Local/dev: skip so BH E2E/regression suites are not blocked (mirrors global limiter).
+      // Production never enters this branch — RATE_LIMIT_MAX stays enforced.
+      if (process.env.NODE_ENV !== 'production') return true
+      return false
+    },
     standardHeaders: true,
     legacyHeaders: false,
   })

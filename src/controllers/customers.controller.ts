@@ -163,6 +163,37 @@ export async function createAddress(req: Request, res: Response) {
   }
 }
 
+/** Save checkout billing address as default (idempotent fingerprint). No TCKN. */
+export async function saveDefaultAddressFromCheckout(req: Request, res: Response) {
+  if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
+  const body = req.body as Record<string, unknown>
+  const fullName = readString(body, 'fullName')
+  const city = readString(body, 'city')
+  const addressLine = readString(body, 'addressLine')
+  if (!fullName || !city || !addressLine) {
+    return res.status(400).json({ success: false, message: 'fullName, city ve addressLine zorunludur' })
+  }
+  try {
+    const { saveCustomerAddressFromCheckout } = await import('../services/customerAddressCheckout.service')
+    const result = await saveCustomerAddressFromCheckout(req.customer.id, {
+      fullName,
+      phone: readString(body, 'phone'),
+      city,
+      district: readString(body, 'district'),
+      addressLine,
+      postalCode: readString(body, 'postalCode'),
+      taxOffice: readString(body, 'taxOffice'),
+      taxNumber: readString(body, 'taxNumber'),
+      companyName: readString(body, 'companyName'),
+      setAsDefault: true,
+    })
+    return res.json({ success: true, data: result })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Adres kaydedilemedi'
+    return res.status(400).json({ success: false, message: msg })
+  }
+}
+
 export async function patchAddress(req: Request, res: Response) {
   if (!req.customer) return res.status(401).json({ success: false, message: 'Giriş gerekli' })
   const id = String(req.params.id ?? '').trim()

@@ -414,6 +414,10 @@ model Product {
   favoritedBy         CustomerFavorite[]
   licenses            License[]
   saasMemberships     CustomerSaasMembership[]
+  affiliateAssignments AffiliatePartnerProduct[]
+  affiliateLinks      AffiliateLink[]
+  affiliateVisits     AffiliateVisit[]
+  affiliateCommissions AffiliateCommission[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   navigationItems     NavigationMenuItem[]
@@ -581,6 +585,21 @@ model Order {
   shippingStatus            String?       @db.VarChar(120)
   /// Soft delete: arşivlenmiş siparişler listede gösterilmez
   archivedAt                DateTime?
+  /// Affiliate: sipariş anında çerezden çözülen bağlantı (PayTR callback’te çerez yok)
+  affiliateLinkId           String?
+  affiliateLink             AffiliateLink? @relation(fields: [affiliateLinkId], references: [id], onDelete: SetNull)
+  affiliatePartnerId        String?
+  affiliatePartner          AffiliatePartner? @relation(fields: [affiliatePartnerId], references: [id], onDelete: SetNull)
+  affiliateCode             String?
+  affiliateCustomerDiscountRate Int?
+  campaignDiscountRateSnapshot  Int?
+  effectiveCustomerDiscountRate Int?
+  /// NONE | PENDING | APPLIED | SKIPPED | FAILED — komisyon yeniden işlenebilir
+  affiliateCommissionStatus String?       @db.VarChar(20)
+  affiliateCommissionError  String?       @db.Text
+  affiliateCommissionAt     DateTime?
+  /// Checkout istemci işlem anahtarı — aynı anahtarla ikinci create mevcut siparişi döner
+  checkoutIdempotencyKey    String?       @unique @db.VarChar(128)
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
   items                     OrderItem[]
@@ -588,11 +607,15 @@ model Order {
   legalSnapshots            OrderLegalSnapshot[]
   legalArchiveFiles         OrderLegalArchiveFile[]
   licenses                  License[]
+  affiliateCommissions      AffiliateCommission[]
 
   @@index([status, createdAt])
   @@index([customerEmail])
   @@index([customerId])
   @@index([archivedAt])
+  @@index([affiliateLinkId])
+  @@index([affiliatePartnerId])
+  @@index([affiliateCommissionStatus])
 }
 
 /// Sipariş anında kabul edilen yasal metin anlık görüntüsü
@@ -811,4 +834,226 @@ model DownloadStat {
 
   @@unique([productKey, variant])
   @@index([productKey])
+}
+
+/// İş ortaklığı (affiliate) — 1. aşama: Bilirkişi ile uyumlu partner + ürün oranları + partner erişimi temeli
+model AffiliatePartner {
+  id                    String   @id @default(uuid())
+  name                  String
+  contactName           String?
+  email                 String?
+  phone                 String?
+  /// Varsayılan komisyon oranı (tam sayı %). Ürün atamasında özel oran yoksa kullanılır.
+  defaultCommissionRate Int      @default(0)
+  isActive              Boolean  @default(true)
+  internalNotes         String?  @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  products              AffiliatePartnerProduct[]
+  links                 AffiliateLink[]
+  visits                AffiliateVisit[]
+  partnerAccess         AffiliatePartnerAccess?
+  commissions           AffiliateCommission[]
+  payouts               AffiliatePayout[]
+  attributedOrders      Order[]
+
+  @@index([isActive, createdAt])
+  @@index([name])
+}
+
+/// İş ortağına atanan ürün — Woontegra farkı: komisyon ve müşteri indirimi ürün bazında
+model AffiliatePartnerProduct {
+  id                    String           @id @default(uuid())
+  partnerId             String
+  partner               AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  productId             String
+  product               Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// İş ortağına ödenecek komisyon oranı (tam sayı %)
+  commissionRatePercent Int
+  /// Müşteriye uygulanacak indirim oranı (tam sayı %)
+  discountRatePercent   Int              @default(0)
+  isActive              Boolean          @default(true)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  links                 AffiliateLink[]
+
+  @@unique([partnerId, productId])
+  @@index([partnerId])
+  @@index([productId])
+}
+
+/// Ürün bazlı tanıtım / satış bağlantısı (Bilirkişi AffiliateLink + ürün bağlama)
+model AffiliateLink {
+  id                    String                  @id @default(uuid())
+  partnerId             String
+  partner               AffiliatePartner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  productId             String
+  product               Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  partnerProductId      String?
+  partnerProduct        AffiliatePartnerProduct? @relation(fields: [partnerProductId], references: [id], onDelete: SetNull)
+  /// Opak takip kodu (URL’de)
+  code                  String                  @unique
+  /// Oluşturma anındaki müşteri indirimi (tam sayı %)
+  customerDiscountRate  Int                     @default(0)
+  /// Oluşturma anındaki komisyon oranı (tam sayı %)
+  commissionRatePercent Int
+  isActive              Boolean                 @default(true)
+  expiresAt             DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  visits                AffiliateVisit[]
+  commissions           AffiliateCommission[]
+  attributedOrders      Order[]
+
+  @@index([partnerId, createdAt])
+  @@index([productId])
+  @@index([isActive])
+}
+
+/// Başarılı ödeme sonrası değişmez komisyon defteri (Bilirkişi AffiliateCommission)
+model AffiliateCommission {
+  id                                      String   @id @default(uuid())
+  orderId                                 String   @unique
+  order                                   Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderNo                                 String
+  partnerId                               String
+  partner                                 AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  linkId                                  String
+  link                                    AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Restrict)
+  productId                               String
+  product                                 Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productNameSnapshot                     String
+  saleType                                String   @db.VarChar(20)
+  productType                             String?
+  subscriptionPeriod                      Int?
+  currency                                String   @default("TRY") @db.VarChar(3)
+  grossPaidAmountKurus                    Int
+  affiliateCustomerDiscountRateSnapshot   Int      @default(0)
+  campaignDiscountRateSnapshot            Int      @default(0)
+  effectiveCustomerDiscountRateSnapshot   Int      @default(0)
+  vatRateSnapshot                         Int
+  commissionBaseAmountKurus               Int
+  commissionRateSnapshot                  Int
+  commissionAmountKurus                   Int
+  /// EARNED | PARTIALLY_PAID | PAID | REVERSED
+  status                                  String   @default("EARNED") @db.VarChar(20)
+  createdAt                               DateTime @default(now())
+  updatedAt                               DateTime @updatedAt
+  payoutItems                             AffiliatePayoutItem[]
+
+  @@index([partnerId, createdAt])
+  @@index([linkId])
+  @@index([productId])
+  @@index([status])
+  @@index([orderNo])
+}
+
+/// Komisyon ödeme kaydı (yalnız muhasebe; otomatik banka transferi yok)
+model AffiliatePayout {
+  id                   String   @id @default(uuid())
+  partnerId            String
+  partner              AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  amountKurus          Int
+  currency             String   @default("TRY") @db.VarChar(3)
+  /// BANK_TRANSFER | CASH | OTHER
+  paymentMethod        String   @db.VarChar(40)
+  reference            String?  @db.VarChar(255)
+  notes                String?  @db.Text
+  /// PAID (v1)
+  status               String   @default("PAID") @db.VarChar(20)
+  paidAt               DateTime
+  idempotencyKey       String   @unique @db.VarChar(80)
+  createdByAdminUserId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  items                AffiliatePayoutItem[]
+
+  @@index([partnerId, paidAt])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Ödeme satırı — aynı komisyon birden fazla kısmi ödemede yer alabilir
+model AffiliatePayoutItem {
+  id                   String   @id @default(uuid())
+  payoutId             String
+  payout               AffiliatePayout @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+  commissionId         String
+  commission           AffiliateCommission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+  allocatedAmountKurus Int
+  createdAt            DateTime @default(now())
+
+  @@unique([payoutId, commissionId])
+  @@index([payoutId])
+  @@index([commissionId])
+}
+
+/// Bağlantı ziyareti kaydı (komisyon yok; yalnızca ilişkilendirme)
+model AffiliateVisit {
+  id          String          @id @default(uuid())
+  linkId      String
+  link        AffiliateLink   @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  partnerId   String
+  partner     AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  code        String
+  ipAddress   String?
+  userAgent   String?         @db.Text
+  referer     String?         @db.Text
+  landingPath String?
+  createdAt   DateTime        @default(now())
+
+  @@index([linkId, createdAt])
+  @@index([partnerId, createdAt])
+  @@index([productId])
+  @@index([code])
+}
+
+/// İş ortağı paneli erişimi (şifresiz; admin daveti). Bilirkişi AffiliatePartnerAccess ile aynı mantık.
+model AffiliatePartnerAccess {
+  id                   String    @id @default(uuid())
+  partnerId            String    @unique
+  partner              AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  email                String
+  isRevoked            Boolean   @default(false)
+  createdByAdminUserId String?
+  revokedAt            DateTime?
+  revokedByAdminUserId String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  magicTokens          AffiliatePartnerMagicToken[]
+  sessions             AffiliatePartnerSession[]
+
+  @@index([email])
+  @@index([isRevoked])
+}
+
+/// Tek kullanımlık giriş bağlantısı jetonu (yalnızca hash saklanır)
+model AffiliatePartnerMagicToken {
+  id         String                 @id @default(uuid())
+  accessId   String
+  access     AffiliatePartnerAccess @relation(fields: [accessId], references: [id], onDelete: Cascade)
+  tokenHash  String                 @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime               @default(now())
+
+  @@index([accessId])
+  @@index([expiresAt])
+}
+
+/// Magic link sonrası oturum (çerez değeri hash’lenir; portal 2. aşamada)
+model AffiliatePartnerSession {
+  id         String                 @id @default(uuid())
+  accessId   String
+  access     AffiliatePartnerAccess @relation(fields: [accessId], references: [id], onDelete: Cascade)
+  tokenHash  String                 @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastSeenAt DateTime?
+  createdAt  DateTime               @default(now())
+
+  @@index([accessId])
+  @@index([expiresAt])
 }
