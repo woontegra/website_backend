@@ -290,3 +290,54 @@ export async function ensureBilirkisiHesapFulfillment(orderId: string): Promise<
 
   return { attempted: true, ok: true }
 }
+
+/**
+ * PayTR get-token / start failure ONLY: abandon BH prepare-sale so campaign reservation releases.
+ * Idempotent — BH abandon-sale is safe for already-failed/released payments.
+ *
+ * IN-FLIGHT PROTECTION: must not be called after a successful get-token / while PayTR payment
+ * may still be open. Callers must have proven get-token API failure evidence.
+ */
+export async function abandonBilirkisiHesapPreparedSale(orderId: string): Promise<{
+  attempted: boolean
+  ok: boolean
+  error?: string
+}> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      orderNo: true,
+      bhSaleRef: true,
+      status: true,
+      bhFulfillmentStatus: true,
+    },
+  })
+  if (!order?.bhSaleRef) return { attempted: false, ok: true }
+  if (order.status === OrderStatus.PAID || order.bhFulfillmentStatus === 'APPLIED') {
+    return { attempted: false, ok: false, error: 'ORDER_ALREADY_PAID_OR_FULFILLED' }
+  }
+
+  const headers = buildWoontegraBhSalesChannelHeaders()
+  const result = await bhUpstreamFetch(
+    'POST',
+    '/api/payment/woontegra/abandon-sale',
+    { merchantOid: order.bhSaleRef, saleRef: order.bhSaleRef },
+    { headers, timeoutMs: 30_000 },
+  )
+
+  if (!result.ok) {
+    const msg =
+      (result.data as { message?: string } | undefined)?.message ||
+      result.error ||
+      'abandon-sale failed'
+    console.error('[bh-abandon] abandon-sale failed', {
+      orderNo: order.orderNo,
+      saleRef: order.bhSaleRef,
+      message: msg,
+    })
+    return { attempted: true, ok: false, error: msg }
+  }
+
+  return { attempted: true, ok: true }
+}

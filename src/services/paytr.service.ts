@@ -18,6 +18,11 @@ import {
   appendPaytrAdminPaidMailSentNote,
   hasPaytrAdminPaidMailSent,
 } from '../lib/orderAdminMail'
+import { abandonBilirkisiHesapPreparedSale } from './bhCentralCheckout.service'
+import {
+  buildGetTokenApiFailurePayload,
+  decidePaytrSuccessTxTransition,
+} from '../lib/paytrCallbackRecovery'
 
 function paytrHmacBase64(secretKey: string, data: string): string {
   return crypto.createHmac('sha256', secretKey).update(data, 'utf8').digest('base64')
@@ -36,6 +41,66 @@ function paymentAmountKurus(total: Prisma.Decimal | number): number {
 function isPaymentDryRunEnabled(): boolean {
   const raw = String(process.env.PAYMENT_DRY_RUN || '').trim().toLowerCase()
   return raw === 'true' || raw === '1' || raw === 'yes'
+}
+
+/**
+ * After a proven PayTR get-token API failure only: mark PENDING TX (+ BH order) failed
+ * and release BH campaign reservation.
+ *
+ * IN-FLIGHT PROTECTION: never call this after a successful token response, never based on
+ * PENDING age alone, never from manual "stale" scripts without get-token failure evidence.
+ * MK orders without bhSaleRef only get TX failed — retry path still works via FAILED→PENDING.
+ */
+async function failPaytrStartAfterTokenAttempt(input: {
+  orderId: string
+  orderNo: string
+  paytrMerchantOid: string
+  bhSaleRef?: string | null
+  reason: string
+}): Promise<void> {
+  const payload = buildGetTokenApiFailurePayload(input.reason)
+  try {
+    const u = await prisma.paymentTransaction.updateMany({
+      where: { merchantOid: input.paytrMerchantOid, status: 'PENDING' },
+      data: {
+        status: 'FAILED',
+        providerRawPayload: payload,
+      },
+    })
+    if (u.count === 0) {
+      console.warn('[paytr] get-token failure cleanup skipped — TX not PENDING (in-flight protection)', {
+        orderNo: input.orderNo,
+        merchantOid: input.paytrMerchantOid,
+      })
+      return
+    }
+  } catch (e) {
+    console.error('[paytr] failed to mark PaymentTransaction FAILED after get-token error', e)
+  }
+
+  if (!input.bhSaleRef) return
+
+  try {
+    await prisma.order.updateMany({
+      where: { id: input.orderId, status: { not: 'PAID' } },
+      data: { status: 'FAILED' },
+    })
+  } catch (e) {
+    console.error('[paytr] failed to mark BH Order FAILED after get-token error', e)
+  }
+
+  try {
+    const abandoned = await abandonBilirkisiHesapPreparedSale(input.orderId)
+    console.info('[paytr] BH abandon after proven get-token API failure', {
+      orderNo: input.orderNo,
+      saleRef: input.bhSaleRef,
+      attempted: abandoned.attempted,
+      ok: abandoned.ok,
+      error: abandoned.error || null,
+    })
+  } catch (e) {
+    console.error('[paytr] BH abandon-sale error after get-token failure', e)
+  }
 }
 
 /** PayTR merchant_oid: yalnızca harf ve rakam (tire, alt çizgi vb. yok). */
@@ -361,17 +426,39 @@ export const paytrService = {
       lang: 'tr',
     })
 
-    const res = await fetch('https://www.paytr.com/odeme/api/get-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
+    let res: globalThis.Response
+    let text: string
+    try {
+      res = await fetch('https://www.paytr.com/odeme/api/get-token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      })
+      text = await res.text()
+    } catch (fetchErr) {
+      await failPaytrStartAfterTokenAttempt({
+        orderId: order.id,
+        orderNo: order.orderNo,
+        paytrMerchantOid,
+        bhSaleRef: order.bhSaleRef,
+        reason: String((fetchErr as Error)?.message || fetchErr).slice(0, 500),
+      })
+      const err = new Error('PayTR bağlantısı kurulamadı') as Error & { status: number }
+      err.status = 502
+      throw err
+    }
 
-    const text = await res.text()
     let json: { status?: string; token?: string; reason?: string }
     try {
       json = JSON.parse(text) as typeof json
     } catch {
+      await failPaytrStartAfterTokenAttempt({
+        orderId: order.id,
+        orderNo: order.orderNo,
+        paytrMerchantOid,
+        bhSaleRef: order.bhSaleRef,
+        reason: 'PayTR yanıtı okunamadı',
+      })
       const err = new Error('PayTR yanıtı okunamadı') as Error & { status: number }
       err.status = 502
       throw err
@@ -383,6 +470,13 @@ export const paytrService = {
         /merchant_oid|alfanumerik|özel karakter/i.test(String(raw))
           ? 'Ödeme oturumu başlatılamadı. Lütfen bir süre sonra tekrar deneyin veya destek ile iletişime geçin.'
           : String(raw)
+      await failPaytrStartAfterTokenAttempt({
+        orderId: order.id,
+        orderNo: order.orderNo,
+        paytrMerchantOid,
+        bhSaleRef: order.bhSaleRef,
+        reason: String(raw).slice(0, 1000),
+      })
       const err = new Error(msg) as Error & { status: number }
       err.status = 502
       throw err
@@ -428,7 +522,7 @@ export const paytrService = {
 
     const txRow = await prisma.paymentTransaction.findUnique({
       where: { merchantOid },
-      select: { orderId: true, status: true },
+      select: { orderId: true, status: true, providerRawPayload: true },
     })
     const order = txRow
       ? await prisma.order.findUnique({
@@ -451,6 +545,13 @@ export const paytrService = {
       failed_reason_code: payload.failed_reason_code ?? '',
       failed_reason_msg: payload.failed_reason_msg ?? '',
     })
+
+    if (!txRow) {
+      console.warn('[paytr] callback PaymentTransaction bulunamadı', { merchantOid })
+      const err = new Error('Ödeme kaydı bulunamadı') as Error & { status: number }
+      err.status = 404
+      throw err
+    }
 
     if (!order) {
       console.warn('[paytr] callback sipariş bulunamadı', { merchantOid })
@@ -520,31 +621,107 @@ export const paytrService = {
 
     if (status === 'success') {
       const previousStatus = order.status
+      const decision = decidePaytrSuccessTxTransition({
+        txStatus: txRow.status,
+        providerRawPayload: txRow.providerRawPayload,
+      })
+
+      if (decision.kind === 'conflict_non_recoverable_failed') {
+        console.error('[paytr] callback CONFLICT: verified success but TX FAILED without internal-cleanup marker — no auto-recover', {
+          merchantOid,
+          orderNo: order.orderNo,
+          transactionStatus: txRow.status,
+          reason: decision.reason,
+        })
+        // Ack OK so PayTR stops retrying; do not fulfill.
+        return
+      }
+
+      if (decision.kind === 'missing_transaction') {
+        const err = new Error('Ödeme kaydı bulunamadı') as Error & { status: number }
+        err.status = 404
+        throw err
+      }
+
       let firstCompletion = false
       await prisma.$transaction(async (tx) => {
-        const u = await tx.paymentTransaction.updateMany({
-          where: { merchantOid, status: 'PENDING' },
-          data: { status: 'SUCCESS', providerRawPayload: rawJson },
-        })
-        if (u.count > 0) {
-          firstCompletion = true
-          await tx.order.update({
-            where: { id: order.id },
-            data: { status: 'PAID', paidAt: new Date() },
+        if (decision.kind === 'promote_pending') {
+          const u = await tx.paymentTransaction.updateMany({
+            where: { merchantOid, status: 'PENDING' },
+            data: { status: 'SUCCESS', providerRawPayload: rawJson },
           })
-          return
+          if (u.count > 0) {
+            firstCompletion = true
+            await tx.order.update({
+              where: { id: order.id },
+              data: { status: 'PAID', paidAt: new Date() },
+            })
+            return
+          }
+          // Race: another worker promoted first
+          const pt = await tx.paymentTransaction.findUnique({ where: { merchantOid } })
+          if (pt?.status === 'SUCCESS') {
+            await tx.order.updateMany({
+              where: { id: order.id, status: { not: 'PAID' } },
+              data: { status: 'PAID', paidAt: new Date() },
+            })
+            return
+          }
+          const err = new Error('Ödeme kaydı güncellenemedi') as Error & { status: number }
+          err.status = 500
+          throw err
         }
-        const pt = await tx.paymentTransaction.findUnique({ where: { merchantOid } })
-        if (pt?.status === 'SUCCESS') {
+
+        if (decision.kind === 'already_success') {
+          await tx.paymentTransaction.updateMany({
+            where: { merchantOid },
+            data: { providerRawPayload: rawJson },
+          })
           await tx.order.updateMany({
             where: { id: order.id, status: { not: 'PAID' } },
             data: { status: 'PAID', paidAt: new Date() },
           })
           return
         }
-        const err = new Error('Ödeme kaydı güncellenemedi') as Error & { status: number }
-        err.status = 500
-        throw err
+
+        if (decision.kind === 'recover_internal_cleanup') {
+          const recoveryPayload = {
+            ...(typeof rawJson === 'object' && rawJson && !Array.isArray(rawJson)
+              ? (rawJson as Record<string, unknown>)
+              : {}),
+            recoveredFromInternalCleanup: true,
+            recoveredFailReason: decision.failReason,
+            recoveredAt: new Date().toISOString(),
+          } as Prisma.InputJsonValue
+
+          const u = await tx.paymentTransaction.updateMany({
+            where: { merchantOid, status: 'FAILED' },
+            data: { status: 'SUCCESS', providerRawPayload: recoveryPayload },
+          })
+          if (u.count === 0) {
+            const pt = await tx.paymentTransaction.findUnique({ where: { merchantOid } })
+            if (pt?.status === 'SUCCESS') {
+              await tx.order.updateMany({
+                where: { id: order.id, status: { not: 'PAID' } },
+                data: { status: 'PAID', paidAt: new Date() },
+              })
+              return
+            }
+            const err = new Error('Ödeme kaydı güncellenemedi') as Error & { status: number }
+            err.status = 500
+            throw err
+          }
+          firstCompletion = true
+          await tx.order.update({
+            where: { id: order.id },
+            data: { status: 'PAID', paidAt: new Date() },
+          })
+          console.info('[paytr] callback recovered internal-cleanup FAILED → SUCCESS', {
+            merchantOid,
+            orderNo: order.orderNo,
+            failReason: decision.failReason,
+          })
+        }
       })
 
       if (!firstCompletion) {
@@ -552,6 +729,7 @@ export const paytrService = {
           merchantOid,
           orderNo: order.orderNo,
           previousOrderStatus: previousStatus,
+          decision: decision.kind,
         })
         return
       }
@@ -561,6 +739,7 @@ export const paytrService = {
         orderNo: order.orderNo,
         previousOrderStatus: previousStatus,
         orderStatusAfter: 'PAID',
+        decision: decision.kind,
       })
 
       await fulfillPaidOrderDelivery(order.id, req)
