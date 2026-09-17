@@ -60,6 +60,8 @@ import { saasDemoRequestsPublicRoutes } from './routes/saasDemoRequests.public.r
 import { mkSaasLicensePurchasePublicRoutes } from './routes/mkSaasLicensePurchase.public.routes'
 import { desktopLicenseRenewalPublicRoutes } from './routes/desktopLicenseRenewal.public.routes'
 import { bhPublicRoutes } from './routes/bh.public.routes'
+import { bhAdminRoutes } from './routes/bh.admin.routes'
+import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
 import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
@@ -168,6 +170,7 @@ app.use('/api/orders', ordersPublicRoutes)
 app.use('/api/license', licensePublicRoutes)
 app.use('/api/customers', customersPublicRoutes)
 app.use('/api/bh', bhPublicRoutes)
+app.use('/api', affiliateReferralPublicRoutes)
 app.use('/api/payments', paymentsPublicRoutes)
 app.use('/api/product-categories', productCategoriesPublicRoutes)
 app.use('/api/navigation-menu', navigationMenuPublicRoutes)
@@ -206,6 +209,7 @@ app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
+app.use('/api/admin', bhAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   const r2 = getR2ConfigStatus()
