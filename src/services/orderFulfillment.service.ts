@@ -32,6 +32,7 @@ import {
   hasMkSaasPendingMailSent,
   isMkSaasOrderItem,
 } from '../lib/mkSaasDeliveryHelpers'
+import { ensureBilirkisiHesapFulfillment } from './bhCentralCheckout.service'
 
 const paidOrderDeliveryItemInclude = {
   product: {
@@ -199,6 +200,18 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   if (!fresh || (fresh.status !== 'PAID' && fresh.status !== 'PROCESSING')) return
 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
+
+  // Bilirkişi Hesap: WT PayTR PAID → BH complete-sale (license + BH mail). No WT BH mail.
+  if (fresh.bhSaleRef) {
+    const bhResult = await ensureBilirkisiHesapFulfillment(fresh.id)
+    if (!bhResult.ok && bhResult.attempted) {
+      console.error('[orders] bilirkisi hesap fulfillment error', {
+        orderId: fresh.id,
+        orderNo: fresh.orderNo,
+        error: bhResult.error,
+      })
+    }
+  }
 
   const mkLicensePurchaseResult = await ensureMuvekkilKasaSaasLicensePurchases(fresh.id)
   if (mkLicensePurchaseResult.errors.length > 0) {

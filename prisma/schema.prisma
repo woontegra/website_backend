@@ -580,6 +580,21 @@ model Order {
   desktopLicenseCustomerNumber  String?       @db.VarChar(32)
   desktopLicensePreviousEndDate DateTime?
   desktopLicenseNewEndDate      DateTime?
+  /// Bilirkişi Hesap Woontegra-central PayTR: NEW | RENEWAL
+  bhPurchaseContext         String?       @db.VarChar(64)
+  /// BH pending payment merchantOid (WTBH…)
+  bhSaleRef                 String?       @db.VarChar(64)
+  bhProductType             String?       @db.VarChar(20)
+  bhSubscriptionPeriod      Int?
+  bhCampaignPublicCode      String?       @db.VarChar(120)
+  bhCampaignId              String?       @db.VarChar(64)
+  bhRenewalSessionId        String?       @db.VarChar(64)
+  bhQuoteFinalKurus         Int?
+  bhQuoteNormalKurus        Int?
+  /// PENDING | APPLIED | FAILED
+  bhFulfillmentStatus       String?       @db.VarChar(20)
+  bhFulfillmentAt           DateTime?
+  bhFulfillmentError        String?       @db.Text
   shippingCarrier           String?       @db.VarChar(200)
   shippingTrackingNumber    String?       @db.VarChar(200)
   shippingStatus            String?       @db.VarChar(120)
@@ -616,6 +631,8 @@ model Order {
   @@index([affiliateLinkId])
   @@index([affiliatePartnerId])
   @@index([affiliateCommissionStatus])
+  @@index([bhSaleRef])
+  @@index([bhFulfillmentStatus])
 }
 
 /// Sipariş anında kabul edilen yasal metin anlık görüntüsü

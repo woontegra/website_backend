@@ -8,6 +8,7 @@ import {
   resolveBhAffiliateFromRequest,
 } from '../services/bhAffiliate.service'
 import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
+import { createBhCentralCheckoutOrder } from '../services/bhCentralCheckout.service'
 
 function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstreamFetch>>) {
   if (result.ok) {
@@ -233,6 +234,88 @@ export async function postBhBankTransferOrder(req: Request, res: Response) {
     timeoutMs: 45_000,
   })
   return sendUpstream(res, result)
+}
+
+/**
+ * Woontegra-central BH checkout: BH prepare-sale + WT Order (amount from BH quote only).
+ * Client price fields are ignored. PayTR uses WT merchant via /api/payments/paytr/start.
+ */
+export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
+  if (!req.customer?.id || !req.customer.email) {
+    return res.status(401).json({ success: false, message: 'Giriş gerekli.' })
+  }
+  const body = (req.body || {}) as Record<string, unknown>
+  const productTypeRaw = String(body.productType || body.product_type || '')
+    .trim()
+    .toLowerCase()
+  const productType =
+    productTypeRaw === 'monthly' || productTypeRaw === 'annual' ? productTypeRaw : null
+  if (!productType) {
+    return res.status(400).json({ success: false, message: 'productType monthly|annual gerekli.' })
+  }
+
+  const billingRaw =
+    body.billingInfo && typeof body.billingInfo === 'object'
+      ? (body.billingInfo as Record<string, unknown>)
+      : {}
+  const sanitized = sanitizeBhCheckoutBilling(billingRaw, req.customer.email)
+  if (!sanitized.ok) {
+    return res.status(400).json({ success: false, message: sanitized.message })
+  }
+  const billingInfo = sanitized.billingInfo as {
+    invoiceType?: string
+    fullName?: string
+    name?: string
+    email?: string
+    phone?: string
+    address?: string
+    openAddress?: string
+    city?: string
+    district?: string
+    identityNumber?: string
+    companyName?: string
+    taxOffice?: string
+    taxNumber?: string
+  }
+
+  try {
+    const created = await createBhCentralCheckoutOrder({
+      req,
+      customerId: req.customer.id,
+      customerEmail: req.customer.email,
+      customerName: billingInfo.fullName || billingInfo.name || req.customer.email,
+      customerPhone: billingInfo.phone || null,
+      productType,
+      subscriptionPeriod:
+        body.subscriptionPeriod != null ? Number(body.subscriptionPeriod) : undefined,
+      campaignPublicCode: String(body.campaignId || body.campaign_id || body.campaignPublicCode || '')
+        .trim() || null,
+      renewalToken: String(body.renewalToken || '').trim() || null,
+      billingInfo,
+      legalConsents:
+        (body.legalConsents as Record<string, unknown>) ||
+        (body.legal_consents as Record<string, unknown>) ||
+        undefined,
+      checkoutIdempotencyKey: String(body.checkoutIdempotencyKey || body.idempotencyKey || '').trim() || null,
+    })
+    return res.status(201).json({
+      success: true,
+      data: {
+        orderNo: created.orderNo,
+        orderId: created.orderId,
+        totalTl: created.totalTl,
+        saleRef: created.saleRef,
+        paymentProvider: 'PAYTR',
+      },
+    })
+  } catch (e) {
+    const err = e as Error & { status?: number; code?: string }
+    return res.status(err.status || 500).json({
+      success: false,
+      code: err.code || null,
+      message: err.message || 'Sipariş oluşturulamadı',
+    })
+  }
 }
 
 export async function getBhPaymentPublicStatus(req: Request, res: Response) {

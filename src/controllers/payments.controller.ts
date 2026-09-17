@@ -15,8 +15,16 @@ export async function paytrStart(req: Request, res: Response) {
     return res.status(400).json({ success: false, message: 'orderNo zorunludur' })
   }
   try {
-    const { iframeToken } = await paytrService.startIframePayment(orderNo, req)
-    return res.json({ success: true, data: { iframe_token: iframeToken } })
+    const started = await paytrService.startIframePayment(orderNo, req)
+    return res.json({
+      success: true,
+      data: {
+        iframe_token: started.iframeToken,
+        ...(started.dryRun
+          ? { dryRun: true, orderNo: started.orderNo || orderNo }
+          : {}),
+      },
+    })
   } catch (e) {
     const err = e as Error & { status?: number; publicMessage?: string }
     const code = err.status ?? 500
