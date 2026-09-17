@@ -85,8 +85,10 @@ export async function createBhCentralCheckoutOrder(input: {
     productType: input.productType,
     product_type: input.productType,
     subscriptionPeriod: input.subscriptionPeriod,
-    campaignId: input.renewalToken ? undefined : input.campaignPublicCode || undefined,
-    campaign_id: input.renewalToken ? undefined : input.campaignPublicCode || undefined,
+    // Renewal: BH ignores promo when bar campaign applies; GENERAL promo allowed otherwise.
+    campaignId: input.campaignPublicCode || undefined,
+    campaign_id: input.campaignPublicCode || undefined,
+    campaignPublicCode: input.campaignPublicCode || undefined,
     renewalToken: input.renewalToken || undefined,
     billingInfo: {
       ...input.billingInfo,
