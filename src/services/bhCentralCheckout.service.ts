@@ -188,7 +188,12 @@ export async function createBhCentralCheckoutOrder(input: {
         prep.campaignDiscountRate ?? 0,
         affiliate?.customerDiscountRate ?? 0,
       ),
-      bhPurchaseContext: prep.orderPurpose === 'RENEWAL' ? 'RENEWAL' : 'NEW',
+      bhPurchaseContext:
+        prep.orderPurpose === 'RENEWAL'
+          ? 'RENEWAL'
+          : prep.orderPurpose === 'DEMO_CONVERSION'
+            ? 'DEMO_CONVERSION'
+            : 'NEW',
       bhSaleRef: saleRef,
       bhProductType: String(prep.productType || input.productType),
       bhSubscriptionPeriod:
