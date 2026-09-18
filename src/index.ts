@@ -124,8 +124,9 @@ app.use(
   }),
 )
 
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+/** Page Builder docs (e.g. bhModulePages) exceed default 100kb JSON limit */
+app.use(express.json({ limit: '5mb' }))
+app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 
 app.use(
   '/uploads',
