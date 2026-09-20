@@ -38,3 +38,16 @@ export function filenameFromObjectKey(objectKey: string): string {
 export function getDownloadsBucketName(): string {
   return getR2PrivateBucketName()
 }
+
+/** Yalnız configured downloads public host — her *.r2.dev satış bucket’ı değildir. */
+export function isManagedDownloadsPublicUrl(sourceUrl: string): boolean {
+  const downloadsBase = getR2DownloadsPublicBaseUrl()
+  if (!downloadsBase) return false
+  try {
+    const url = new URL(sourceUrl)
+    const base = new URL(downloadsBase)
+    return url.protocol === 'https:' && url.hostname === base.hostname
+  } catch {
+    return false
+  }
+}

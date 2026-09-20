@@ -8,31 +8,24 @@ import type { Request, Response } from 'express'
 import {
   filenameFromObjectKey,
   getDownloadsBucketName,
+  isManagedDownloadsPublicUrl,
   objectKeyFromDownloadsPublicUrl,
 } from './r2DownloadObjectKey'
-import { getR2DownloadsPublicBaseUrl } from './r2.client'
 import { getR2S3Client, isR2PublicUploadConfigured } from './r2.client'
 import { isCatalogUploadDownloadPath } from './mailDeliveryUrl'
-
-function isR2DownloadsPublicHost(hostname: string): boolean {
-  if (hostname.endsWith('.r2.dev')) return true
-  const base = getR2DownloadsPublicBaseUrl()
-  if (!base) return false
-  try {
-    return new URL(base).hostname === hostname
-  } catch {
-    return false
-  }
-}
+import { isKoopPlusSalesPublicUrl } from './koopplusSalesInstaller'
+import { isNonSalesDeliveryUrl } from './productDeliveryUrl'
+import { getRemoteHttpsDownload, headRemoteHttpsDownload, isAllowlistedRemoteDownloadHost } from './remoteHttpsDownload'
 
 export type ByteRange = { start: number; end: number }
 
 export type ResolvedDownloadSource = {
-  kind: 'local' | 'r2'
+  kind: 'local' | 'r2' | 'remote'
   filename: string
   localUploadPath?: string
   bucket?: string
   objectKey?: string
+  remoteUrl?: string
 }
 
 export type ObjectMeta = { size: number }
@@ -101,6 +94,7 @@ function localUploadAbsolutePath(uploadPath: string): string {
 export function resolveDownloadSourceFromRawUrl(rawUrl: string | null | undefined): ResolvedDownloadSource | null {
   const url = (rawUrl ?? '').trim()
   if (!url || url.startsWith('saas:')) return null
+  if (isNonSalesDeliveryUrl(url)) return null
 
   if (isCatalogUploadDownloadPath(url)) {
     return {
@@ -110,28 +104,55 @@ export function resolveDownloadSourceFromRawUrl(rawUrl: string | null | undefine
     }
   }
 
-  if (/^https?:\/\//i.test(url)) {
-    if (isR2PublicUploadConfigured()) {
-      try {
-        const hostname = new URL(url).hostname
-        if (isR2DownloadsPublicHost(hostname)) {
-          const objectKey = objectKeyFromDownloadsPublicUrl(url)
-          if (objectKey) {
-            return {
-              kind: 'r2',
-              bucket: getDownloadsBucketName(),
-              objectKey,
-              filename: filenameFromUrl(url) || filenameFromObjectKey(objectKey),
-            }
+  if (/^https:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url)
+      // Satış public host asla woontegra-downloads S3 key olarak çözülmez.
+      if (isKoopPlusSalesPublicUrl(url) && isAllowlistedRemoteDownloadHost(parsed.hostname)) {
+        return {
+          kind: 'remote',
+          remoteUrl: url,
+          filename: filenameFromUrl(url),
+        }
+      }
+      if (isManagedDownloadsPublicUrl(url) && isR2PublicUploadConfigured()) {
+        const objectKey = objectKeyFromDownloadsPublicUrl(url)
+        if (objectKey) {
+          return {
+            kind: 'r2',
+            bucket: getDownloadsBucketName(),
+            objectKey,
+            filename: filenameFromUrl(url) || filenameFromObjectKey(objectKey),
           }
         }
-      } catch {
-        /* geçersiz URL */
       }
+      if (isAllowlistedRemoteDownloadHost(parsed.hostname)) {
+        return {
+          kind: 'remote',
+          remoteUrl: url,
+          filename: filenameFromUrl(url),
+        }
+      }
+    } catch {
+      return null
     }
   }
 
   return null
+}
+
+export function classifyDownloadStreamError(error: unknown): 'NOT_FOUND' | 'STORAGE_FAILURE' {
+  if (error && typeof error === 'object') {
+    const row = error as { name?: string; Code?: string; code?: string; message?: string; httpStatus?: number; $metadata?: { httpStatusCode?: number } }
+    const code = String(row.Code ?? row.code ?? row.name ?? '')
+    const status = row.httpStatus ?? row.$metadata?.httpStatusCode
+    if (row.message === 'NOT_FOUND' || code === 'NOT_FOUND' || code === 'NoSuchKey' || code === 'NotFound') {
+      return 'NOT_FOUND'
+    }
+    if (status === 404 || status === 410) return 'NOT_FOUND'
+    if (row.message === 'Dosya boyutu alınamadı') return 'NOT_FOUND'
+  }
+  return 'STORAGE_FAILURE'
 }
 
 export async function headDownloadSource(source: ResolvedDownloadSource): Promise<ObjectMeta> {
@@ -139,6 +160,11 @@ export async function headDownloadSource(source: ResolvedDownloadSource): Promis
     const stat = await fs.stat(localUploadAbsolutePath(source.localUploadPath!))
     if (stat.size <= 0) throw new Error('Dosya boyutu alınamadı')
     return { size: stat.size }
+  }
+
+  if (source.kind === 'remote') {
+    const head = await headRemoteHttpsDownload(source.remoteUrl!)
+    return { size: head.size }
   }
 
   if (!isR2PublicUploadConfigured()) throw new Error('R2 yapılandırması eksik')
@@ -182,6 +208,15 @@ export async function streamDownloadSource(
       range ? { start: range.start, end: range.end } : undefined,
     )
     await pipeline(stream, res)
+    return
+  }
+
+  if (source.kind === 'remote') {
+    const remote = await getRemoteHttpsDownload(
+      source.remoteUrl!,
+      range ? `bytes=${range.start}-${range.end}` : null,
+    )
+    await pipeline(remote.stream, res)
     return
   }
 

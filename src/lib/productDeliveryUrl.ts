@@ -1,3 +1,4 @@
+import { canonicalizeKoopPlusSalesInstallerUrl } from './koopplusSalesInstaller'
 import { isDeliverableDownloadRawUrl } from './mailDeliveryUrl'
 import { parseProductDownloadFiles } from './productDownloadFiles'
 
@@ -49,19 +50,21 @@ export function resolveProductDeliveryRawUrl(product: ProductDeliverySource): st
 
   const config = parseProductDownloadFiles(product.downloadFiles)
   const setup = config.files.find((f) => f.type === 'setup' && f.url.trim())
-  if (setup?.url.trim() && isUsableSalesDeliveryUrl(setup.url)) return setup.url.trim()
+  if (setup?.url.trim() && isUsableSalesDeliveryUrl(setup.url)) {
+    return canonicalizeKoopPlusSalesInstallerUrl(setup.url.trim())
+  }
 
   for (const f of config.files) {
     const u = f.url.trim()
-    if (u && isUsableSalesDeliveryUrl(u)) return u
+    if (u && isUsableSalesDeliveryUrl(u)) return canonicalizeKoopPlusSalesInstallerUrl(u)
   }
 
   if (manual && (!media || manual !== media) && isUsableSalesDeliveryUrl(manual)) {
-    return manual
+    return canonicalizeKoopPlusSalesInstallerUrl(manual)
   }
 
-  if (media && isUsableSalesDeliveryUrl(media)) return media
-  if (manual && isUsableSalesDeliveryUrl(manual)) return manual
+  if (media && isUsableSalesDeliveryUrl(media)) return canonicalizeKoopPlusSalesInstallerUrl(media)
+  if (manual && isUsableSalesDeliveryUrl(manual)) return canonicalizeKoopPlusSalesInstallerUrl(manual)
 
   return ''
 }
@@ -84,5 +87,5 @@ export function resolveOrderItemDeliveryRawUrl(item: OrderItemDeliverySource): s
     const fromProduct = resolveProductDeliveryRawUrl(item.product)
     if (fromProduct.trim()) return fromProduct.trim()
   }
-  return (item.downloadUrl ?? '').trim()
+  return canonicalizeKoopPlusSalesInstallerUrl((item.downloadUrl ?? '').trim())
 }

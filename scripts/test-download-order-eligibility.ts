@@ -79,6 +79,20 @@ function filename(url: string): string {
     },
   })
   assert.equal(filename(resolved), 'KoopPlus-Setup-1.0.0.exe', 'TEST 3 snapshot/delivery selects setup EXE')
+  const liveSales = resolveProductDeliveryRawUrl({
+    downloadUrl: null,
+    downloadMedia: null,
+    downloadFiles: {
+      files: [
+        {
+          type: 'setup',
+          label: 'Kurulum',
+          url: 'https://pub-57d992373eaf4ebd92cd37366668fafd.r2.dev/windows/KoopPlus-Setup-1.0.0.exe',
+        },
+      ],
+    },
+  })
+  assert.equal(filename(liveSales), 'KoopPlus-Setup-1.0.3.exe', 'TEST 3 temporary compat: live sales host remaps 1.0.0 → 1.0.3')
   const snapshot = resolveOrderItemDeliveryRawUrl({
     downloadUrl: null,
     product: {

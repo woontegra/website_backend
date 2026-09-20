@@ -43,8 +43,14 @@ export async function getOrderDownload(req: Request, res: Response) {
       if (msg === 'NOT_FOUND') {
         return res.status(404).json({ success: false, message: 'İndirme dosyası bulunamadı' })
       }
+      console.error('[downloads] order token stream failed', {
+        errorClass: e instanceof Error ? e.name : 'Error',
+        errorCode: msg || 'STORAGE_FAILURE',
+      })
       return res.status(500).json({ success: false, message: 'Dosya indirilemedi. Lütfen tekrar deneyin.' })
     }
-    console.error('[downloads] order token stream failed', { error: e })
+    console.error('[downloads] order token stream failed after headers', {
+      errorClass: e instanceof Error ? e.name : 'Error',
+    })
   }
 }
