@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import type { DesktopLicenseRenewalSession, DesktopLicenseRenewalSessionStatus } from '@prisma/client'
+import { ProductType, type DesktopLicenseRenewalSession, type DesktopLicenseRenewalSessionStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import {
   addDaysFromBase,
@@ -7,9 +7,14 @@ import {
   estimateDesktopRenewalEndDate,
   maskLicenseKey,
 } from '../lib/desktopLicenseExtend'
+import {
+  buildDesktopWebsiteRenewLicensePayload,
+  desktopRenewalPurchasePath,
+  isCentralDesktopLicenseProduct,
+  isDesktopRenewalOpenSuccessful,
+} from '../lib/centralDesktopLicenseProduct'
 import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext'
-import { mkDesktopProductPath } from '../lib/muvekkilKasaDesktopProduct'
-import { PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP } from '../lib/productCode'
+import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 import { requestDesktopRenewalOpen, requestWebsiteRenewLicense } from './woontegraLicenseServer.client'
 
 const TOKEN_TTL_MS = 20 * 60 * 1000
@@ -18,7 +23,7 @@ const PURPOSE = 'DESKTOP_LICENSE_RENEWAL'
 export type DesktopLicenseRenewalPublicView = {
   purchaseContext: typeof DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL
   sessionId: string
-  productCode: typeof PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP
+  productCode: string
   purpose: typeof PURPOSE
   licenseId: string | null
   licenseKeyMasked: string
@@ -93,7 +98,7 @@ function toPublicView(session: DesktopLicenseRenewalSession, licenseKeyMasked: s
   return {
     purchaseContext: DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL,
     sessionId: session.id,
-    productCode: PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP,
+    productCode: session.appCode,
     purpose: PURPOSE,
     licenseId: session.licenseId,
     licenseKeyMasked,
@@ -130,11 +135,31 @@ export async function issueDesktopLicenseRenewalLink(input: {
 }): Promise<{ purchaseUrl: string; expiresAt: string }> {
   const licenseKey = normalizeLicenseKey(input.licenseKey)
   const deviceHash = input.deviceHash.trim()
-  const appCode = input.appCode.trim().toUpperCase()
+  const appCode = normalizeLicenseAppCodeInput(input.appCode)
   if (!licenseKey || !deviceHash || !appCode) {
     throw new Error('LICENSE_RENEWAL_INVALID')
   }
-  if (appCode !== PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP) {
+  if (!isValidLicenseAppCodeFormat(appCode)) {
+    throw new Error('LICENSE_RENEWAL_UNSUPPORTED_PRODUCT')
+  }
+
+  const catalogProduct = await prisma.product.findFirst({
+    where: {
+      licenseAppCode: appCode,
+      licenseRequired: true,
+      productType: ProductType.DOWNLOAD,
+      isActive: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      slug: true,
+      licenseAppCode: true,
+      licenseRequired: true,
+      productType: true,
+      isActive: true,
+    },
+  })
+  if (!catalogProduct || !isCentralDesktopLicenseProduct(catalogProduct)) {
     throw new Error('LICENSE_RENEWAL_UNSUPPORTED_PRODUCT')
   }
 
@@ -144,6 +169,9 @@ export async function issueDesktopLicenseRenewalLink(input: {
   }
 
   const open = await requestDesktopRenewalOpen({ licenseKey, deviceHash, appCode })
+  if (!isDesktopRenewalOpenSuccessful(open)) {
+    throw new Error('LICENSE_RENEWAL_NOT_ELIGIBLE')
+  }
   const licenseExpiresAt = validation.expiresAt ? new Date(validation.expiresAt) : open.expiresAt ? new Date(open.expiresAt) : null
 
   const plainToken = randomBytes(32).toString('base64url')
@@ -165,7 +193,7 @@ export async function issueDesktopLicenseRenewalLink(input: {
     },
   })
 
-  const purchaseUrl = `${woontegraWebsiteBaseUrl()}${mkDesktopProductPath()}?renewalToken=${encodeURIComponent(plainToken)}`
+  const purchaseUrl = `${woontegraWebsiteBaseUrl()}${desktopRenewalPurchasePath(catalogProduct.slug)}?renewalToken=${encodeURIComponent(plainToken)}`
   return { purchaseUrl, expiresAt: expiresAt.toISOString() }
 }
 
@@ -252,13 +280,15 @@ export async function fulfillDesktopLicenseRenewal(input: {
   if (session.status !== 'BOUND') throw new Error('DESKTOP_RENEWAL_SESSION_NOT_BOUND')
 
   const renewalDays = Math.max(1, input.renewalDays)
-  const result = await requestWebsiteRenewLicense({
-    orderNo: input.externalOrderId,
-    licenseKey: session.targetLicenseKey,
-    licenseId: session.licenseId,
-    appCode: session.appCode,
-    licenseDays: renewalDays,
-  })
+  const result = await requestWebsiteRenewLicense(
+    buildDesktopWebsiteRenewLicensePayload({
+      orderNo: input.externalOrderId,
+      licenseKey: session.targetLicenseKey,
+      licenseId: session.licenseId,
+      appCode: session.appCode,
+      licenseDays: renewalDays,
+    }),
+  )
   if (!result.success) {
     throw new Error(result.error ?? 'DESKTOP_RENEWAL_FAILED')
   }

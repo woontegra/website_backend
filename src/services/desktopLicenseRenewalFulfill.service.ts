@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL, isDesktopLicenseRenewalOrderContext } from '../lib/desktopLicensePurchaseContext'
-import { isMuvekkilKasaDesktopCentralLicenseProduct } from '../lib/muvekkilKasaDesktopProduct'
+import { isCentralDesktopLicenseProduct } from '../lib/centralDesktopLicenseProduct'
 import { fulfillDesktopLicenseRenewal } from './desktopLicenseRenewal.service'
 import { isLicenseServerConfigured } from './woontegraLicenseServer.client'
 
@@ -31,7 +31,7 @@ function isDesktopRenewalOrderItem(item: {
   product?: { slug: string | null; licenseAppCode: string | null; licenseRequired: boolean | null; productType: string } | null
   productSlug: string | null
 }): boolean {
-  return isMuvekkilKasaDesktopCentralLicenseProduct({
+  return isCentralDesktopLicenseProduct({
     slug: item.productSlug ?? item.product?.slug,
     licenseAppCode: item.product?.licenseAppCode,
     licenseRequired: item.product?.licenseRequired,

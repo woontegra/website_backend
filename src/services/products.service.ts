@@ -13,7 +13,11 @@ import {
   type PublicProductDownloadFile,
 } from '../lib/productDownloadFiles'
 import { prisma } from '../lib/prisma'
-import { assertPublishImageRequired, hasImageUrl } from '../lib/publishImageValidation'
+import {
+  assertPublishImageRequired,
+  hasImageUrl,
+  resolveNextCoverImageUrl,
+} from '../lib/publishImageValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { slugifyName } from '../utils/slugify'
@@ -597,19 +601,17 @@ function assertActiveDownloadDeliverable(row: {
 }): void {
   if (row.productType !== ProductType.DOWNLOAD) return
   if (!row.isActive || !row.purchaseEnabled) return
-  const u = (row.downloadUrl?.trim() || row.downloadMedia?.url?.trim() || '') || ''
-  const hasFiles = hasValidDownloadFiles(row.downloadFiles)
-  if (!u && !hasFiles) {
+  const resolved = resolveProductDeliveryRawUrl({
+    downloadUrl: row.downloadUrl,
+    downloadMedia: row.downloadMedia,
+    downloadFiles: row.downloadFiles,
+  })
+  if (!resolved) {
     throw new Error(
       'Dijital ürünlerde indirme/teslimat bağlantısı zorunludur. Medyadan dosya seçin, R2 indirme dosyası ekleyin veya bir indirme adresi girin.',
     )
   }
-  if (u && !isDeliverableDownloadRawUrl(u)) {
-    throw new Error(
-      'İndirme adresi geçersiz. Medyadan ZIP/exe seçin, /uploads/... yolu kullanın veya https:// ile tam bir URL girin.',
-    )
-  }
-  if (hasFiles) {
+  if (hasValidDownloadFiles(row.downloadFiles)) {
     const config = parseProductDownloadFiles(row.downloadFiles)
     for (const f of config.files) {
       if (f.url.trim() && !isDeliverableDownloadRawUrl(f.url)) {
@@ -639,7 +641,8 @@ async function resolveMediaIds(data: {
     const v = data.coverImageMediaId
     if (v === null || v === '') {
       out.coverImageMediaId = null
-      out.coverImage = null
+      // downloadUrl ile aynı: mediaId temizlenirken coverImage URL aynı
+      // request'te gelebilir; caller karar verir, burada URL'yi silmeyiz.
     } else {
       const m = await prisma.catalogMedia.findUnique({ where: { id: v } })
       if (!m) throw new Error('Kapak medyası bulunamadı')
@@ -780,12 +783,15 @@ export const productsService = {
     const mediaPatch =
       Object.keys(mediaPayload).length > 0 ? await resolveMediaIds(mediaPayload) : {}
 
-    let coverImage: string | null = null
-    if (mediaPatch.coverImage !== undefined) coverImage = mediaPatch.coverImage
-    else if (data.coverImage !== undefined) {
-      const c = sanitizeImageUrl(data.coverImage ?? '')
-      coverImage = c && c !== '' ? c : null
-    }
+    const coverImage = resolveNextCoverImageUrl({
+      currentCoverUrl: null,
+      coverImageMediaId: Object.prototype.hasOwnProperty.call(data, 'coverImageMediaId')
+        ? data.coverImageMediaId ?? null
+        : undefined,
+      mediaResolvedUrl: mediaPatch.coverImage,
+      coverImage:
+        data.coverImage !== undefined ? sanitizeImageUrl(data.coverImage ?? '') || null : undefined,
+    })
 
     let downloadUrl: string | null = null
     if (data.downloadUrl !== undefined) downloadUrl = normalizeUrl(data.downloadUrl)
@@ -939,35 +945,29 @@ export const productsService = {
     if (Object.prototype.hasOwnProperty.call(data, 'downloadMediaId')) {
       mediaPayload.downloadMediaId = data.downloadMediaId ?? null
     }
-    let resolvedCoverFromMedia: string | null | undefined
+    const mediaPatch =
+      Object.keys(mediaPayload).length > 0 ? await resolveMediaIds(mediaPayload) : {}
+    if (mediaPatch.coverImageMediaId !== undefined) {
+      patch.coverImageMedia =
+        mediaPatch.coverImageMediaId === null
+          ? { disconnect: true }
+          : { connect: { id: mediaPatch.coverImageMediaId } }
+    }
+    if (mediaPatch.downloadMediaId !== undefined) {
+      patch.downloadMedia =
+        mediaPatch.downloadMediaId === null
+          ? { disconnect: true }
+          : { connect: { id: mediaPatch.downloadMediaId } }
+    }
     if (Object.keys(mediaPayload).length > 0) {
-      const mediaPatch = await resolveMediaIds(mediaPayload)
-      resolvedCoverFromMedia = mediaPatch.coverImage
-      if (mediaPatch.coverImageMediaId !== undefined) {
-        patch.coverImageMedia =
-          mediaPatch.coverImageMediaId === null
-            ? { disconnect: true }
-            : { connect: { id: mediaPatch.coverImageMediaId } }
-      }
-      if (mediaPatch.coverImage !== undefined) patch.coverImage = mediaPatch.coverImage
-      if (mediaPatch.downloadMediaId !== undefined) {
-        patch.downloadMedia =
-          mediaPatch.downloadMediaId === null
-            ? { disconnect: true }
-            : { connect: { id: mediaPatch.downloadMediaId } }
-      }
       // Alternatif indirme URL (R2 vb.) medya seçimi olsa bile önceliklidir.
       if (data.downloadUrl !== undefined) {
         patch.downloadUrl = normalizeUrl(data.downloadUrl)
       } else if (mediaPatch.downloadUrl !== undefined) {
         patch.downloadUrl = mediaPatch.downloadUrl
       }
-    } else {
-      if (data.coverImage !== undefined) {
-        const c = sanitizeImageUrl(data.coverImage ?? '')
-        patch.coverImage = c && c !== '' ? c : null
-      }
-      if (data.downloadUrl !== undefined) patch.downloadUrl = normalizeUrl(data.downloadUrl)
+    } else if (data.downloadUrl !== undefined) {
+      patch.downloadUrl = normalizeUrl(data.downloadUrl)
     }
 
     if (Object.prototype.hasOwnProperty.call(data, 'downloadFiles')) {
@@ -985,14 +985,22 @@ export const productsService = {
         coverImageMedia: { select: { url: true } },
       },
     })
+    const nextCover = resolveNextCoverImageUrl({
+      currentCoverUrl: effectiveProductCoverImage(
+        currentForCover as Pick<ProductRow, 'coverImage' | 'coverImageMedia'>,
+      ),
+      coverImageMediaId: Object.prototype.hasOwnProperty.call(data, 'coverImageMediaId')
+        ? data.coverImageMediaId ?? null
+        : undefined,
+      mediaResolvedUrl: mediaPatch.coverImage,
+      coverImage:
+        data.coverImage !== undefined ? sanitizeImageUrl(data.coverImage ?? '') || null : undefined,
+    })
+    if (data.coverImageMediaId !== undefined || data.coverImage !== undefined) {
+      patch.coverImage = nextCover
+    }
     const nextActive = data.isActive !== undefined ? data.isActive : currentForCover.isActive
     if (nextActive) {
-      let nextCover = effectiveProductCoverImage(currentForCover as Pick<ProductRow, 'coverImage' | 'coverImageMedia'>)
-      if (resolvedCoverFromMedia !== undefined) nextCover = resolvedCoverFromMedia ?? null
-      else if (data.coverImage !== undefined) {
-        const c = sanitizeImageUrl(data.coverImage ?? '')
-        nextCover = c && c !== '' ? c : null
-      }
       assertPublishImageRequired(hasImageUrl(nextCover))
     }
 
@@ -1060,6 +1068,7 @@ export const productsService = {
         coverImageMedia: { select: { url: true } },
         downloadUrl: true,
         downloadMedia: { select: { url: true } },
+        downloadFiles: true,
       },
     })
 
@@ -1089,6 +1098,7 @@ export const productsService = {
         purchaseEnabled: p.purchaseEnabled,
         downloadUrl: p.downloadUrl,
         downloadMedia: p.downloadMedia,
+        downloadFiles: p.downloadFiles,
       }
       if (getProductOrderDenialReason(row)) continue
 
@@ -1123,7 +1133,13 @@ export const productsService = {
         coverImage: p.coverImageMedia?.url?.trim() || p.coverImage?.trim() || null,
         hasDownload:
           p.productType === ProductType.DOWNLOAD
-            ? !!(p.downloadUrl?.trim() || p.downloadMedia?.url?.trim())
+            ? Boolean(
+                resolveProductDeliveryRawUrl({
+                  downloadUrl: p.downloadUrl,
+                  downloadMedia: p.downloadMedia,
+                  downloadFiles: p.downloadFiles,
+                }),
+              )
             : true,
         licenseRequired: p.licenseRequired,
         singleQuantity: isSingleLicenseQuantityProduct({

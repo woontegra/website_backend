@@ -1,5 +1,8 @@
 import { ProductType } from '@prisma/client'
-import { isDeliverableDownloadRawUrl } from './mailDeliveryUrl'
+import {
+  productHasAnyDownloadSource,
+  resolveProductDeliveryRawUrl,
+} from './productDeliveryUrl'
 
 /** SaaS dışında tek lisans/adet: masaüstü, merkezi lisans, hizmet. */
 export function isSingleLicenseQuantityProduct(p: {
@@ -36,6 +39,7 @@ export type ProductOrderCheckRow = {
   purchaseEnabled: boolean
   downloadUrl: string | null
   downloadMedia: { url: string } | null
+  downloadFiles?: unknown
 }
 
 export type ProductOrderDenial =
@@ -49,10 +53,14 @@ export type ProductOrderDenial =
 export function getProductOrderDenialReason(p: ProductOrderCheckRow): ProductOrderDenial | null {
   if (!p.isActive) return 'inactive'
   if (p.productType === ProductType.DOWNLOAD) {
-    const u = (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '') || ''
-    if (!u) return 'download_missing'
-    if (!isDeliverableDownloadRawUrl(u)) return 'download_unresolvable'
-    return null
+    const resolved = resolveProductDeliveryRawUrl({
+      downloadUrl: p.downloadUrl,
+      downloadMedia: p.downloadMedia,
+      downloadFiles: p.downloadFiles,
+    })
+    if (resolved) return null
+    if (productHasAnyDownloadSource(p)) return 'download_unresolvable'
+    return 'download_missing'
   }
   if (p.productType === ProductType.SAAS || p.productType === ProductType.SERVICE) {
     if (p.purchaseEnabled === false) return 'purchase_disabled'

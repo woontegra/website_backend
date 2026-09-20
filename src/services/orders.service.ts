@@ -12,7 +12,7 @@ import {
 } from '../lib/orderLegalRequirements'
 import { prisma } from '../lib/prisma'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
-import { isMuvekkilKasaDesktopCentralLicenseProduct } from '../lib/muvekkilKasaDesktopProduct'
+import { isCentralDesktopLicenseProduct } from '../lib/centralDesktopLicenseProduct'
 import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext'
 import {
   bindDesktopLicenseRenewalToken,
@@ -37,6 +37,7 @@ import {
   type SaasDeliveryStatusView,
 } from '../lib/mkSaasDeliveryHelpers'
 import { denialReasonLabel, getProductOrderDenialReason, assertSingleLicenseQuantityOrThrow, type ProductOrderCheckRow, type ProductOrderDenial } from '../lib/productOrderValidation'
+import { resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
@@ -141,8 +142,9 @@ async function allocateOrderNo(): Promise<string> {
 function resolveDownloadUrl(p: {
   downloadUrl: string | null
   downloadMedia: { url: string } | null
+  downloadFiles?: unknown
 }): string | null {
-  const u = (p.downloadUrl?.trim() || p.downloadMedia?.url?.trim() || '') || ''
+  const u = resolveProductDeliveryRawUrl(p)
   return u === '' ? null : u
 }
 
@@ -532,8 +534,8 @@ export const ordersService = {
     const hasMuvekkilKasaSaas = products.some((p) =>
       isMuvekkilKasaSaasProduct({ slug: p.slug, licenseAppCode: p.licenseAppCode }),
     )
-    const hasMuvekkilKasaDesktop = products.some((p) =>
-      isMuvekkilKasaDesktopCentralLicenseProduct({
+    const hasDesktopLicenseRenewalProduct = products.some((p) =>
+      isCentralDesktopLicenseProduct({
         slug: p.slug,
         licenseAppCode: p.licenseAppCode,
         licenseRequired: p.licenseRequired,
@@ -569,9 +571,9 @@ export const ordersService = {
           throw err
         }
         licensePurchaseView = resolveResult.data
-      } else if (hasMuvekkilKasaDesktop) {
+      } else if (hasDesktopLicenseRenewalProduct) {
         const allDesktop = products.every((p) =>
-          isMuvekkilKasaDesktopCentralLicenseProduct({
+          isCentralDesktopLicenseProduct({
             slug: p.slug,
             licenseAppCode: p.licenseAppCode,
             licenseRequired: p.licenseRequired,
@@ -581,7 +583,7 @@ export const ordersService = {
         if (!allDesktop || canonicalIds.length !== 1) {
           const err = new Error('DESKTOP_LICENSE_RENEWAL_INVALID') as Error & { status: number; publicMessage?: string }
           err.status = 400
-          err.publicMessage = 'Lisans yenileme yalnızca Müvekkil Kasa Defteri masaüstü ürünü ile kullanılabilir.'
+          err.publicMessage = 'Lisans yenileme yalnızca merkezi masaüstü lisans ürünü ile kullanılabilir.'
           throw err
         }
         try {
@@ -590,6 +592,13 @@ export const ordersService = {
           const err = new Error('DESKTOP_LICENSE_RENEWAL_INVALID') as Error & { status: number; publicMessage?: string }
           err.status = 410
           err.publicMessage = 'Yenileme bağlantısı geçersiz veya süresi dolmuş.'
+          throw err
+        }
+        const cartAppCode = products[0]?.licenseAppCode?.trim().toUpperCase() || ''
+        if (!cartAppCode || cartAppCode !== desktopLicenseRenewalView.productCode) {
+          const err = new Error('DESKTOP_LICENSE_RENEWAL_INVALID') as Error & { status: number; publicMessage?: string }
+          err.status = 400
+          err.publicMessage = 'Yenileme bağlantısı sepetteki masaüstü ürün ile eşleşmiyor.'
           throw err
         }
       } else {
@@ -628,6 +637,7 @@ export const ordersService = {
         purchaseEnabled: p.purchaseEnabled,
         downloadUrl: p.downloadUrl,
         downloadMedia: p.downloadMedia,
+        downloadFiles: p.downloadFiles,
       }
       const d = getProductOrderDenialReason(row)
       if (d) {

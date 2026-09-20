@@ -18,6 +18,8 @@
     "inspect:order-license": "tsx scripts/inspect-order-license.ts",
     "retry:order-fulfillment": "tsx scripts/retry-order-fulfillment.ts",
     "test:desktop-license-renewal": "tsx scripts/desktop-license-renewal-quality.ts",
+    "test:central-desktop-license": "tsx scripts/test-central-desktop-license.ts",
+    "test:download-order-eligibility": "tsx scripts/test-download-order-eligibility.ts",
     "cleanup:saas-membership": "tsx scripts/cleanup-saas-membership.ts",
     "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
     "postinstall": "node scripts/prisma-generate.cjs"

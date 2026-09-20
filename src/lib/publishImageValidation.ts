@@ -16,6 +16,30 @@ export function assertPublishImageRequired(condition: boolean, message = PUBLISH
   if (!condition) throw new PublishImageValidationError(message)
 }
 
+/**
+ * Yayın kapağı: medya seçimi varsa onun URL’si, yoksa coverImage URL,
+ * ikisi de gönderilmediyse mevcut kayıt. MediaId bilinçli null iken
+ * mevcut medya URL’si korunmaz; yalnızca gelen coverImage URL geçer.
+ */
+export function resolveNextCoverImageUrl(input: {
+  currentCoverUrl?: string | null
+  coverImageMediaId?: string | null
+  mediaResolvedUrl?: string | null
+  coverImage?: string | null
+}): string | null {
+  const mediaId = input.coverImageMediaId
+  if (typeof mediaId === 'string' && mediaId.trim()) {
+    return input.mediaResolvedUrl?.trim() || null
+  }
+  if (mediaId === null || (typeof mediaId === 'string' && !mediaId.trim())) {
+    return input.coverImage?.trim() || null
+  }
+  if (input.coverImage !== undefined && input.coverImage !== null) {
+    return input.coverImage.trim() || null
+  }
+  return input.currentCoverUrl?.trim() || null
+}
+
 /** pageContent JSON — yayında hero görseli zorunlu sayfalar */
 export function validatePageContentPublishImages(pageKey: string, content: unknown): void {
   if (!content || typeof content !== 'object') return
