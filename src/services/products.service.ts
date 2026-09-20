@@ -20,6 +20,7 @@ import {
 } from '../lib/publishImageValidation'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
+import { normalizeProductGalleryMediaIds, publicProductScreenshotAlt } from '../lib/productGallery'
 import { slugifyName } from '../utils/slugify'
 import { assertLicensedProductSaleReady } from './licensePrograms.service'
 import { normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
@@ -102,6 +103,7 @@ export type PublicProductGalleryImage = {
   id: string
   url: string
   sortOrder: number
+  alt?: string
 }
 
 export type PublicProductCampaignInfo = {
@@ -389,13 +391,13 @@ async function mapPublicDetailWithCampaigns(p: ProductRow): Promise<PublicProduc
 }
 
 function mapPublicDetail(p: ProductRow): PublicProductDetail {
-  const gallery: PublicProductGalleryImage[] = (p.galleryImages ?? [])
-    .filter((g) => g.media?.fileType === 'IMAGE')
-    .map((g) => ({
-      id: g.id,
-      url: g.media.url,
-      sortOrder: g.sortOrder,
-    }))
+  const imageGallery = (p.galleryImages ?? []).filter((g) => g.media?.fileType === 'IMAGE')
+  const gallery: PublicProductGalleryImage[] = imageGallery.map((g, index) => ({
+    id: g.id,
+    url: g.media.url,
+    sortOrder: g.sortOrder,
+    alt: publicProductScreenshotAlt(p.name, index, imageGallery.length),
+  }))
   const downloadConfig = parseProductDownloadFiles(p.downloadFiles)
   const freeDownload = isPublicFreeDownloadProduct(p)
   const publicFiles =
@@ -559,7 +561,7 @@ function resolveNextLicensedSaleFields(
 }
 
 async function syncProductGallery(productId: string, mediaIds: string[]): Promise<void> {
-  const ordered = [...new Set(mediaIds.map((id) => id.trim()).filter(Boolean))]
+  const ordered = normalizeProductGalleryMediaIds(mediaIds)
   await prisma.$transaction(async (tx) => {
     await tx.productGalleryImage.deleteMany({ where: { productId } })
     if (ordered.length === 0) return
