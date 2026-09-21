@@ -12,6 +12,7 @@ import {
   type ProductDownloadFilesConfig,
   type PublicProductDownloadFile,
 } from '../lib/productDownloadFiles'
+import { publicMuvekkilKasaDesktopInstallerFiles } from '../lib/muvekkilKasaDesktopProduct'
 import { prisma } from '../lib/prisma'
 import {
   assertPublishImageRequired,
@@ -146,7 +147,10 @@ export type PublicProductDetail = PublicProductListItem & {
   licenseMaxDevices: number | null
   /** İndirme URL’si public yanıtta yer almaz; yalnızca tanımlı olup olmadığı */
   hasDownload: boolean
-  /** Ücretsiz araçlarda public R2 indirme dosyaları */
+  /**
+   * Ücretsiz araçlarda `/api/downloads/free/...` proxy path.
+   * Müvekkil Kasa Desktop’ta admin Kurulum sürümü public R2 URL’si (auto-update feed değil).
+   */
   publicDownloadFiles?: PublicProductDownloadFile[]
 }
 
@@ -403,7 +407,11 @@ function mapPublicDetail(p: ProductRow): PublicProductDetail {
   const publicFiles =
     freeDownload && downloadConfig.publicFreeDownload !== false
       ? sanitizePublicDownloadFiles(p.slug, downloadConfig.files)
-      : []
+      : publicMuvekkilKasaDesktopInstallerFiles({
+          slug: p.slug,
+          licenseAppCode: p.licenseAppCode,
+          downloadFiles: p.downloadFiles,
+        })
   const singleUrl = effectiveDownloadUrlForProduct(p)
   return {
     ...mapPublicList(p),
@@ -439,7 +447,10 @@ const productInclude = {
   galleryImages: galleryArgs,
 } as const
 
-/** Public API: indirme alanları DB’den okunmaz (yanlışlıkla JSON’a sızmaz). */
+/**
+ * Public API ham downloadUrl/downloadFiles JSON’a yazılmaz.
+ * downloadFiles yalnızca ücretsiz araç proxy’si ve MK Desktop public installer için okunur.
+ */
 const productPublicSelect = {
   id: true,
   name: true,
@@ -454,6 +465,7 @@ const productPublicSelect = {
   purchaseEnabled: true,
   licenseMonths: true,
   licenseRequired: true,
+  licenseAppCode: true,
   licenseDays: true,
   licenseMaxDevices: true,
   downloadUrl: true,
