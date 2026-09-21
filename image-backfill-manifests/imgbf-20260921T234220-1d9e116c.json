@@ -1,0 +1,1634 @@
+{
+  "runId": "imgbf-20260921T234220-1d9e116c",
+  "timestamp": "2026-09-21T23:42:20.964Z",
+  "mode": "apply",
+  "priorities": [
+    "P0",
+    "P1"
+  ],
+  "entries": [
+    {
+      "sourceType": "frontend-static",
+      "priority": "P1",
+      "oldUrl": "/images/products/koopplus-icon.png",
+      "newCanonicalUrl": "/images/products/koopplus-icon.optavif-w512.webp",
+      "usages": [
+        {
+          "page": "/yazilimlar/koopplus",
+          "field": "coverImage",
+          "component": "ProductCard"
+        },
+        {
+          "page": "/yazilimlar/koopplus",
+          "field": "coverImage",
+          "component": "ProductDetail"
+        },
+        {
+          "page": "productPages",
+          "field": "__productDetail.coverImage",
+          "component": "PageContent"
+        },
+        {
+          "page": "frontend-static",
+          "field": "/images/products/koopplus-icon.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/products/koopplus-icon.optavif-w480.webp",
+        "/images/products/koopplus-icon.optavif-w512.webp",
+        "/images/products/koopplus-icon.optavif-w480.avif",
+        "/images/products/koopplus-icon.optavif-w512.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:42:23.301Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P1",
+      "oldUrl": "/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w1083.webp",
+      "usages": [
+        {
+          "page": "/yazilimlar/muvekkil-kasa-defteri-yazilimi",
+          "field": "coverImage",
+          "component": "ProductCard"
+        },
+        {
+          "page": "/yazilimlar/muvekkil-kasa-defteri-yazilimi",
+          "field": "coverImage",
+          "component": "ProductDetail"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-yazilimi.blocks[0].settings.gallery[0].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w1083.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/46169725-66de-4edd-8e73-815b4d2da412.optavif-w1083.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "product:muvekkil-kasa-defteri-yazilimi",
+        "catalogMedia:46169725-66de-4edd-8e73-815b4d2da412.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:42:42.953Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P1",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w1920.webp",
+      "usages": [
+        {
+          "page": "/yazilimlar/muvekkil-kasa-defteri-yazilimi",
+          "field": "galleryImages[0].url",
+          "component": "ProductDetail"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-yazilimi.blocks[0].settings.gallery[1].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w1920.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/muvekkil-kasa-2-1782588795340-63f77b2053.optavif-w1920.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-kasa-2-1782588795340-63f77b2053.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:43:08.310Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P1",
+      "oldUrl": "/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w1920.webp",
+      "usages": [
+        {
+          "page": "/yazilimlar/muvekkil-kasa-defteri-web-tabanli",
+          "field": "coverImage",
+          "component": "ProductCard"
+        },
+        {
+          "page": "/yazilimlar/muvekkil-kasa-defteri-web-tabanli",
+          "field": "coverImage",
+          "component": "ProductDetail"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w1920.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/uploads/catalog/muvekkil-saas-1782255175770-9e841ca81e.optavif-w1920.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "product:muvekkil-kasa-defteri-web-tabanli",
+        "catalogMedia:muvekkil-saas-1782255175770-9e841ca81e.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:43:21.071Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P1",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w800.jpg",
+      "usages": [
+        {
+          "page": "/yazilimlar/sifre-kasasi",
+          "field": "coverImage",
+          "component": "ProductCard"
+        },
+        {
+          "page": "/yazilimlar/sifre-kasasi",
+          "field": "coverImage",
+          "component": "ProductDetail"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.sifre-kasasi.blocks[0].settings.gallery[0].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w800.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w800.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/sifrekasasi-2-1783024495387-5673ba9631.optavif-w800.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "product:sifre-kasasi",
+        "catalogMedia:sifrekasasi-2-1783024495387-5673ba9631.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:43:28.424Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/hero-dashboard.jpg",
+      "newCanonicalUrl": "/images/hero-dashboard.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "sections[0].data.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "frontend-static",
+          "field": "/images/hero-dashboard.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/hero-dashboard.optavif-w480.webp",
+        "/images/hero-dashboard.optavif-w960.webp",
+        "/images/hero-dashboard.optavif-w1440.webp",
+        "/images/hero-dashboard.optavif-w1536.jpg",
+        "/images/hero-dashboard.optavif-w1536.webp",
+        "/images/hero-dashboard.optavif-w480.avif",
+        "/images/hero-dashboard.optavif-w960.avif",
+        "/images/hero-dashboard.optavif-w1440.avif",
+        "/images/hero-dashboard.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:43:36.274Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.jpg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "/",
+          "field": "blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard-1782595632631-85de13b18c.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home",
+        "catalogMedia:hero-dashboard-1782595632631-85de13b18c.jpg"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:43:52.583Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.jpeg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1920.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "blocks[0].settings.slides[0].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1920.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1920.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-web-jpg-1787414071189-79963f1879.optavif-w1920.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home",
+        "catalogMedia:woontegra-slider-1-web-jpg-1787414071189-79963f1879.jpeg"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:44:03.911Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.jpeg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w941.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "blocks[0].settings.slides[0].mobileImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w941.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w941.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.optavif-w941.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home",
+        "catalogMedia:woontegra-slider-1-mobil-jpg-1787414087442-13a511870b.jpeg"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:44:13.704Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1920.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "blocks[0].settings.slides[1].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1920.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1920.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegrahero2-1782770837152-1a9fb18627.optavif-w1920.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home",
+        "catalogMedia:woontegrahero2-1782770837152-1a9fb18627.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:44:26.753Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w941.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "blocks[0].settings.slides[1].mobileImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w941.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w941.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.optavif-w941.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home",
+        "catalogMedia:chatgpt-image-30-haz-2026-01-17-34-1782771466442-f7d01f80be.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:44:37.962Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/catalog/general/2026/06/hero-dashboard.jpg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "/",
+          "field": "blocks[0].settings.mobileImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/hero-dashboard.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:home"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:44:53.071Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w800.jpg",
+      "usages": [
+        {
+          "page": "about",
+          "field": "hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "about",
+          "field": "blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        },
+        {
+          "page": "about",
+          "field": "blocks[0].settings.mobileImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w800.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w800.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hakkimizda-1783024774016-5cc8258041.optavif-w800.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:about",
+        "catalogMedia:hakkimizda-1783024774016-5cc8258041.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:45:00.763Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1448.jpg",
+      "usages": [
+        {
+          "page": "contact",
+          "field": "heroImage",
+          "component": "PageContent"
+        },
+        {
+          "page": "contact",
+          "field": "blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1448.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1448.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/woontegra-iletisim-1782843089397-b4b47a42b0.optavif-w1448.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:contact",
+        "catalogMedia:woontegra-iletisim-1782843089397-b4b47a42b0.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:45:15.980Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w800.jpg",
+      "usages": [
+        {
+          "page": "servicesPage",
+          "field": "blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicesPage",
+          "field": "heroImage",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w800.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w800.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/hizmetler-1783024933419-16fffd4659.optavif-w800.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicesPage",
+        "catalogMedia:hizmetler-1783024933419-16fffd4659.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:45:23.547Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w1254.jpg",
+      "usages": [
+        {
+          "page": "solutionsPage",
+          "field": "heroImage",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w1254.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w1254.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/catalog/general/2026/06/cozumler-1782425561826-9c6497854e.optavif-w1254.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:solutionsPage",
+        "catalogMedia:cozumler-1782425561826-9c6497854e.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:45:41.710Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P1",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w1200.webp",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.bilirkisi-hesap.blocks[0].settings.gallery[0].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w1200.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r1-1788955631463-0d7afcbbc1.optavif-w1200.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:r1-1788955631463-0d7afcbbc1.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:45:54.547Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P1",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w1200.webp",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.bilirkisi-hesap.blocks[0].settings.gallery[1].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w1200.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r2-1788955649997-c598a6f3cd.optavif-w1200.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:r2-1788955649997-c598a6f3cd.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:46:06.967Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P1",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w1200.webp",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.bilirkisi-hesap.blocks[0].settings.gallery[2].url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w1200.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/r3-1788955662629-f9ded9934d.optavif-w1200.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:r3-1788955662629-f9ded9934d.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:46:20.307Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w1330.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[0].settings.slides[0].desktopImage.url",
+          "component": "PageContent"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri.blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri.blocks[1].settings.compareDesktop.imageUrl",
+          "component": "PageContent"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri.blocks[1].settings.compareSaas.imageUrl",
+          "component": "PageContent"
+        },
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w1330.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w1330.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-0-1786734644603-4494ea62e3.optavif-w1330.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-0-1786734644603-4494ea62e3.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:46:31.058Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w1330.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[0].settings.slides[1].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w1330.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w1330.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-1-1786733484425-3ee3bb752f.optavif-w1330.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-1-1786733484425-3ee3bb752f.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:46:41.543Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w1330.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[0].settings.slides[2].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w1330.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w1330.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-2-1786734176407-d0e82f2805.optavif-w1330.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-2-1786734176407-d0e82f2805.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:46:55.689Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w1330.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[0].settings.slides[3].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w1330.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w1330.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-4-1786734690502-ec5e170914.optavif-w1330.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-4-1786734690502-ec5e170914.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:47:11.846Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w1330.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[0].settings.slides[4].desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w1330.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w1330.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/muvekkil-5-1786734699986-06b2684ede.optavif-w1330.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:muvekkil-5-1786734699986-06b2684ede.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:47:30.440Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P1",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w1080.webp",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.muvekkil-kasa-defteri-web-tabanli.blocks[7].settings.androidSteps[1].image.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w1080.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/builder/whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.optavif-w1080.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:whatsapp-business-resmi-magazadan-yukleme-1786732743392-20692dd0c5.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:47:53.503Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w1200.jpg",
+      "usages": [
+        {
+          "page": "productPages",
+          "field": "pages.koopplus.blocks[0].settings.content.hero.imageUrl",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w1200.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w1200.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/products/koopplus-1-1789933188032-348bd73388.optavif-w1200.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:productPages",
+        "catalogMedia:koopplus-1-1789933188032-348bd73388.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:48:03.978Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/yazilim-gelistirme/hero.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "yazilim-gelistirme.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/yazilim-gelistirme/hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:48:21.184Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/web-tasarim/hero.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "web-tasarim.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.web-tasarim.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/web-tasarim/hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:48:38.582Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/e-ticaret/hero.jpeg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1920.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "e-ticaret.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.e-ticaret.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1920.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1920.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/e-ticaret/hero.optavif-w1920.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:48:57.670Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/saas/hero.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w1189.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "saas.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w1189.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w1189.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/saas/hero.optavif-w1189.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:49:05.764Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/marka-patent-vekilligi/hero.jpg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "marka-patent-vekilligi.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.marka-patent-vekilligi.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/marka-patent-vekilligi/hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:49:21.427Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/oyun-gelistirme/hero.jpg",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "oyun-gelistirme.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.oyun-gelistirme.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/oyun-gelistirme/hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:49:36.745Z"
+    },
+    {
+      "sourceType": "r2",
+      "priority": "P0",
+      "oldUrl": "https://pub-2e17f120c9d046379c63e619f169fd4f.r2.dev/services/dijital-danismanlik/hero.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "dijital-danismanlik.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.dijital-danismanlik.hero.image",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1536.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1536.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/backfill/services/dijital-danismanlik/hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:49:54.699Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1448.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "pages.yazilim-gelistirme.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.yazilim-gelistirme.blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w960.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1440.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1448.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1448.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w960.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1440.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/yazilim-gelistirme-1783202243046-3fcda8b136.optavif-w1448.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages",
+        "catalogMedia:yazilim-gelistirme-1783202243046-3fcda8b136.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:50:14.257Z"
+    },
+    {
+      "sourceType": "vercel-blob",
+      "priority": "P0",
+      "oldUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.png",
+      "newCanonicalUrl": "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w800.jpg",
+      "usages": [
+        {
+          "page": "servicePages",
+          "field": "pages.saas.hero.image",
+          "component": "PageContent"
+        },
+        {
+          "page": "servicePages",
+          "field": "pages.saas.blocks[0].settings.desktopImage.url",
+          "component": "PageContent"
+        }
+      ],
+      "variantUrls": [
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w480.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w800.jpg",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w800.webp",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w480.avif",
+        "https://fm1lntc3pwasdljl.public.blob.vercel-storage.com/website-media/hero/saas-urun-gelistirme-1783025739127-176a7355fe.optavif-w800.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": true,
+      "cmsLocations": [
+        "pageContent:servicePages",
+        "catalogMedia:saas-urun-gelistirme-1783025739127-176a7355fe.png"
+      ],
+      "status": "success",
+      "timestamp": "2026-09-21T23:50:22.265Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/about-hero.png",
+      "newCanonicalUrl": "/images/about-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/about-hero.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/about-hero.optavif-w480.webp",
+        "/images/about-hero.optavif-w960.webp",
+        "/images/about-hero.optavif-w1440.webp",
+        "/images/about-hero.optavif-w1536.jpg",
+        "/images/about-hero.optavif-w1536.webp",
+        "/images/about-hero.optavif-w480.avif",
+        "/images/about-hero.optavif-w960.avif",
+        "/images/about-hero.optavif-w1440.avif",
+        "/images/about-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:50:32.802Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/danismanlik-hero.png",
+      "newCanonicalUrl": "/images/danismanlik-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/danismanlik-hero.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/danismanlik-hero.optavif-w480.webp",
+        "/images/danismanlik-hero.optavif-w960.webp",
+        "/images/danismanlik-hero.optavif-w1440.webp",
+        "/images/danismanlik-hero.optavif-w1536.jpg",
+        "/images/danismanlik-hero.optavif-w1536.webp",
+        "/images/danismanlik-hero.optavif-w480.avif",
+        "/images/danismanlik-hero.optavif-w960.avif",
+        "/images/danismanlik-hero.optavif-w1440.avif",
+        "/images/danismanlik-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:50:42.871Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/hakkimizda-hero.jpg",
+      "newCanonicalUrl": "/images/hakkimizda-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/hakkimizda-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/hakkimizda-hero.optavif-w480.webp",
+        "/images/hakkimizda-hero.optavif-w960.webp",
+        "/images/hakkimizda-hero.optavif-w1440.webp",
+        "/images/hakkimizda-hero.optavif-w1536.jpg",
+        "/images/hakkimizda-hero.optavif-w1536.webp",
+        "/images/hakkimizda-hero.optavif-w480.avif",
+        "/images/hakkimizda-hero.optavif-w960.avif",
+        "/images/hakkimizda-hero.optavif-w1440.avif",
+        "/images/hakkimizda-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:50:51.341Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/blog-hero.jpg",
+      "newCanonicalUrl": "/images/pages/blog-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/blog-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/blog-hero.optavif-w480.webp",
+        "/images/pages/blog-hero.optavif-w960.webp",
+        "/images/pages/blog-hero.optavif-w1440.webp",
+        "/images/pages/blog-hero.optavif-w1536.jpg",
+        "/images/pages/blog-hero.optavif-w1536.webp",
+        "/images/pages/blog-hero.optavif-w480.avif",
+        "/images/pages/blog-hero.optavif-w960.avif",
+        "/images/pages/blog-hero.optavif-w1440.avif",
+        "/images/pages/blog-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:00.691Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/contact-hero.jpg",
+      "newCanonicalUrl": "/images/pages/contact-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/contact-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/contact-hero.optavif-w480.webp",
+        "/images/pages/contact-hero.optavif-w960.webp",
+        "/images/pages/contact-hero.optavif-w1440.webp",
+        "/images/pages/contact-hero.optavif-w1536.jpg",
+        "/images/pages/contact-hero.optavif-w1536.webp",
+        "/images/pages/contact-hero.optavif-w480.avif",
+        "/images/pages/contact-hero.optavif-w960.avif",
+        "/images/pages/contact-hero.optavif-w1440.avif",
+        "/images/pages/contact-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:09.295Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/faq-hero.jpg",
+      "newCanonicalUrl": "/images/pages/faq-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/faq-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/faq-hero.optavif-w480.webp",
+        "/images/pages/faq-hero.optavif-w960.webp",
+        "/images/pages/faq-hero.optavif-w1440.webp",
+        "/images/pages/faq-hero.optavif-w1536.jpg",
+        "/images/pages/faq-hero.optavif-w1536.webp",
+        "/images/pages/faq-hero.optavif-w480.avif",
+        "/images/pages/faq-hero.optavif-w960.avif",
+        "/images/pages/faq-hero.optavif-w1440.avif",
+        "/images/pages/faq-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:17.616Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/services-hero.jpg",
+      "newCanonicalUrl": "/images/pages/services-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/services-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/services-hero.optavif-w480.webp",
+        "/images/pages/services-hero.optavif-w960.webp",
+        "/images/pages/services-hero.optavif-w1440.webp",
+        "/images/pages/services-hero.optavif-w1536.jpg",
+        "/images/pages/services-hero.optavif-w1536.webp",
+        "/images/pages/services-hero.optavif-w480.avif",
+        "/images/pages/services-hero.optavif-w960.avif",
+        "/images/pages/services-hero.optavif-w1440.avif",
+        "/images/pages/services-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:25.674Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/solutions-hero.jpg",
+      "newCanonicalUrl": "/images/pages/solutions-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/solutions-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/solutions-hero.optavif-w480.webp",
+        "/images/pages/solutions-hero.optavif-w960.webp",
+        "/images/pages/solutions-hero.optavif-w1440.webp",
+        "/images/pages/solutions-hero.optavif-w1536.jpg",
+        "/images/pages/solutions-hero.optavif-w1536.webp",
+        "/images/pages/solutions-hero.optavif-w480.avif",
+        "/images/pages/solutions-hero.optavif-w960.avif",
+        "/images/pages/solutions-hero.optavif-w1440.avif",
+        "/images/pages/solutions-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:34.578Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/pages/tools-hero.jpg",
+      "newCanonicalUrl": "/images/pages/tools-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/pages/tools-hero.jpg",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/pages/tools-hero.optavif-w480.webp",
+        "/images/pages/tools-hero.optavif-w960.webp",
+        "/images/pages/tools-hero.optavif-w1440.webp",
+        "/images/pages/tools-hero.optavif-w1536.jpg",
+        "/images/pages/tools-hero.optavif-w1536.webp",
+        "/images/pages/tools-hero.optavif-w480.avif",
+        "/images/pages/tools-hero.optavif-w960.avif",
+        "/images/pages/tools-hero.optavif-w1440.avif",
+        "/images/pages/tools-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:42.825Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P1",
+      "oldUrl": "/images/products/bilirkisi-hesap-icon.png",
+      "newCanonicalUrl": "/images/products/bilirkisi-hesap-icon.optavif-w512.webp",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/products/bilirkisi-hesap-icon.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/products/bilirkisi-hesap-icon.optavif-w480.webp",
+        "/images/products/bilirkisi-hesap-icon.optavif-w512.webp",
+        "/images/products/bilirkisi-hesap-icon.optavif-w480.avif",
+        "/images/products/bilirkisi-hesap-icon.optavif-w512.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:45.100Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P1",
+      "oldUrl": "/images/products/muvekkil-kasa-defteri-icon.png",
+      "newCanonicalUrl": "/images/products/muvekkil-kasa-defteri-icon.optavif-w1254.webp",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/products/muvekkil-kasa-defteri-icon.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w480.webp",
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w960.webp",
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w1254.webp",
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w480.avif",
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w960.avif",
+        "/images/products/muvekkil-kasa-defteri-icon.optavif-w1254.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:52.424Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P1",
+      "oldUrl": "/images/products/sifre-kasasi-icon.png",
+      "newCanonicalUrl": "/images/products/sifre-kasasi-icon.optavif-w256.webp",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/products/sifre-kasasi-icon.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/products/sifre-kasasi-icon.optavif-w256.webp",
+        "/images/products/sifre-kasasi-icon.optavif-w256.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:53.223Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/saas-hero.png",
+      "newCanonicalUrl": "/images/saas-hero.optavif-w1189.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/saas-hero.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/saas-hero.optavif-w480.webp",
+        "/images/saas-hero.optavif-w960.webp",
+        "/images/saas-hero.optavif-w1189.jpg",
+        "/images/saas-hero.optavif-w1189.webp",
+        "/images/saas-hero.optavif-w480.avif",
+        "/images/saas-hero.optavif-w960.avif",
+        "/images/saas-hero.optavif-w1189.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:51:56.715Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/web-tasarim-hero.png",
+      "newCanonicalUrl": "/images/web-tasarim-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/web-tasarim-hero.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/web-tasarim-hero.optavif-w480.webp",
+        "/images/web-tasarim-hero.optavif-w960.webp",
+        "/images/web-tasarim-hero.optavif-w1440.webp",
+        "/images/web-tasarim-hero.optavif-w1536.jpg",
+        "/images/web-tasarim-hero.optavif-w1536.webp",
+        "/images/web-tasarim-hero.optavif-w480.avif",
+        "/images/web-tasarim-hero.optavif-w960.avif",
+        "/images/web-tasarim-hero.optavif-w1440.avif",
+        "/images/web-tasarim-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:52:07.234Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P0",
+      "oldUrl": "/images/yazilim-hero.png",
+      "newCanonicalUrl": "/images/yazilim-hero.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/yazilim-hero.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/yazilim-hero.optavif-w480.webp",
+        "/images/yazilim-hero.optavif-w960.webp",
+        "/images/yazilim-hero.optavif-w1440.webp",
+        "/images/yazilim-hero.optavif-w1536.jpg",
+        "/images/yazilim-hero.optavif-w1536.webp",
+        "/images/yazilim-hero.optavif-w480.avif",
+        "/images/yazilim-hero.optavif-w960.avif",
+        "/images/yazilim-hero.optavif-w1440.avif",
+        "/images/yazilim-hero.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:52:16.878Z"
+    },
+    {
+      "sourceType": "frontend-static",
+      "priority": "P1",
+      "oldUrl": "/images/yazilim.png",
+      "newCanonicalUrl": "/images/yazilim.optavif-w1536.jpg",
+      "usages": [
+        {
+          "page": "frontend-static",
+          "field": "/images/yazilim.png",
+          "component": "public/images"
+        }
+      ],
+      "variantUrls": [
+        "/images/yazilim.optavif-w480.webp",
+        "/images/yazilim.optavif-w960.webp",
+        "/images/yazilim.optavif-w1440.webp",
+        "/images/yazilim.optavif-w1536.jpg",
+        "/images/yazilim.optavif-w1536.webp",
+        "/images/yazilim.optavif-w480.avif",
+        "/images/yazilim.optavif-w960.avif",
+        "/images/yazilim.optavif-w1440.avif",
+        "/images/yazilim.optavif-w1536.avif"
+      ],
+      "orphanVariantUrls": [],
+      "cmsUpdated": false,
+      "cmsLocations": [],
+      "status": "static-written",
+      "timestamp": "2026-09-21T23:52:26.695Z"
+    }
+  ]
+}

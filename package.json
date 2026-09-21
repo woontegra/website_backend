@@ -23,7 +23,8 @@
     "test:order-download-source": "tsx scripts/test-order-download-source.ts",
     "cleanup:saas-membership": "tsx scripts/cleanup-saas-membership.ts",
     "legal:sync-defaults": "tsx scripts/sync-legal-defaults.ts",
-    "test:images": "tsx --test src/media/imageVariantNames.test.ts src/media/imageOptimization.policy.test.ts src/media/imageOptimization.service.test.ts",
+    "test:images": "tsx --test src/media/imageVariantNames.test.ts src/media/imageOptimization.policy.test.ts src/media/imageOptimization.service.test.ts src/media/imageBackfill.test.ts",
+    "audit:image-backfill": "tsx scripts/image-backfill-audit.ts",
     "postinstall": "node scripts/prisma-generate.cjs"
   },
   "prisma": {
