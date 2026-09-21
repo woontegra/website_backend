@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import { getDownloadTokenSecret } from './requiredSecrets'
 
 const TOKEN_AUDIENCE = 'order-download'
 const TOKEN_TTL = '90d'
@@ -11,7 +12,7 @@ export type OrderDownloadTokenPayload = {
 }
 
 function downloadTokenSecret(): string {
-  return (process.env.DOWNLOAD_TOKEN_SECRET || process.env.JWT_SECRET || 'change-me-in-production').trim()
+  return getDownloadTokenSecret()
 }
 
 export function signOrderDownloadToken(payload: OrderDownloadTokenPayload): string {

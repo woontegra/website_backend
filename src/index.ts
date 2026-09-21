@@ -65,6 +65,7 @@ import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
 import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
+import { assertProductionJwtSecret } from './lib/requiredSecrets'
 
 const app = express()
 const PORT = process.env.PORT ?? 4000
@@ -241,6 +242,8 @@ app.get('/api/health', (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Endpoint bulunamadı' })
 })
+
+assertProductionJwtSecret()
 
 app.listen(PORT, () => {
   console.log(`Woontegra API http://localhost:${PORT}`)

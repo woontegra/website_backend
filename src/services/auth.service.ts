@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { getJwtSecret } from '../lib/requiredSecrets'
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
 const SALT_ROUNDS = 10
 
 /** DB satırı — Prisma Client User tipi şema ile uyumsuz olsa bile $queryRaw ile okunur */
@@ -16,8 +16,8 @@ function uuid() {
 
 function signUser(user: { id: string; email: string; role: string }) {
   const expiresIn = user.role === 'admin' || user.role === 'superadmin' ? '7d' : '1h'
-  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn })
-  const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '7d' })
+  const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, getJwtSecret(), { expiresIn })
+  const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, getJwtSecret(), { expiresIn: '7d' })
   return { success: true, token, refreshToken, user: { id: user.id, email: user.email, role: user.role } }
 }
 
@@ -64,7 +64,7 @@ export const authService = {
     usersStore.set(id, { id, email: data.email, passwordHash, role: 'user' })
     const token = jwt.sign(
       { userId: id, email: data.email, role: 'user' },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '1h' }
     )
     return { success: true, token, user: { id, email: data.email, role: 'user' } }
@@ -79,7 +79,7 @@ export const authService = {
   },
 
   async refresh(refreshToken: string) {
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as { userId: string; type: string }
+    const decoded = jwt.verify(refreshToken, getJwtSecret()) as { userId: string; type: string }
     if (decoded.type !== 'refresh') throw new Error('Geçersiz token')
     try {
       const dbUser = await findUserById(decoded.userId)
@@ -87,7 +87,7 @@ export const authService = {
         const expiresIn = dbUser.role === 'admin' || dbUser.role === 'superadmin' ? '7d' : '1h'
         const token = jwt.sign(
           { userId: dbUser.id, email: dbUser.email, role: dbUser.role },
-          JWT_SECRET,
+          getJwtSecret(),
           { expiresIn }
         )
         return { success: true, token }
@@ -98,7 +98,7 @@ export const authService = {
     const user = usersStore.get(decoded.userId)
     if (!user) throw new Error('Kullanıcı bulunamadı')
     const expiresIn = user.role === 'admin' || user.role === 'superadmin' ? '7d' : '1h'
-    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn })
+    const token = jwt.sign({ userId: user.id, email: user.email, role: user.role }, getJwtSecret(), { expiresIn })
     return { success: true, token }
   },
 

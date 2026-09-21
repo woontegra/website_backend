@@ -22,6 +22,10 @@ import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '..
 import { isAllowlistedRemoteDownloadHost, isBlockedDownloadHostname } from '../src/lib/remoteHttpsDownload.js'
 import { decideOrderDownloadAccess } from '../src/services/orderProductDownload.service.js'
 
+if (!String(process.env.JWT_SECRET ?? '').trim() && !String(process.env.DOWNLOAD_TOKEN_SECRET ?? '').trim()) {
+  process.env.JWT_SECRET = 'woontegra-local-test-jwt-secret'
+}
+
 function salesUrl(filename: string): string {
   return `https://${KOOPPLUS_SALES_PUBLIC_HOST}/${KOOPPLUS_SALES_OBJECT_PREFIX}${filename}`
 }

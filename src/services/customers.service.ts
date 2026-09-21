@@ -10,8 +10,8 @@ import { resolveOrderPaymentRowStatus } from './orders.service'
 import { fetchLicenseServerCustomerLicenses } from './woontegraLicenseServer.client'
 import { listCustomerSaasMemberships } from './customerSaasMembership.service'
 import { createSaasRenewOrder, getSaasRenewQuote as fetchSaasRenewQuote } from './customerSaasRenewal.service'
+import { getJwtSecret } from '../lib/requiredSecrets'
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
 const SALT_ROUNDS = 10
 
 function isUniqueViolation(err: unknown): boolean {
@@ -19,7 +19,7 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 function signCustomerToken(id: string, email: string) {
-  return jwt.sign({ customerId: id, email }, JWT_SECRET, { audience: 'customer', expiresIn: '7d' })
+  return jwt.sign({ customerId: id, email }, getJwtSecret(), { audience: 'customer', expiresIn: '7d' })
 }
 
 function customerOrderWhere(customerId: string, orderNo?: string) {

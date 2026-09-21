@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
+import { getJwtSecret } from '../lib/requiredSecrets'
 
 export interface JwtPayload {
   userId: string
@@ -16,7 +15,7 @@ export function authMiddleware(req: Request & { user?: JwtPayload }, res: Respon
   }
   const token = authHeader.slice(7)
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & { aud?: string }
+    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload & { aud?: string }
     if (decoded.aud === 'customer') {
       return res.status(401).json({ success: false, message: 'Bu endpoint için admin oturumu gerekli' })
     }

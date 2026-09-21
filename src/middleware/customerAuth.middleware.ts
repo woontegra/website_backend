@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET ?? 'change-me-in-production'
+import { getJwtSecret } from '../lib/requiredSecrets'
 
 export type CustomerJwtPayload = {
   customerId: string
@@ -15,7 +14,7 @@ export function optionalCustomerAuth(req: Request, _res: Response, next: NextFun
   }
   const token = authHeader.slice(7)
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, { audience: 'customer' }) as CustomerJwtPayload
+    const decoded = jwt.verify(token, getJwtSecret(), { audience: 'customer' }) as CustomerJwtPayload
     if (decoded.customerId && decoded.email) {
       req.customer = { id: decoded.customerId, email: decoded.email }
     }
@@ -32,7 +31,7 @@ export function customerAuthMiddleware(req: Request, res: Response, next: NextFu
   }
   const token = authHeader.slice(7)
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, { audience: 'customer' }) as CustomerJwtPayload
+    const decoded = jwt.verify(token, getJwtSecret(), { audience: 'customer' }) as CustomerJwtPayload
     if (!decoded.customerId || !decoded.email) {
       return res.status(401).json({ success: false, message: 'Geçersiz müşteri oturumu' })
     }
