@@ -3,6 +3,7 @@ import { CatalogMediaFileType } from '@prisma/client'
 import { getVercelBlobConfigStatus } from '../lib/vercelBlob.client'
 import { catalogMediaService } from '../services/catalogMedia.service'
 import { isVercelBlobUrl } from '../services/vercelBlobUpload.service'
+import { isImageOptimizationError } from '../media/imageOptimization.errors'
 
 function parseFileType(q: unknown): CatalogMediaFileType | undefined {
   if (q === 'IMAGE' || q === 'DOWNLOAD' || q === 'DOCUMENT') return q
@@ -41,6 +42,10 @@ export async function adminUpload(req: Request, res: Response) {
     })
     res.status(201).json({ success: true, data })
   } catch (e) {
+    if (isImageOptimizationError(e)) {
+      const status = e.code === 'IMAGE_TRANSFORM_FAILED' ? 422 : 400
+      return res.status(status).json({ success: false, code: e.code, message: e.message })
+    }
     const msg = e instanceof Error ? e.message : 'Yükleme başarısız'
     const status = msg.includes('BLOB_READ_WRITE_TOKEN') ? 503 : 500
     res.status(status).json({ success: false, message: msg })

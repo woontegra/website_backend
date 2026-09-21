@@ -19,6 +19,18 @@ import {
   uploadPublicObject,
 } from './r2Upload.service'
 import { buildSafeCatalogStorageFilename, maybeFixMojibakeFilename } from '../utils/uploadFilename'
+import { IMAGE_OPTIMIZATION_CONFIG, IMAGE_VARIANT_WIDTHS } from '../media/imageOptimization.config'
+import { assertRasterImageByteLimit } from '../media/imageOptimization.policy'
+import { prepareCatalogImageForStorage } from '../media/prepareCatalogImage'
+import type { OptimizedImageSet } from '../media/imageOptimization.service'
+import {
+  isOptimizedFileName,
+  listOptimizedSiblingNames,
+  parseOptimizedFileName,
+  replacePathFileName,
+  requireUploadedCanonical,
+  type OptimizedImageFormat,
+} from '../media/imageVariantNames'
 
 const UPLOAD_SUBDIR = 'catalog'
 
@@ -46,6 +58,7 @@ function safeExt(originalName: string, mimetype: string): string {
     'image/jpg': 'jpg',
     'image/png': 'png',
     'image/webp': 'webp',
+    'image/avif': 'avif',
     'image/svg+xml': 'svg',
     'application/pdf': 'pdf',
     'application/zip': 'zip',
@@ -55,6 +68,13 @@ function safeExt(originalName: string, mimetype: string): string {
     'application/x-apple-diskimage': 'dmg',
   }
   return map[mimetype.toLowerCase()] || 'bin'
+}
+
+export type CatalogImageVariantDto = {
+  width: number
+  format: OptimizedImageFormat
+  mimeType: string
+  url: string
 }
 
 export type CatalogMediaDto = {
@@ -71,6 +91,10 @@ export type CatalogMediaDto = {
   publicUrl: string | null
   createdAt: string
   updatedAt: string
+  width?: number
+  height?: number
+  format?: string
+  variants?: CatalogImageVariantDto[]
 }
 
 function effectiveMediaUrl(row: {
@@ -114,6 +138,27 @@ function mapRow(row: {
     publicUrl: row.publicUrl,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+function withOptimizedMeta(
+  dto: CatalogMediaDto,
+  set: OptimizedImageSet,
+  urlForFileName: (fileName: string) => string,
+): CatalogMediaDto {
+  return {
+    ...dto,
+    width: set.width,
+    height: set.height,
+    format: set.format,
+    variants: set.files
+      .map((file) => ({
+        width: file.width,
+        format: file.format,
+        mimeType: file.mimeType,
+        url: urlForFileName(file.fileName),
+      }))
+      .filter((file) => Boolean(file.url)),
   }
 }
 
@@ -184,6 +229,83 @@ async function persistUploadToVercelBlob(
   return mapRow(row)
 }
 
+async function persistOptimizedImageToVercelBlob(
+  set: OptimizedImageSet,
+  id: string,
+  displayOriginalName: string,
+  folder: WebsiteMediaFolder,
+): Promise<CatalogMediaDto> {
+  const uploadedUrls = new Map<string, { url: string; pathname: string }>()
+
+  for (const file of set.files) {
+    const pathname = buildWebsiteMediaBlobPath(folder, file.fileName)
+    const uploaded = await uploadWebsiteMediaBlob({
+      pathname,
+      body: file.buffer,
+      contentType: file.mimeType,
+      cacheControlMaxAge: IMAGE_OPTIMIZATION_CONFIG.blobCacheControlMaxAge,
+    })
+    uploadedUrls.set(file.fileName, { url: uploaded.url, pathname: uploaded.pathname })
+  }
+
+  const canonicalUpload = requireUploadedCanonical(uploadedUrls, set.canonical.fileName)
+  if (!canonicalUpload.pathname) {
+    throw new Error('Optimize edilmiş canonical görsel yüklenemedi.')
+  }
+
+  const row = await prisma.catalogMedia.create({
+    data: {
+      id,
+      fileName: set.canonical.fileName,
+      originalName: displayOriginalName,
+      mimeType: set.canonical.mimeType,
+      fileType: 'IMAGE',
+      fileSize: set.canonical.fileSize,
+      url: canonicalUpload.url,
+      storageKey: canonicalUpload.pathname,
+      storageProvider: 'LOCAL',
+      bucket: VERCEL_BLOB_BUCKET_MARKER,
+      publicUrl: canonicalUpload.url,
+    },
+  })
+
+  return withOptimizedMeta(mapRow(row), set, (fileName) => uploadedUrls.get(fileName)?.url ?? '')
+}
+
+async function persistOptimizedImageToDisk(
+  set: OptimizedImageSet,
+  id: string,
+  displayOriginalName: string,
+): Promise<CatalogMediaDto> {
+  const dir = resolveCatalogUploadDir()
+  for (const file of set.files) {
+    const absolutePath = path.join(dir, file.fileName)
+    fs.writeFileSync(absolutePath, file.buffer)
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error('Optimize edilmiş görsel diske yazılamadı')
+    }
+  }
+
+  const publicUrl = `/uploads/${UPLOAD_SUBDIR}/${set.canonical.fileName}`
+  const row = await prisma.catalogMedia.create({
+    data: {
+      id,
+      fileName: set.canonical.fileName,
+      originalName: displayOriginalName,
+      mimeType: set.canonical.mimeType,
+      fileType: 'IMAGE',
+      fileSize: set.canonical.fileSize,
+      url: publicUrl,
+      storageKey: null,
+      storageProvider: 'LOCAL',
+      bucket: null,
+      publicUrl: null,
+    },
+  })
+
+  return withOptimizedMeta(mapRow(row), set, (fileName) => `/uploads/${UPLOAD_SUBDIR}/${fileName}`)
+}
+
 async function persistUploadToR2(
   file: Express.Multer.File,
   id: string,
@@ -246,6 +368,50 @@ export const catalogMediaService = {
     const fileName = storageFileName
     const mediaFolder = normalizeWebsiteMediaFolder(options?.folder)
     const blobStatus = getVercelBlobConfigStatus()
+
+    if (fileType === 'IMAGE') {
+      assertRasterImageByteLimit(file)
+      const stem = fileName.replace(/\.[^.]+$/, '')
+      const prepared = await prepareCatalogImageForStorage(file, stem)
+      if (prepared.mode === 'optimized') {
+        if (blobStatus.configured) {
+          const row = await persistOptimizedImageToVercelBlob(
+            prepared.set,
+            id,
+            displayOriginalName,
+            mediaFolder,
+          )
+          console.info('[catalogMedia] upload', {
+            fileType,
+            folder: mediaFolder,
+            storage: 'vercel-blob',
+            optimized: true,
+            width: prepared.set.width,
+            height: prepared.set.height,
+            variants: prepared.set.files.length,
+          })
+          return row
+        }
+
+        if (process.env.NODE_ENV === 'production') {
+          assertVercelBlobConfigured()
+        }
+
+        console.warn(
+          '[catalogMedia] blobConfigured=false; geliştirme modunda optimize IMAGE yerel diske yazılıyor.',
+        )
+        const row = await persistOptimizedImageToDisk(prepared.set, id, displayOriginalName)
+        console.info('[catalogMedia] upload', {
+          fileType,
+          folder: mediaFolder,
+          storage: 'local-disk',
+          optimized: true,
+          width: prepared.set.width,
+          height: prepared.set.height,
+        })
+        return row
+      }
+    }
 
     // Website görselleri (IMAGE/DOCUMENT) → yalnızca Vercel Blob (R2'ye düşmez)
     if (fileType === 'IMAGE' || fileType === 'DOCUMENT') {
@@ -328,6 +494,22 @@ export const catalogMediaService = {
       try {
         if (isVercelBlobConfigured()) {
           await deleteWebsiteMediaBlob(row.storageKey)
+          if (isOptimizedFileName(row.fileName)) {
+            const parsed = parseOptimizedFileName(row.fileName)
+            const siblings = listOptimizedSiblingNames(
+              row.fileName,
+              [...IMAGE_VARIANT_WIDTHS, parsed?.width ?? 0].filter((width) => width > 0),
+              ['jpeg', 'webp', 'avif', 'png'],
+            )
+            for (const name of siblings) {
+              if (name === row.fileName) continue
+              try {
+                await deleteWebsiteMediaBlob(replacePathFileName(row.storageKey, name))
+              } catch {
+                // orphan variant
+              }
+            }
+          }
         }
       } catch {
         // Blob silme hatası DB kaydını engellemesin

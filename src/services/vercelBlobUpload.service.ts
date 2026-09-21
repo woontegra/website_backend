@@ -36,6 +36,7 @@ export async function uploadWebsiteMediaBlob(input: {
   pathname: string
   body: Buffer
   contentType: string
+  cacheControlMaxAge?: number
 }): Promise<UploadWebsiteBlobResult> {
   const token = readBlobToken()
   const blob = await put(input.pathname, input.body, {
@@ -43,6 +44,7 @@ export async function uploadWebsiteMediaBlob(input: {
     token,
     contentType: input.contentType || 'application/octet-stream',
     addRandomSuffix: false,
+    ...(input.cacheControlMaxAge ? { cacheControlMaxAge: input.cacheControlMaxAge } : {}),
   })
 
   return {

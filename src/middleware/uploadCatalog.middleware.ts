@@ -1,6 +1,6 @@
 import multer from 'multer'
 
-const IMAGE = /^image\/(jpeg|jpg|png|webp|svg\+xml)$/
+const IMAGE = /^image\/(jpeg|jpg|png|webp|avif|svg\+xml)$/
 const PDF = /^application\/pdf$/
 const ZIP = /^application\/(zip|x-zip-compressed)$/
 const OCTET = /^application\/octet-stream$/
