@@ -8,6 +8,7 @@ import {
   canonicalizeKoopPlusSalesInstallerUrl,
   KOOPPLUS_SALES_INSTALLER_FILENAME,
   KOOPPLUS_SALES_LEGACY_PUBLIC_HOST,
+  KOOPPLUS_SALES_OBJECT_PREFIX,
   KOOPPLUS_SALES_PUBLIC_HOST,
   KOOPPLUS_SALES_PUBLIC_URL,
 } from '../src/lib/koopplusSalesInstaller.js'
@@ -17,32 +18,136 @@ import {
 } from '../src/lib/downloadStream.js'
 import { signOrderDownloadToken, verifyOrderDownloadToken } from '../src/lib/orderDownloadToken.js'
 import { isPublicFreeDownloadProduct } from '../src/lib/productDownloadFiles.js'
-import { resolveProductDeliveryRawUrl } from '../src/lib/productDeliveryUrl.js'
+import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '../src/lib/productDeliveryUrl.js'
 import { isAllowlistedRemoteDownloadHost, isBlockedDownloadHostname } from '../src/lib/remoteHttpsDownload.js'
 import { decideOrderDownloadAccess } from '../src/services/orderProductDownload.service.js'
 
+function salesUrl(filename: string): string {
+  return `https://${KOOPPLUS_SALES_PUBLIC_HOST}/${KOOPPLUS_SALES_OBJECT_PREFIX}${filename}`
+}
+
 const SALES_V100 = `https://${KOOPPLUS_SALES_LEGACY_PUBLIC_HOST}/windows/KoopPlus-Setup-1.0.0.exe`
-const SALES_V103 = KOOPPLUS_SALES_PUBLIC_URL
+const SALES_V103 = salesUrl('KoopPlus-Setup-1.0.3.exe')
+const SALES_V104 = salesUrl('KoopPlus-Setup-1.0.4.exe')
+const SALES_V105 = salesUrl('KoopPlus-Setup-1.0.5.exe')
 const LEGACY_V103 = `https://${KOOPPLUS_SALES_LEGACY_PUBLIC_HOST}/windows/${KOOPPLUS_SALES_INSTALLER_FILENAME}`
 const UPDATE_EXE = 'https://updates.woontegra.com/updates/koopplus-aidat-takip/KoopPlus-Setup-1.0.3.exe'
 const UPDATE_YML = 'https://updates.woontegra.com/updates/koopplus-aidat-takip/latest.yml'
+const UPDATE_BLOCKMAP = 'https://updates.woontegra.com/updates/koopplus-aidat-takip/KoopPlus-Setup-1.0.3.exe.blockmap'
+const MK_SETUP = 'https://pub-52796df7e74b467a8f38ec503fb5137f.r2.dev/Woontegra-Muvekkil-Kasa-Defteri-Setup-0.1.11.exe'
 const MANAGED_BASE = 'https://downloads.example.test/files'
 const MANAGED_SETUP = `${MANAGED_BASE}/woontegra-sifre-kasasi-setup-1.0.0.exe`
+
+function setupFiles(url: string) {
+  return {
+    publicFreeDownload: false,
+    files: [{ type: 'setup' as const, label: 'Kurulum', url }],
+  }
+}
+
+{
+  assert.equal(SALES_V103, KOOPPLUS_SALES_PUBLIC_URL)
+  assert.equal(
+    resolveProductDeliveryRawUrl({ downloadUrl: null, downloadMedia: null, downloadFiles: setupFiles(SALES_V103) }),
+    SALES_V103,
+    'TEST 1 admin 1.0.3 stays 1.0.3',
+  )
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V103), SALES_V103)
+}
+
+{
+  assert.equal(
+    resolveProductDeliveryRawUrl({ downloadUrl: null, downloadMedia: null, downloadFiles: setupFiles(SALES_V104) }),
+    SALES_V104,
+    'TEST 2 admin 1.0.4 stays 1.0.4',
+  )
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V104), SALES_V104)
+  const source = resolveDownloadSourceFromRawUrl(SALES_V104)
+  assert.equal(source?.kind, 'remote')
+  assert.equal(source?.filename, 'KoopPlus-Setup-1.0.4.exe')
+  assert.equal(source?.remoteUrl, SALES_V104)
+}
+
+{
+  assert.equal(
+    resolveProductDeliveryRawUrl({ downloadUrl: null, downloadMedia: null, downloadFiles: setupFiles(SALES_V105) }),
+    SALES_V105,
+    'TEST 3 admin 1.0.5 stays 1.0.5',
+  )
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V105), SALES_V105)
+}
+
+{
+  const fromUpdatedProduct = resolveOrderItemDeliveryRawUrl({
+    downloadUrl: SALES_V103,
+    product: { downloadUrl: null, downloadMedia: null, downloadFiles: setupFiles(SALES_V104) },
+  })
+  assert.equal(fromUpdatedProduct, SALES_V104, 'TEST 4 current Product.downloadFiles wins over order snapshot')
+}
+
+{
+  const snapshotOnly = resolveOrderItemDeliveryRawUrl({
+    downloadUrl: SALES_V103,
+    product: { downloadUrl: null, downloadMedia: null, downloadFiles: { files: [] } },
+  })
+  assert.equal(snapshotOnly, SALES_V103, 'TEST 5 empty product files fall back to OrderItem snapshot')
+  const noProduct = resolveOrderItemDeliveryRawUrl({
+    downloadUrl: SALES_V104,
+    product: null,
+  })
+  assert.equal(noProduct, SALES_V104, 'TEST 5 missing product uses snapshot as-is')
+}
 
 {
   const resolved = resolveProductDeliveryRawUrl({
     downloadUrl: null,
     downloadMedia: null,
-    downloadFiles: {
-      publicFreeDownload: false,
-      files: [{ type: 'setup', label: 'Kurulum', url: SALES_V100 }],
-    },
+    downloadFiles: setupFiles(SALES_V100),
   })
-  assert.equal(resolved, SALES_V103, 'G temporary compat: legacy sales 1.0.0 remaps to production 1.0.3')
+  assert.equal(resolved, SALES_V103, 'TEST 6 legacy r2.dev 1.0.0 remaps to production fallback')
   assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V100), SALES_V103)
-  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(LEGACY_V103), SALES_V103, 'legacy r2.dev 1.0.3 remaps to custom domain')
-  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V103), SALES_V103)
-  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(UPDATE_EXE), UPDATE_EXE, 'G update URL is not rewritten')
+  assert.equal(
+    canonicalizeKoopPlusSalesInstallerUrl(LEGACY_V103),
+    SALES_V103,
+    'TEST 6 legacy r2.dev 1.0.3 remaps to custom domain fallback',
+  )
+}
+
+{
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(UPDATE_EXE), UPDATE_EXE, 'TEST 7 updater EXE is not rewritten')
+  assert.equal(resolveDownloadSourceFromRawUrl(UPDATE_EXE), null, 'TEST 7 updater EXE is not a sales source')
+}
+
+{
+  assert.equal(resolveDownloadSourceFromRawUrl(UPDATE_YML), null, 'TEST 8 latest.yml rejected')
+  assert.equal(resolveDownloadSourceFromRawUrl(UPDATE_BLOCKMAP), null, 'TEST 8 blockmap rejected')
+}
+
+{
+  assert.equal(isBlockedDownloadHostname('127.0.0.1'), true, 'TEST 9 localhost blocked')
+  assert.equal(isAllowlistedRemoteDownloadHost('127.0.0.1'), false)
+  assert.equal(
+    resolveDownloadSourceFromRawUrl(
+      'http://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.4.exe',
+    ),
+    null,
+    'TEST 9 HTTP rejected',
+  )
+  assert.equal(resolveDownloadSourceFromRawUrl('http://127.0.0.1/secret'), null)
+  assert.equal(resolveDownloadSourceFromRawUrl('javascript:alert(1)'), null)
+}
+
+{
+  const mkDelivery = resolveProductDeliveryRawUrl({
+    downloadUrl: null,
+    downloadMedia: null,
+    downloadFiles: setupFiles(MK_SETUP),
+  })
+  assert.equal(mkDelivery, MK_SETUP, 'TEST 10 Müvekkil Kasa admin URL is not remapped')
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(MK_SETUP), MK_SETUP)
+  const mkSource = resolveDownloadSourceFromRawUrl(MK_SETUP)
+  assert.equal(mkSource?.kind, 'remote')
+  assert.equal(mkSource?.remoteUrl, MK_SETUP)
 }
 
 {

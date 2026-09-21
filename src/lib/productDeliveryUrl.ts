@@ -43,7 +43,7 @@ function isUsableSalesDeliveryUrl(url: string | null | undefined): boolean {
   return isDeliverableDownloadRawUrl(raw)
 }
 
-/** Ürün teslimat URL önceliği: R2 downloadFiles → alternatif downloadUrl → medya kütüphanesi */
+/** Ürün teslimat URL önceliği: admin downloadFiles (setup) → alternatif downloadUrl → medya kütüphanesi */
 export function resolveProductDeliveryRawUrl(product: ProductDeliverySource): string {
   const media = (product.downloadMedia?.url ?? '').trim()
   const manual = (product.downloadUrl ?? '').trim()

@@ -79,6 +79,36 @@ function filename(url: string): string {
     },
   })
   assert.equal(filename(resolved), 'KoopPlus-Setup-1.0.0.exe', 'TEST 3 snapshot/delivery selects setup EXE')
+  const prod103 = 'https://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.3.exe'
+  const prod104 = 'https://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.4.exe'
+  const prod105 = 'https://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.5.exe'
+  assert.equal(
+    resolveProductDeliveryRawUrl({
+      downloadUrl: null,
+      downloadMedia: null,
+      downloadFiles: { files: [{ type: 'setup', label: 'Kurulum', url: prod103 }] },
+    }),
+    prod103,
+    'TEST 3b admin production 1.0.3 is not rewritten',
+  )
+  assert.equal(
+    resolveProductDeliveryRawUrl({
+      downloadUrl: null,
+      downloadMedia: null,
+      downloadFiles: { files: [{ type: 'setup', label: 'Kurulum', url: prod104 }] },
+    }),
+    prod104,
+    'TEST 3b admin production 1.0.4 is not rewritten',
+  )
+  assert.equal(
+    resolveProductDeliveryRawUrl({
+      downloadUrl: null,
+      downloadMedia: null,
+      downloadFiles: { files: [{ type: 'setup', label: 'Kurulum', url: prod105 }] },
+    }),
+    prod105,
+    'TEST 3b admin production 1.0.5 is not rewritten',
+  )
   const liveSales = resolveProductDeliveryRawUrl({
     downloadUrl: null,
     downloadMedia: null,
@@ -92,11 +122,22 @@ function filename(url: string): string {
       ],
     },
   })
-  assert.equal(filename(liveSales), 'KoopPlus-Setup-1.0.3.exe', 'TEST 3 temporary compat: live sales host remaps 1.0.0 → 1.0.3')
-  assert.equal(
-    liveSales,
-    'https://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.3.exe',
-  )
+  assert.equal(filename(liveSales), 'KoopPlus-Setup-1.0.3.exe', 'TEST 3 legacy r2.dev still remaps to production fallback')
+  assert.equal(liveSales, prod103)
+  const currentWins = resolveOrderItemDeliveryRawUrl({
+    downloadUrl: prod103,
+    product: {
+      downloadUrl: null,
+      downloadMedia: null,
+      downloadFiles: { files: [{ type: 'setup', label: 'Kurulum', url: prod104 }] },
+    },
+  })
+  assert.equal(currentWins, prod104, 'TEST 3 current Product.downloadFiles wins over snapshot')
+  const snapshotFallback = resolveOrderItemDeliveryRawUrl({
+    downloadUrl: prod103,
+    product: { downloadUrl: null, downloadMedia: null, downloadFiles: { files: [] } },
+  })
+  assert.equal(snapshotFallback, prod103, 'TEST 3 empty product files use snapshot')
   const snapshot = resolveOrderItemDeliveryRawUrl({
     downloadUrl: null,
     product: {
