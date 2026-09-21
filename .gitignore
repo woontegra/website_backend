@@ -1,5 +1,12 @@
 node_modules
 .env
+.env*
+.env.*
+.env*.bak
+.env*.backup
+*.env.bak
+*.env.backup
+!.env.example
 dist
 build
 coverage

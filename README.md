@@ -29,16 +29,13 @@ Build aşamasında `DATABASE_URL` olmasa bile `prisma generate` artık placehold
      - `CORS_ORIGIN` — frontend URL’niz (`https://xxx.up.railway.app` veya özel domain).
 4. **Build command:** `npm install && npm run build`
 5. Deploy sonrası tablolar `startCommand` ile `prisma db push` ile oluşur (`railway.toml`).
-6. **İlk veri (admin + CMS seed):** Railway → servis → **Shell**:
-   ```bash
-   npx tsx prisma/seed.ts
-   ```
-   Admin: `admin@woontegra.com` / `Admin123!` — hemen değiştirin.
+6. **Destructive seed (`prisma/seed.ts`) Railway production’da çalıştırılmamalıdır.** Seed `deleteMany()` ile kullanıcılar ve CMS içeriğini siler; production / Railway ortamında kasıtlı olarak engellenmiştir. Local seed için `ADMIN_SEED_PASSWORD` zorunludur. Mevcut admin şifresini ezmeden hesap oluşturmak için `npm run admin:ensure` kullanın.
 
 ### Yerel geliştirme (Railway Postgres’e bağlanmak)
 
 Railway Postgres → **Connect** → **Public Network** → Connection URL kopyalayın.  
-`.env` içinde `DATABASE_URL=...` yapıştırın. Bağlanmazsa URL sonuna `?sslmode=require` ekleyin.
+`.env` içinde `DATABASE_URL=...` yapıştırın. Bağlanmazsa URL sonuna `?sslmode=require` ekleyin.  
+`prisma/seed.ts` Railway/production görünümlü `DATABASE_URL`’ye karşı varsayılan olarak çalışmaz. Production’da destructive seed çalıştırmayın.
 
 ### Önemli
 
@@ -56,7 +53,8 @@ npx prisma generate
 cp .env.example .env
 # .env: DATABASE_URL, JWT_SECRET, CORS_ORIGIN
 npx prisma db push
-npx tsx prisma/seed.ts
+# Local seed: ADMIN_SEED_PASSWORD zorunlu. Production Railway DB’ye karşı çalıştırmayın.
+ADMIN_SEED_PASSWORD=yerel-sifre npx tsx prisma/seed.ts
 ```
 
 PowerShell — temiz kurulum:

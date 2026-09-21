@@ -5,6 +5,6 @@
 builder = "NIXPACKS"
 
 [deploy]
-# Şema senkronu + API başlatma (ilk kurulumdan sonra seed: Railway shell → npx tsx prisma/seed.ts)
+# Şema senkronu + API başlatma. Destructive seed (prisma/seed.ts) production Railway’de çalıştırılmamalıdır.
 # DATABASE_URL: Backend servisinde Postgres’ten Reference ile ekleyin (zorunlu).
 startCommand = "node scripts/prisma-db-push.cjs && node dist/index.js"

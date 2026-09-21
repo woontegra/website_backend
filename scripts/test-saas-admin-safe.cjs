@@ -7,8 +7,12 @@ const { chromium, request } = require('playwright')
 
 const APP = 'http://127.0.0.1:5173'
 const API = 'http://localhost:4000'
-const ADMIN_EMAIL = 'info@woontegra.com'
-const ADMIN_PASSWORD = 'Admin123!'
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || process.env.ADMIN_SEED_EMAIL || 'info@woontegra.com').trim()
+const ADMIN_PASSWORD = String(process.env.ADMIN_SEED_PASSWORD || process.env.ADMIN_PASSWORD || '').trim()
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_SEED_PASSWORD or ADMIN_PASSWORD is required. No HTTP login was sent.')
+  process.exit(1)
+}
 const TEST_EMAIL = 'test-saas@woontegra.com'
 const TEST_PASSWORD = 'Test12345!'
 const MK_SLUG = 'muvekkil-kasa-defteri-web-tabanli'

@@ -4,10 +4,17 @@
  */
 import { PrismaClient } from '@prisma/client'
 
-const PROD = process.env.PROD_API_URL || 'https://websitebackend-production-ab6e.up.railway.app'
-const EMAIL = process.env.ADMIN_EMAIL || 'info@woontegra.com'
-const PASSWORD = process.env.ADMIN_PASSWORD || 'Admin123!'
+const PROD = String(process.env.PROD_API_URL ?? '').trim()
+const EMAIL = String(process.env.ADMIN_EMAIL ?? '').trim()
+const PASSWORD = String(process.env.ADMIN_PASSWORD || process.env.ADMIN_SEED_PASSWORD || '').trim()
 const PAGE_KEY = 'bhModulePages'
+
+if (!PROD || !EMAIL || !PASSWORD) {
+  console.error(
+    'PROD_API_URL, ADMIN_EMAIL, and ADMIN_PASSWORD (or ADMIN_SEED_PASSWORD) are required. No HTTP login was sent.',
+  )
+  process.exit(1)
+}
 
 const prisma = new PrismaClient()
 

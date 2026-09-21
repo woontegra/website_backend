@@ -8,10 +8,17 @@ import path from 'path'
 import { HeadObjectCommand } from '@aws-sdk/client-s3'
 import { getR2PublicBucketName, getR2S3Client } from '../src/lib/r2.client'
 import { buildPageHeroObjectKey, inferContentType, uploadPublicObject } from '../src/services/r2Upload.service'
+import { readLocalAdminScriptCreds } from '../src/lib/adminBootstrapSafety'
+
+const creds = readLocalAdminScriptCreds()
+if (!creds.ok) {
+  console.error(creds.error)
+  process.exit(1)
+}
 
 const API = process.env.API_BASE ?? 'http://localhost:4000/api'
-const EMAIL = 'info@woontegra.com'
-const PASS = process.env.ADMIN_SEED_PASSWORD ?? 'Admin123!'
+const EMAIL = creds.email
+const PASS = creds.password
 const PAGE_KEY = 'about'
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..')

@@ -2,6 +2,7 @@ import path from 'path'
 import { config } from 'dotenv'
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { destructiveSeedBlockReason, readAdminSeedPassword } from '../src/lib/adminBootstrapSafety'
 
 config({ path: path.resolve(process.cwd(), '.env') })
 try {
@@ -9,6 +10,12 @@ try {
   require(path.join(process.cwd(), 'scripts/resolve-database-url.cjs')).applyToProcessEnv()
 } catch {
   /* */
+}
+
+const seedBlock = destructiveSeedBlockReason()
+if (seedBlock) {
+  console.error(`[seed] ${seedBlock}`)
+  process.exit(1)
 }
 
 const dbUrl = process.env.DATABASE_URL?.trim() ?? ''
@@ -70,7 +77,7 @@ async function main() {
   await prisma.service.deleteMany()
   await prisma.user.deleteMany()
 
-  const adminPassword = process.env.ADMIN_SEED_PASSWORD ?? 'Admin123!'
+  const adminPassword = readAdminSeedPassword()
   const passwordHash = await bcrypt.hash(adminPassword, 10)
   await prisma.user.create({
     data: { email: 'info@woontegra.com', passwordHash, role: 'admin' },
@@ -535,7 +542,7 @@ async function main() {
   })
 
   console.log('✅ Seed tamamlandı!')
-  console.log('👤 Yönetici: info@woontegra.com / Şifre: Admin123!')
+  console.log('👤 Yönetici: info@woontegra.com (şifre loglanmaz)')
   console.log('📄 Sayfalar:', await prisma.page.count())
   console.log('🛠️  Hizmetler:', await prisma.service.count())
   console.log('🏢 Markalar:', await prisma.brand.count())
