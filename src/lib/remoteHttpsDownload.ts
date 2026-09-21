@@ -1,10 +1,12 @@
 import https from 'node:https'
 import { Readable } from 'node:stream'
 import type { IncomingMessage } from 'node:http'
+import { isKoopPlusSalesHostname } from './koopplusSalesInstaller'
 import { isNonSalesDeliveryUrl } from './productDeliveryUrl'
 
 const MAX_REDIRECTS = 3
 const ALLOWED_REMOTE_SUFFIXES = ['.r2.dev']
+const ALLOWED_REMOTE_HOSTS = ['download.woontegra.com']
 
 function readEnv(name: string): string {
   return (process.env[name] ?? '').trim()
@@ -35,6 +37,7 @@ export function isBlockedDownloadHostname(hostname: string): boolean {
 export function isAllowlistedRemoteDownloadHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase()
   if (!host || isBlockedDownloadHostname(host)) return false
+  if (ALLOWED_REMOTE_HOSTS.includes(host) || isKoopPlusSalesHostname(host)) return true
   if (ALLOWED_REMOTE_SUFFIXES.some((suffix) => host.endsWith(suffix))) return true
   const configured = [
     hostnameFromEnvUrl('R2_PUBLIC_BASE_URL'),

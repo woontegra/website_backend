@@ -7,7 +7,9 @@ import { ProductType } from '@prisma/client'
 import {
   canonicalizeKoopPlusSalesInstallerUrl,
   KOOPPLUS_SALES_INSTALLER_FILENAME,
+  KOOPPLUS_SALES_LEGACY_PUBLIC_HOST,
   KOOPPLUS_SALES_PUBLIC_HOST,
+  KOOPPLUS_SALES_PUBLIC_URL,
 } from '../src/lib/koopplusSalesInstaller.js'
 import {
   classifyDownloadStreamError,
@@ -19,8 +21,9 @@ import { resolveProductDeliveryRawUrl } from '../src/lib/productDeliveryUrl.js'
 import { isAllowlistedRemoteDownloadHost, isBlockedDownloadHostname } from '../src/lib/remoteHttpsDownload.js'
 import { decideOrderDownloadAccess } from '../src/services/orderProductDownload.service.js'
 
-const SALES_V100 = `https://${KOOPPLUS_SALES_PUBLIC_HOST}/windows/KoopPlus-Setup-1.0.0.exe`
-const SALES_V103 = `https://${KOOPPLUS_SALES_PUBLIC_HOST}/windows/${KOOPPLUS_SALES_INSTALLER_FILENAME}`
+const SALES_V100 = `https://${KOOPPLUS_SALES_LEGACY_PUBLIC_HOST}/windows/KoopPlus-Setup-1.0.0.exe`
+const SALES_V103 = KOOPPLUS_SALES_PUBLIC_URL
+const LEGACY_V103 = `https://${KOOPPLUS_SALES_LEGACY_PUBLIC_HOST}/windows/${KOOPPLUS_SALES_INSTALLER_FILENAME}`
 const UPDATE_EXE = 'https://updates.woontegra.com/updates/koopplus-aidat-takip/KoopPlus-Setup-1.0.3.exe'
 const UPDATE_YML = 'https://updates.woontegra.com/updates/koopplus-aidat-takip/latest.yml'
 const MANAGED_BASE = 'https://downloads.example.test/files'
@@ -35,8 +38,10 @@ const MANAGED_SETUP = `${MANAGED_BASE}/woontegra-sifre-kasasi-setup-1.0.0.exe`
       files: [{ type: 'setup', label: 'Kurulum', url: SALES_V100 }],
     },
   })
-  assert.equal(resolved, SALES_V103, 'G temporary compat: legacy sales 1.0.0 remaps to 1.0.3 until product URL is updated')
+  assert.equal(resolved, SALES_V103, 'G temporary compat: legacy sales 1.0.0 remaps to production 1.0.3')
   assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V100), SALES_V103)
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(LEGACY_V103), SALES_V103, 'legacy r2.dev 1.0.3 remaps to custom domain')
+  assert.equal(canonicalizeKoopPlusSalesInstallerUrl(SALES_V103), SALES_V103)
   assert.equal(canonicalizeKoopPlusSalesInstallerUrl(UPDATE_EXE), UPDATE_EXE, 'G update URL is not rewritten')
 }
 
@@ -45,7 +50,7 @@ const MANAGED_SETUP = `${MANAGED_BASE}/woontegra-sifre-kasasi-setup-1.0.0.exe`
   delete process.env.R2_DOWNLOADS_PUBLIC_BASE_URL
   const source = resolveDownloadSourceFromRawUrl(SALES_V103)
   assert.ok(source, 'A sales installer resolves')
-  assert.equal(source?.kind, 'remote', 'A sales r2.dev is remote, not woontegra-downloads')
+  assert.equal(source?.kind, 'remote', 'A sales host is remote, not woontegra-downloads')
   assert.equal(source?.filename, KOOPPLUS_SALES_INSTALLER_FILENAME)
   assert.equal(source?.bucket, undefined)
   assert.equal(resolveDownloadSourceFromRawUrl(UPDATE_EXE), null, 'update exe is not a sales source')
@@ -201,6 +206,8 @@ const MANAGED_SETUP = `${MANAGED_BASE}/woontegra-sifre-kasasi-setup-1.0.0.exe`
 
 {
   assert.equal(isAllowlistedRemoteDownloadHost(KOOPPLUS_SALES_PUBLIC_HOST), true)
+  assert.equal(isAllowlistedRemoteDownloadHost(KOOPPLUS_SALES_LEGACY_PUBLIC_HOST), true)
+  assert.equal(isAllowlistedRemoteDownloadHost('updates.woontegra.com'), false)
   assert.equal(isBlockedDownloadHostname('127.0.0.1'), true)
   assert.equal(isAllowlistedRemoteDownloadHost('127.0.0.1'), false)
   assert.equal(resolveDownloadSourceFromRawUrl('javascript:alert(1)'), null)

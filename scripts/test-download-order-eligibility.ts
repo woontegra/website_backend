@@ -93,6 +93,10 @@ function filename(url: string): string {
     },
   })
   assert.equal(filename(liveSales), 'KoopPlus-Setup-1.0.3.exe', 'TEST 3 temporary compat: live sales host remaps 1.0.0 → 1.0.3')
+  assert.equal(
+    liveSales,
+    'https://download.woontegra.com/downloads/koopplus/windows/KoopPlus-Setup-1.0.3.exe',
+  )
   const snapshot = resolveOrderItemDeliveryRawUrl({
     downloadUrl: null,
     product: {
