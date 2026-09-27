@@ -1,5 +1,8 @@
 import { Router } from 'express'
-import { createLicensePublicRateLimiter } from '../middleware/rateLimit.middleware'
+import {
+  createLicensePublicRateLimiter,
+  createPublicBhProductReadRateLimiter,
+} from '../middleware/rateLimit.middleware'
 import { customerAuthMiddleware } from '../middleware/customerAuth.middleware'
 import * as bh from '../controllers/bh.public.controller'
 
@@ -11,9 +14,10 @@ import * as bh from '../controllers/bh.public.controller'
  */
 const r = Router()
 const limiter = createLicensePublicRateLimiter()
+const productReadLimiter = createPublicBhProductReadRateLimiter()
 
 r.get('/config', limiter, bh.getBhPublicConfig)
-r.get('/product', limiter, bh.getBhProduct)
+r.get('/product', productReadLimiter, bh.getBhProduct)
 r.post('/quote', limiter, bh.postBhQuote)
 r.get('/campaigns/:code', limiter, bh.getBhCampaignByCode)
 r.post('/demo/request', limiter, bh.postBhDemoRequest)

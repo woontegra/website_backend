@@ -66,9 +66,31 @@ export function createGlobalRateLimiter() {
   })
 }
 
+/** Public BH ürün/fiyat okuması. Lisans deneme limitinden ayrı; sayfa yenilemeyi kesmez. */
+export const PUBLIC_BH_PRODUCT_READ_WINDOW_MS = 15 * 60 * 1000
+export const PUBLIC_BH_PRODUCT_READ_MAX = 600
+
+export function createPublicBhProductReadRateLimiter() {
+  const max = isSmokeTestMode() ? SMOKE_RATE_LIMIT_MAX : PUBLIC_BH_PRODUCT_READ_MAX
+  return rateLimit({
+    windowMs: PUBLIC_BH_PRODUCT_READ_WINDOW_MS,
+    max,
+    message: { success: false, message: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' },
+    skip: (req) => {
+      if (isSmokeTestBypass(req)) return true
+      if (process.env.NODE_ENV !== 'production') return true
+      return false
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+}
+
 /** Masaüstü lisans aktivasyonu / doğrulama — brute-force için ayrı sıkı limit. */
+export const LICENSE_PUBLIC_RATE_LIMIT_MAX = 40
+
 export function createLicensePublicRateLimiter() {
-  const max = isSmokeTestMode() ? 2_000 : 40
+  const max = isSmokeTestMode() ? 2_000 : LICENSE_PUBLIC_RATE_LIMIT_MAX
   return rateLimit({
     windowMs: 15 * 60 * 1000,
     max,
