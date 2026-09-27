@@ -418,15 +418,36 @@ type OrderDeliveryView = {
   downloadEmailSentAt: string | null
 }
 
-function buildOrderDeliveryView(order: {
+const BH_ACCESS_PREPARING =
+  'Erişim bilgileriniz hazırlanıyor. Tamamlandığında e-posta adresinize gönderilecektir.'
+
+export function buildOrderDeliveryView(order: {
   status: string
   downloadEmailSentAt: Date | null
+  bhSaleRef?: string | null
+  bhFulfillmentStatus?: string | null
   items: { productName: string; licenseServerLastError: string | null; downloadUrl: string | null }[]
 }): OrderDeliveryView {
   const paidLike = order.status === 'PAID' || order.status === 'PROCESSING'
   const downloadEmailSentAt = order.downloadEmailSentAt?.toISOString() ?? null
   if (!paidLike) {
     return { deliveryState: 'not_applicable', deliveryMessage: '', downloadEmailSentAt }
+  }
+
+  if (order.bhSaleRef) {
+    const fulfillment = String(order.bhFulfillmentStatus || '').toUpperCase()
+    if (fulfillment === 'APPLIED') {
+      return {
+        deliveryState: 'delivered',
+        deliveryMessage: 'Web tabanlı ürün erişim bilgileriniz e-posta ile gönderildi.',
+        downloadEmailSentAt,
+      }
+    }
+    return {
+      deliveryState: 'pending',
+      deliveryMessage: BH_ACCESS_PREPARING,
+      downloadEmailSentAt,
+    }
   }
 
   const errors = order.items
