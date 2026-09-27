@@ -43,6 +43,47 @@ function kurusToTryDecimal(kurus: number): Prisma.Decimal {
   return new Prisma.Decimal((Math.round(kurus) / 100).toFixed(2))
 }
 
+function listedFromProductRead(data: unknown): BhListedProduct | null {
+  if (!data || typeof data !== 'object') return null
+  const body = data as { data?: BhListedProduct }
+  if (body.data && typeof body.data === 'object') return body.data
+  return data as BhListedProduct
+}
+
+/**
+ * PayTR tutarı sipariş toplamından üretilir. prepare-sale başarılı olsa bile
+ * BH v2 plan fiyatını değil, admin aylık/yıllık kaydını kullan.
+ * İndirim varsa yalnız prepare-sale oranını admin liste fiyatına uygula.
+ */
+async function adminCheckoutKurus(
+  productType: string,
+  upstreamFinalKurus: number | null,
+  upstreamNormalKurus: number | null,
+): Promise<{ finalKurus: number; normalKurus: number } | null> {
+  const productRead = await readBhPublicProduct()
+  if (!productRead.ok) return null
+  const listed = listedFromProductRead(productRead.data)
+  if (!listed) return null
+  const quote = quoteFromBhListedProduct(listed, productType)
+  if (!quote) return null
+  let finalTl = quote.finalPrice
+  if (
+    upstreamNormalKurus != null &&
+    Number.isFinite(upstreamNormalKurus) &&
+    upstreamNormalKurus > 0 &&
+    upstreamFinalKurus != null &&
+    Number.isFinite(upstreamFinalKurus) &&
+    upstreamFinalKurus >= 0 &&
+    upstreamFinalKurus < upstreamNormalKurus
+  ) {
+    finalTl = Math.round(quote.normalPrice * (upstreamFinalKurus / upstreamNormalKurus) * 100) / 100
+  }
+  return {
+    finalKurus: Math.round(finalTl * 100),
+    normalKurus: Math.round(quote.normalPrice * 100),
+  }
+}
+
 export async function createBhCentralCheckoutOrder(input: {
   req: Request
   customerId: string
@@ -171,6 +212,17 @@ export async function createBhCentralCheckoutOrder(input: {
     }
   } else {
     prep = (prepare.data || {}) as typeof prep
+  }
+  const adminKurus = await adminCheckoutKurus(
+    String(prep.productType || input.productType),
+    Number.isFinite(Number(prep.finalPriceKurus)) ? Number(prep.finalPriceKurus) : null,
+    prep.normalPriceKurus == null || !Number.isFinite(Number(prep.normalPriceKurus))
+      ? null
+      : Number(prep.normalPriceKurus),
+  )
+  if (adminKurus) {
+    prep.finalPriceKurus = adminKurus.finalKurus
+    prep.normalPriceKurus = adminKurus.normalKurus
   }
   if (!prep.success) {
     const err = new Error(prep.message || 'BH prepare-sale reddedildi') as Error & { status: number }
