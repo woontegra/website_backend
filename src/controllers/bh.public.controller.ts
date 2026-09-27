@@ -1,6 +1,14 @@
 import type { Request, Response } from 'express'
-import { bhManualCallback, bhUpstreamFetch } from '../services/bhWebapi.client'
+import {
+  bhManualCallback,
+  bhUpstreamFetch,
+  localBhUpstreamDown,
+  quoteFromBhListedProduct,
+  readBhPublicProduct,
+  type BhListedProduct,
+} from '../services/bhWebapi.client'
 import { resolveBhWebapiBaseUrl } from '../lib/assertSafeBhUpstream'
+import { getPublicBankTransferDisplay } from '../services/bankTransferSettings.service'
 import { sanitizeBhCheckoutBilling } from '../lib/sanitizeBhCheckoutBilling'
 import {
   buildBhAffiliateBridgeHeaders,
@@ -10,6 +18,13 @@ import {
 import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
 import { createBhCentralCheckoutOrder } from '../services/bhCentralCheckout.service'
 
+function customerUpstreamMessage(error: string): string {
+  if (/fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(error)) {
+    return 'Bilirkişi Hesap servisine şu an ulaşılamıyor. Lütfen kısa süre sonra tekrar deneyin.'
+  }
+  return error
+}
+
 function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstreamFetch>>) {
   if (result.ok) {
     return res.status(result.status).json(result.data ?? { success: true })
@@ -17,7 +32,7 @@ function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstrea
   const payload =
     result.data && typeof result.data === 'object'
       ? result.data
-      : { success: false, message: result.error }
+      : { success: false, message: customerUpstreamMessage(result.error) }
   return res.status(result.status || 502).json(payload)
 }
 
@@ -166,10 +181,8 @@ export async function getBhPublicConfig(_req: Request, res: Response) {
   })
 }
 
-export async function getBhProduct(req: Request, res: Response) {
-  const result = await bhUpstreamFetch('GET', '/api/product', undefined, {
-    cookie: req.headers.cookie,
-  })
+export async function getBhProduct(_req: Request, res: Response) {
+  const result = await readBhPublicProduct()
   return sendUpstream(res, result)
 }
 
@@ -179,7 +192,20 @@ export async function postBhQuote(req: Request, res: Response) {
     cookie: req.headers.cookie,
     headers,
   })
-  return sendUpstream(res, result)
+  if (result.ok || !localBhUpstreamDown(result)) return sendUpstream(res, result)
+  const product = await readBhPublicProduct()
+  if (!product.ok) return sendUpstream(res, product)
+  const body = product.data as { data?: BhListedProduct } | BhListedProduct | null
+  const listed =
+    body && typeof body === 'object' && 'data' in body && body.data && typeof body.data === 'object'
+      ? body.data
+      : (body as BhListedProduct)
+  const productType = String((req.body as { productType?: string } | undefined)?.productType || '')
+  const quote = quoteFromBhListedProduct(listed, productType)
+  if (!quote) {
+    return res.status(502).json({ success: false, message: 'Seçilen paket için fiyat bulunamadı.' })
+  }
+  return res.json({ success: true, valid: true, quote, campaign: null })
 }
 
 export async function getBhCampaignByCode(req: Request, res: Response) {
@@ -205,14 +231,9 @@ export async function postBhDemoRequest(req: Request, res: Response) {
   return sendUpstream(res, result)
 }
 
-export async function getBhBankTransferAvailability(req: Request, res: Response) {
-  const result = await bhUpstreamFetch(
-    'GET',
-    '/api/payment/bank-transfer-availability',
-    undefined,
-    { cookie: req.headers.cookie },
-  )
-  return sendUpstream(res, result)
+export async function getBhBankTransferAvailability(_req: Request, res: Response) {
+  const display = await getPublicBankTransferDisplay()
+  return res.json({ success: true, isActive: display.bankTransferEnabled })
 }
 
 export async function postBhBankTransferOrder(req: Request, res: Response) {
@@ -310,10 +331,14 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
     })
   } catch (e) {
     const err = e as Error & { status?: number; code?: string }
+    const raw = err.message || 'Sipariş oluşturulamadı'
+    const message = /fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(raw)
+      ? 'Bilirkişi Hesap servisine şu an ulaşılamıyor. Lütfen kısa süre sonra tekrar deneyin.'
+      : raw
     return res.status(err.status || 500).json({
       success: false,
       code: err.code || null,
-      message: err.message || 'Sipariş oluşturulamadı',
+      message,
     })
   }
 }

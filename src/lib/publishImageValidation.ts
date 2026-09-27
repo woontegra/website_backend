@@ -17,6 +17,27 @@ export function assertPublishImageRequired(condition: boolean, message = PUBLISH
 }
 
 /**
+ * Zaten yayındaki üründe kapak alanı boşsa ve public sayfa galerisi varsa
+ * fiyat gibi başka bir alanın kaydı görsel yüzünden durmasın.
+ * Yeni ürünü yayına alma bu muafiyete girmez.
+ */
+export function shouldWaiveMissingCoverOnUpdate(input: {
+  alreadyActive: boolean
+  nextActive: boolean
+  currentCoverUrl?: string | null
+  nextCoverUrl?: string | null
+  publishedGalleryImageCount: number
+}): boolean {
+  return (
+    input.alreadyActive &&
+    input.nextActive &&
+    !hasImageUrl(input.currentCoverUrl) &&
+    !hasImageUrl(input.nextCoverUrl) &&
+    input.publishedGalleryImageCount > 0
+  )
+}
+
+/**
  * Yayın kapağı: medya seçimi varsa onun URL’si, yoksa coverImage URL,
  * ikisi de gönderilmediyse mevcut kayıt. MediaId bilinçli null iken
  * mevcut medya URL’si korunmaz; yalnızca gelen coverImage URL geçer.

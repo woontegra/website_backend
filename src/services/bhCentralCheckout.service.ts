@@ -8,7 +8,13 @@ import {
   buildBhAffiliateBridgeHeaders,
   resolveBhAffiliateFromRequest,
 } from './bhAffiliate.service'
-import { bhUpstreamFetch } from './bhWebapi.client'
+import {
+  bhUpstreamFetch,
+  localBhUpstreamDown,
+  quoteFromBhListedProduct,
+  readBhPublicProduct,
+  type BhListedProduct,
+} from './bhWebapi.client'
 import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 
 export type BhCheckoutBilling = {
@@ -61,12 +67,12 @@ export async function createBhCentralCheckoutOrder(input: {
   const idem = String(input.checkoutIdempotencyKey || '').trim() || null
   if (idem) {
     const existing = await prisma.order.findUnique({ where: { checkoutIdempotencyKey: idem } })
-    if (existing?.bhSaleRef) {
+    if (existing) {
       return {
         orderId: existing.id,
         orderNo: existing.orderNo,
         totalTl: Number(existing.total),
-        saleRef: existing.bhSaleRef,
+        saleRef: existing.bhSaleRef || existing.orderNo,
       }
     }
   }
@@ -105,18 +111,22 @@ export async function createBhCentralCheckoutOrder(input: {
     headers: channelHeaders,
     timeoutMs: 45_000,
   })
+  let localPriceFallback = false
   if (!prepare.ok) {
-    const data = prepare.data as { message?: string; code?: string } | undefined
-    const err = new Error(data?.message || prepare.error || 'BH prepare-sale başarısız') as Error & {
-      status: number
-      code?: string
+    if (!localBhUpstreamDown(prepare)) {
+      const data = prepare.data as { message?: string; code?: string } | undefined
+      const err = new Error(data?.message || prepare.error || 'BH prepare-sale başarısız') as Error & {
+        status: number
+        code?: string
+      }
+      err.status = prepare.status || 502
+      err.code = data?.code
+      throw err
     }
-    err.status = prepare.status || 502
-    err.code = data?.code
-    throw err
+    localPriceFallback = true
   }
 
-  const prep = (prepare.data || {}) as {
+  let prep: {
     success?: boolean
     saleRef?: string
     merchantOid?: string
@@ -131,6 +141,37 @@ export async function createBhCentralCheckoutOrder(input: {
     renewalSessionId?: string | null
     message?: string
   }
+  if (localPriceFallback) {
+    const productRead = await readBhPublicProduct()
+    if (!productRead.ok) {
+      const err = new Error('Bilirkişi Hesap servisine şu an ulaşılamıyor. Lütfen kısa süre sonra tekrar deneyin.') as Error & {
+        status: number
+      }
+      err.status = 502
+      throw err
+    }
+    const body = productRead.data as { data?: BhListedProduct } | BhListedProduct | null
+    const listed =
+      body && typeof body === 'object' && 'data' in body && body.data && typeof body.data === 'object'
+        ? body.data
+        : (body as BhListedProduct)
+    const quote = quoteFromBhListedProduct(listed, input.productType)
+    if (!quote) {
+      const err = new Error('Seçilen paket için fiyat bulunamadı.') as Error & { status: number }
+      err.status = 502
+      throw err
+    }
+    prep = {
+      success: true,
+      finalPriceKurus: Math.round(quote.finalPrice * 100),
+      normalPriceKurus: Math.round(quote.normalPrice * 100),
+      productType: input.productType,
+      subscriptionPeriod: input.subscriptionPeriod ?? null,
+      orderPurpose: input.renewalToken ? 'RENEWAL' : 'NEW',
+    }
+  } else {
+    prep = (prepare.data || {}) as typeof prep
+  }
   if (!prep.success) {
     const err = new Error(prep.message || 'BH prepare-sale reddedildi') as Error & { status: number }
     err.status = 400
@@ -139,7 +180,7 @@ export async function createBhCentralCheckoutOrder(input: {
 
   const saleRef = String(prep.saleRef || prep.merchantOid || '').trim()
   const finalKurus = Number(prep.finalPriceKurus)
-  if (!saleRef || !Number.isFinite(finalKurus) || finalKurus < 0) {
+  if (!Number.isFinite(finalKurus) || finalKurus < 0 || (!localPriceFallback && !saleRef)) {
     const err = new Error('BH prepare-sale yanıtı geçersiz') as Error & { status: number }
     err.status = 502
     throw err
@@ -194,7 +235,7 @@ export async function createBhCentralCheckoutOrder(input: {
           : prep.orderPurpose === 'DEMO_CONVERSION'
             ? 'DEMO_CONVERSION'
             : 'NEW',
-      bhSaleRef: saleRef,
+      bhSaleRef: saleRef || null,
       bhProductType: String(prep.productType || input.productType),
       bhSubscriptionPeriod:
         prep.subscriptionPeriod == null ? null : Number(prep.subscriptionPeriod),
@@ -225,7 +266,7 @@ export async function createBhCentralCheckoutOrder(input: {
     orderId: order.id,
     orderNo: order.orderNo,
     totalTl: Number(order.total),
-    saleRef,
+    saleRef: saleRef || order.orderNo,
   }
 }
 

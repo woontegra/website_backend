@@ -38,11 +38,6 @@ function paymentAmountKurus(total: Prisma.Decimal | number): number {
   return Math.round(n * 100)
 }
 
-function isPaymentDryRunEnabled(): boolean {
-  const raw = String(process.env.PAYMENT_DRY_RUN || '').trim().toLowerCase()
-  return raw === 'true' || raw === '1' || raw === 'yes'
-}
-
 /**
  * After a proven PayTR get-token API failure only: mark PENDING TX (+ BH order) failed
  * and release BH campaign reservation.
@@ -262,40 +257,6 @@ export const paytrService = {
       const err = new Error('Sipariş kalemi bulunamadı') as Error & { status: number }
       err.status = 400
       throw err
-    }
-
-    // Local/staging: skip real PayTR API (same flag semantics as BH PAYMENT_DRY_RUN).
-    // Must run before PaymentSettings lookup so dry-run works without merchant credentials.
-    if (isPaymentDryRunEnabled()) {
-      const paytrMerchantOid = await allocatePaytrMerchantOid(order.id, order.orderNo)
-      await prisma.paymentTransaction.create({
-        data: {
-          orderId: order.id,
-          merchantOid: paytrMerchantOid,
-          status: 'PENDING',
-          amount: order.total,
-          currency: order.currency,
-          providerRawPayload: { dryRun: true },
-        },
-      })
-      await prisma.$transaction(async (tx) => {
-        await tx.paymentTransaction.updateMany({
-          where: { merchantOid: paytrMerchantOid, status: 'PENDING' },
-          data: { status: 'SUCCESS', providerRawPayload: { dryRun: true, status: 'success' } },
-        })
-        await tx.order.updateMany({
-          where: { id: order.id, status: { not: 'PAID' } },
-          data: { status: 'PAID', paidAt: new Date() },
-        })
-      })
-      await fulfillPaidOrderDelivery(order.id, req)
-      const mockToken = `dryrun_${paytrMerchantOid}`
-      console.info('[paytr] PAYMENT_DRY_RUN — skipped PayTR API', {
-        orderNo: order.orderNo,
-        merchant_oid: paytrMerchantOid,
-        mockToken,
-      })
-      return { iframeToken: mockToken, dryRun: true, orderNo: order.orderNo }
     }
 
     const env = await getEffectivePaytrConfig()

@@ -1242,6 +1242,28 @@ export type AdminOrderListQuery = {
 const ADMIN_ORDERS_DEFAULT_TAKE = 50
 const ADMIN_ORDERS_MAX_TAKE = 200
 
+/** Kart kaydı, dry-run dahil, gerçek PayTR başarısı olmadan listeye girmez. */
+export const excludeUnpaidCardCheckoutWhere: Prisma.OrderWhereInput = {
+  NOT: {
+    AND: [
+      { paymentProvider: PaymentProvider.PAYTR },
+      {
+        paymentTransactions: {
+          none: {
+            status: PaymentTransactionStatus.SUCCESS,
+            NOT: {
+              OR: [
+                { providerRawPayload: { string_contains: '"dryRun":true' } },
+                { providerRawPayload: { string_contains: '"dryRun": true' } },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  },
+}
+
 function parseBankPaymentDateInput(raw: string): Date | null {
   const s = raw.trim()
   if (!s) return null
@@ -1263,7 +1285,7 @@ export const ordersAdminService = {
       return []
     }
 
-    const and: Prisma.OrderWhereInput[] = [{ archivedAt: null }]
+    const and: Prisma.OrderWhereInput[] = [{ archivedAt: null }, excludeUnpaidCardCheckoutWhere]
 
     if (q.status === 'PENDING' || q.status === 'PROCESSING' || q.status === 'PAID' || q.status === 'FAILED' || q.status === 'CANCELLED') {
       and.push({ status: q.status })

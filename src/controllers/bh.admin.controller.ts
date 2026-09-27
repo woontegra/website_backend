@@ -3,13 +3,22 @@ import {
   bhUpstreamBinaryFetch,
   bhUpstreamFetch,
   bhUpstreamRemoteReadGet,
+  localBhUpstreamDown,
+  readBhPublicProduct,
   type BhUpstreamMethod,
+  type BhUpstreamResult,
 } from '../services/bhWebapi.client'
 import {
   getBhAdminAuthorization,
   getBhRemoteAdminAuthorization,
 } from '../services/bhAdminAuth.service'
 import { isBhRemoteReadAllowed } from '../lib/assertSafeBhUpstream'
+import {
+  clearBhListedPriceOverride,
+  mergeListedPriceOverride,
+  readBhListedPriceOverride,
+  saveBhListedPriceOverrideFromTl,
+} from '../services/bhListedPriceOverride.service'
 
 function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstreamFetch>>) {
   if (result.ok) {
@@ -218,12 +227,86 @@ export async function getBhAdminOverview(_req: Request, res: Response) {
   })
 }
 
+async function readBhAdminProductUpstream(timeoutMs = 30_000): Promise<BhUpstreamResult> {
+  if (isBhRemoteReadAllowed()) {
+    const auth = await getBhRemoteAdminAuthorization()
+    if (auth.ok) {
+      const remote = await bhUpstreamRemoteReadGet('/api/admin/product', {
+        authorization: auth.authorization,
+        timeoutMs,
+      })
+      if (remote.ok) return remote
+    }
+  }
+  const auth = await getBhAdminAuthorization()
+  if (!auth.ok) return { ok: false, status: auth.status, error: auth.error }
+  return bhUpstreamFetch('GET', '/api/admin/product', undefined, {
+    authorization: auth.authorization,
+    timeoutMs,
+  })
+}
+
 export async function getBhAdminProduct(_req: Request, res: Response) {
-  return proxyReadGet(res, '/api/admin/product')
+  const result = await readBhAdminProductUpstream()
+  if (!result.ok) return sendUpstream(res, result)
+  try {
+    const override = await readBhListedPriceOverride()
+    if (!override) return sendUpstream(res, result)
+    return sendUpstream(res, {
+      ok: true,
+      status: result.status,
+      data: mergeListedPriceOverride(result.data, override),
+    })
+  } catch {
+    return sendUpstream(res, result)
+  }
+}
+
+function localBhUnreachable(status: number): boolean {
+  return status === 502 || status === 503
+}
+
+async function respondWithSavedListedPrices(res: Response, body: Record<string, unknown>) {
+  let saved: { price: number; priceMonthly: number }
+  try {
+    saved = await saveBhListedPriceOverrideFromTl(body)
+  } catch (err) {
+    const status =
+      typeof (err as { status?: number }).status === 'number' ? (err as { status: number }).status : 400
+    return res.status(status).json({
+      success: false,
+      message: err instanceof Error ? err.message : 'Fiyat kaydedilemedi',
+    })
+  }
+  const current = await readBhPublicProduct()
+  if (current.ok) return sendUpstream(res, current)
+  return res.json({
+    success: true,
+    data: { price: saved.price, priceMonthly: saved.priceMonthly, monthlyPrice: saved.priceMonthly },
+  })
 }
 
 export async function postBhAdminProduct(req: Request, res: Response) {
-  return proxy(res, 'POST', '/api/admin/product', req.body)
+  const body = (req.body || {}) as Record<string, unknown>
+  const auth = await getBhAdminAuthorization()
+  if (!auth.ok) {
+    if (localBhUnreachable(auth.status)) return respondWithSavedListedPrices(res, body)
+    return res.status(auth.status).json({ success: false, message: auth.error })
+  }
+  const result = await bhUpstreamFetch('POST', '/api/admin/product', body, {
+    authorization: auth.authorization,
+    timeoutMs: 30_000,
+  })
+  if (result.ok) {
+    try {
+      await clearBhListedPriceOverride()
+    } catch {
+      /* Yerel BH kaydı duruyor. */
+    }
+    return sendUpstream(res, result)
+  }
+  if (!localBhUpstreamDown(result)) return sendUpstream(res, result)
+  return respondWithSavedListedPrices(res, body)
 }
 
 /**

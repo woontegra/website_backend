@@ -1,5 +1,6 @@
 import { CustomerSaasMembershipStatus, OrderStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { excludeUnpaidCardCheckoutWhere } from './orders.service'
 
 export type AdminSidebarBadges = {
   ordersPending: number
@@ -27,11 +28,12 @@ export async function getAdminSidebarBadges(): Promise<AdminSidebarBadges> {
 
   const [ordersPending, paymentsPending, saasExpiringSoon, unreadRequests] = await Promise.all([
     prisma.order.count({
-      where: { status: OrderStatus.PENDING },
+      where: { status: OrderStatus.PENDING, AND: [excludeUnpaidCardCheckoutWhere] },
     }),
     prisma.order.count({
       where: {
         OR: [{ status: OrderStatus.PENDING }, { status: OrderStatus.FAILED }],
+        AND: [excludeUnpaidCardCheckoutWhere],
       },
     }),
     prisma.customerSaasMembership.count({

@@ -6,6 +6,10 @@ import {
   resolveBhWebapiBaseUrl,
   resolveBhWebapiRemoteBaseUrl,
 } from '../lib/assertSafeBhUpstream'
+import {
+  mergeListedPriceOverride,
+  readBhListedPriceOverride,
+} from './bhListedPriceOverride.service'
 
 export type BhUpstreamResult =
   | { ok: true; status: number; data: unknown }
@@ -138,6 +142,67 @@ export async function bhUpstreamFetch(
     }
   } finally {
     clearTimeout(timer)
+  }
+}
+
+export function localBhUpstreamDown(result: BhUpstreamResult): boolean {
+  return !result.ok && (result.status === 502 || result.status === 503)
+}
+
+export type BhListedProduct = {
+  name?: string
+  price?: number | null
+  priceMonthly?: number | null
+}
+
+/** Ürün okuması. Yerel servis kapalıysa yalnız uzak GET kullanılır. */
+export async function readBhPublicProduct(): Promise<BhUpstreamResult> {
+  const local = await bhUpstreamFetch('GET', '/api/product')
+  const base =
+    local.ok || !localBhUpstreamDown(local) || !isBhRemoteReadAllowed()
+      ? local
+      : await bhUpstreamRemoteReadGet('/api/product')
+  if (!base.ok) return base
+  try {
+    const override = await readBhListedPriceOverride()
+    if (!override) return base
+    return { ok: true, status: base.status, data: mergeListedPriceOverride(base.data, override) }
+  } catch {
+    return base
+  }
+}
+
+export function quoteFromBhListedProduct(
+  product: BhListedProduct,
+  productType: string,
+): {
+  valid: true
+  reason: null
+  normalPrice: number
+  packageDiscount: number
+  campaignDiscount: number
+  partnerDiscount: number
+  partnerDiscountRate: number
+  appliedDiscountSource: 'none'
+  finalPrice: number
+  currency: 'TRY'
+  campaign: null
+} | null {
+  const kurus = productType === 'monthly' ? Number(product.priceMonthly) : Number(product.price)
+  if (!Number.isFinite(kurus) || kurus < 0) return null
+  const tl = kurus / 100
+  return {
+    valid: true,
+    reason: null,
+    normalPrice: tl,
+    packageDiscount: 0,
+    campaignDiscount: 0,
+    partnerDiscount: 0,
+    partnerDiscountRate: 0,
+    appliedDiscountSource: 'none',
+    finalPrice: tl,
+    currency: 'TRY',
+    campaign: null,
   }
 }
 

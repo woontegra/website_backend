@@ -18,7 +18,9 @@ import {
   assertPublishImageRequired,
   hasImageUrl,
   resolveNextCoverImageUrl,
+  shouldWaiveMissingCoverOnUpdate,
 } from '../lib/publishImageValidation'
+import { publishedProductGalleryUrls } from '../lib/publishedProductGallery'
 import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { sanitizeImageUrl } from '../utils/sanitizeImageFields'
 import { normalizeProductGalleryMediaIds, publicProductScreenshotAlt } from '../lib/productGallery'
@@ -216,6 +218,20 @@ function effectiveProductCoverImage(p: Pick<ProductRow, 'coverImage' | 'coverIma
   const fromMedia = p.coverImageMedia?.url?.trim()
   if (fromMedia) return fromMedia
   return p.coverImage?.trim() || null
+}
+
+async function publishedGalleryCountForSlug(slug: string): Promise<number> {
+  if (!slug) return 0
+  const row = await prisma.pageContent.findUnique({
+    where: { pageKey: 'productPages' },
+    select: { content: true },
+  })
+  if (!row?.content) return 0
+  try {
+    return publishedProductGalleryUrls(JSON.parse(row.content) as unknown, slug).length
+  } catch {
+    return 0
+  }
 }
 
 /** Kapak görseli yoksa ilk galeri görselini (IMAGE) kapak olarak kullanır. */
@@ -992,6 +1008,7 @@ export const productsService = {
       where: { id },
       select: {
         isActive: true,
+        slug: true,
         purchaseEnabled: true,
         licenseRequired: true,
         licenseAppCode: true,
@@ -999,10 +1016,11 @@ export const productsService = {
         coverImageMedia: { select: { url: true } },
       },
     })
+    const currentCoverUrl = effectiveProductCoverImage(
+      currentForCover as Pick<ProductRow, 'coverImage' | 'coverImageMedia'>,
+    )
     const nextCover = resolveNextCoverImageUrl({
-      currentCoverUrl: effectiveProductCoverImage(
-        currentForCover as Pick<ProductRow, 'coverImage' | 'coverImageMedia'>,
-      ),
+      currentCoverUrl,
       coverImageMediaId: Object.prototype.hasOwnProperty.call(data, 'coverImageMediaId')
         ? data.coverImageMediaId ?? null
         : undefined,
@@ -1014,8 +1032,17 @@ export const productsService = {
       patch.coverImage = nextCover
     }
     const nextActive = data.isActive !== undefined ? data.isActive : currentForCover.isActive
-    if (nextActive) {
-      assertPublishImageRequired(hasImageUrl(nextCover))
+    if (nextActive && !hasImageUrl(nextCover)) {
+      const slug = (data.slug?.trim() || currentForCover.slug).trim()
+      const galleryCount = await publishedGalleryCountForSlug(slug)
+      const waive = shouldWaiveMissingCoverOnUpdate({
+        alreadyActive: currentForCover.isActive,
+        nextActive,
+        currentCoverUrl,
+        nextCoverUrl: nextCover,
+        publishedGalleryImageCount: galleryCount,
+      })
+      if (!waive) assertPublishImageRequired(false)
     }
 
     const nextSale = resolveNextLicensedSaleFields(currentForCover, data)
