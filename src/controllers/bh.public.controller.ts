@@ -186,26 +186,53 @@ export async function getBhProduct(_req: Request, res: Response) {
   return sendUpstream(res, result)
 }
 
+function listedProductFromRead(data: unknown): BhListedProduct | null {
+  if (!data || typeof data !== 'object') return null
+  const body = data as { data?: BhListedProduct }
+  if (body.data && typeof body.data === 'object') return body.data
+  return data as BhListedProduct
+}
+
+function quoteFromAdminListedProduct(
+  listed: BhListedProduct,
+  productType: string,
+  upstream: unknown,
+): ReturnType<typeof quoteFromBhListedProduct> {
+  const quote = quoteFromBhListedProduct(listed, productType)
+  if (!quote || !upstream || typeof upstream !== 'object') return quote
+  const body = upstream as { quote?: { normalPrice?: unknown; finalPrice?: unknown; campaign?: unknown; appliedDiscountSource?: unknown }; campaign?: unknown }
+  const upstreamQuote = body.quote && typeof body.quote === 'object' ? body.quote : null
+  if (!upstreamQuote) return quote
+  const normal = Number(upstreamQuote.normalPrice)
+  const final = Number(upstreamQuote.finalPrice)
+  if (!Number.isFinite(normal) || normal <= 0 || !Number.isFinite(final) || final < 0 || final >= normal) {
+    return quote
+  }
+  const finalPrice = Math.round(quote.normalPrice * (final / normal) * 100) / 100
+  return {
+    ...quote,
+    finalPrice,
+    campaignDiscount: Math.round((quote.normalPrice - finalPrice) * 100) / 100,
+    appliedDiscountSource: 'none',
+    campaign: (upstreamQuote.campaign ?? body.campaign ?? null) as null,
+  }
+}
+
 export async function postBhQuote(req: Request, res: Response) {
   const { headers } = await affiliateUpstreamInit(req)
   const result = await bhUpstreamFetch('POST', '/api/campaigns/quote', req.body, {
     cookie: req.headers.cookie,
     headers,
   })
-  if (result.ok || !localBhUpstreamDown(result)) return sendUpstream(res, result)
-  const product = await readBhPublicProduct()
-  if (!product.ok) return sendUpstream(res, product)
-  const body = product.data as { data?: BhListedProduct } | BhListedProduct | null
-  const listed =
-    body && typeof body === 'object' && 'data' in body && body.data && typeof body.data === 'object'
-      ? body.data
-      : (body as BhListedProduct)
   const productType = String((req.body as { productType?: string } | undefined)?.productType || '')
-  const quote = quoteFromBhListedProduct(listed, productType)
-  if (!quote) {
-    return res.status(502).json({ success: false, message: 'Seçilen paket için fiyat bulunamadı.' })
+  const product = await readBhPublicProduct()
+  const listed = product.ok ? listedProductFromRead(product.data) : null
+  const adminQuote = listed ? quoteFromAdminListedProduct(listed, productType, result.ok ? result.data : null) : null
+  if (adminQuote) {
+    return res.json({ success: true, valid: true, quote: adminQuote, campaign: adminQuote.campaign })
   }
-  return res.json({ success: true, valid: true, quote, campaign: null })
+  if (result.ok || !localBhUpstreamDown(result)) return sendUpstream(res, result)
+  return res.status(502).json({ success: false, message: 'Seçilen paket için fiyat bulunamadı.' })
 }
 
 export async function getBhCampaignByCode(req: Request, res: Response) {

@@ -155,6 +155,54 @@ export type BhListedProduct = {
   priceMonthly?: number | null
 }
 
+function listedKurus(value: unknown): number | null {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(n)
+}
+
+function unwrapProductRow(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object') return null
+  const body = data as { data?: unknown }
+  if (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
+    return body.data as Record<string, unknown>
+  }
+  return data as Record<string, unknown>
+}
+
+/** Admin Fiyat & Satış kaydı. Public ürün cevabı v2 plan metnini bunun üzerine yazabiliyor. */
+async function readAdminListedPrices(): Promise<{ price: number; priceMonthly: number } | null> {
+  const { getBhAdminAuthorization, getBhRemoteAdminAuthorization } = await import('./bhAdminAuth.service')
+  const fromResult = (result: BhUpstreamResult): { price: number; priceMonthly: number } | null => {
+    if (!result.ok) return null
+    const row = unwrapProductRow(result.data)
+    if (!row) return null
+    const price = listedKurus(row.price)
+    const priceMonthly = listedKurus(row.priceMonthly ?? row.monthlyPrice)
+    if (price == null || priceMonthly == null) return null
+    return { price, priceMonthly }
+  }
+
+  if (isBhRemoteReadAllowed()) {
+    const remoteAuth = await getBhRemoteAdminAuthorization()
+    if (remoteAuth.ok) {
+      const remote = await bhUpstreamRemoteReadGet('/api/admin/product', {
+        authorization: remoteAuth.authorization,
+      })
+      const prices = fromResult(remote)
+      if (prices) return prices
+    }
+  }
+
+  const localAuth = await getBhAdminAuthorization()
+  if (!localAuth.ok) return null
+  return fromResult(
+    await bhUpstreamFetch('GET', '/api/admin/product', undefined, {
+      authorization: localAuth.authorization,
+    }),
+  )
+}
+
 /** Ürün okuması. Yerel servis kapalıysa yalnız uzak GET kullanılır. */
 export async function readBhPublicProduct(): Promise<BhUpstreamResult> {
   const local = await bhUpstreamFetch('GET', '/api/product')
@@ -164,9 +212,14 @@ export async function readBhPublicProduct(): Promise<BhUpstreamResult> {
       : await bhUpstreamRemoteReadGet('/api/product')
   if (!base.ok) return base
   try {
+    // Public BH cevabı v2 plan fiyatını taşır. Admin ekranı önce admin ürün
+    // alanlarını, yerel BH yazılamıyorsa onun üstüne SiteSetting kaydını gösterir.
+    let data = base.data
+    const adminPrices = await readAdminListedPrices()
+    if (adminPrices) data = mergeListedPriceOverride(data, adminPrices)
     const override = await readBhListedPriceOverride()
-    if (!override) return base
-    return { ok: true, status: base.status, data: mergeListedPriceOverride(base.data, override) }
+    if (override) data = mergeListedPriceOverride(data, override)
+    return { ok: true, status: base.status, data }
   } catch {
     return base
   }
