@@ -3,7 +3,7 @@ import {
   createLicensePublicRateLimiter,
   createPublicBhProductReadRateLimiter,
 } from '../middleware/rateLimit.middleware'
-import { customerAuthMiddleware } from '../middleware/customerAuth.middleware'
+import { customerAuthMiddleware, optionalCustomerAuth } from '../middleware/customerAuth.middleware'
 import * as bh from '../controllers/bh.public.controller'
 
 /**
@@ -24,6 +24,7 @@ r.post('/demo/request', limiter, bh.postBhDemoRequest)
 r.get('/legal/templates/:type/preview', limiter, bh.getBhLegalPreview)
 r.get('/payment/bank-transfer-availability', limiter, bh.getBhBankTransferAvailability)
 r.post('/payment/bank-transfer-order', limiter, customerAuthMiddleware, bh.postBhBankTransferOrder)
+r.post('/checkout/coupon/validate', limiter, optionalCustomerAuth, bh.postBhCheckoutCouponValidate)
 r.post('/checkout/create-order', limiter, customerAuthMiddleware, bh.postBhCheckoutCreateOrder)
 r.get('/payment/public-status', limiter, bh.getBhPaymentPublicStatus)
 r.post('/payment/paytr-token-guest', limiter, customerAuthMiddleware, bh.postBhPaytrTokenGuest)

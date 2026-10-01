@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { ordersService } from '../services/orders.service'
+import { couponsService } from '../services/coupons.service'
 import { isIndividualBillingType, validateTurkishIdentityNumber } from '../lib/turkishIdentityNumber'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
@@ -37,6 +38,33 @@ function resolveOrderTaxNumber(
     return identityNumber || taxNumber
   }
   return taxNumber
+}
+
+export async function validateCoupon(req: Request, res: Response) {
+  const body = req.body as Record<string, unknown>
+  const code = readString(body, 'couponCode') || readString(body, 'code') || ''
+  const items = parseOrderItems(body)
+  if (!code) {
+    return res.status(400).json({ success: false, message: 'Bu kupon bulunamadı.' })
+  }
+  if (items.length === 0) {
+    return res.status(400).json({ success: false, message: 'Sepet boş' })
+  }
+  try {
+    const quote = await couponsService.validateCheckoutCoupon({
+      code,
+      items,
+      customerEmail: readString(body, 'customerEmail') || req.customer?.email || null,
+    })
+    return res.json({ success: true, data: quote })
+  } catch (e) {
+    const err = e as Error & { status?: number; publicMessage?: string }
+    const codeStatus = err.status ?? 400
+    return res.status(codeStatus).json({
+      success: false,
+      message: err.publicMessage || err.message || 'Kupon doğrulanamadı',
+    })
+  }
 }
 
 export async function createOrder(req: Request, res: Response) {
@@ -121,6 +149,7 @@ export async function createOrder(req: Request, res: Response) {
       saveToAddressBook: body.saveToAddressBook === true,
       selectedAddressId: readString(body, 'selectedAddressId') || null,
       renewalToken: readString(body, 'renewalToken') || null,
+      couponCode: readString(body, 'couponCode') || null,
     })
     const order = result.order
     return res.status(201).json({
@@ -129,7 +158,11 @@ export async function createOrder(req: Request, res: Response) {
         orderNo: order.orderNo,
         id: order.id,
         status: order.status,
+        subtotal: Number(order.subtotal),
         total: Number(order.total),
+        couponCode: order.couponCodeSnapshot,
+        couponDiscountAmount:
+          order.couponDiscountAmount != null ? Number(order.couponDiscountAmount) : null,
         currency: order.currency,
         paymentProvider: order.paymentProvider,
         ...(result.addressBookWarning ? { addressBookWarning: result.addressBookWarning } : {}),

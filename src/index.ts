@@ -36,6 +36,7 @@ import { productsAdminRoutes } from './routes/products.admin.routes'
 import { productsPublicRoutes } from './routes/products.public.routes'
 import { campaignsPublicRoutes } from './routes/campaigns.public.routes'
 import { campaignsAdminRoutes } from './routes/campaigns.admin.routes'
+import { couponsAdminRoutes } from './routes/coupons.admin.routes'
 import { catalogMediaAdminRoutes } from './routes/catalogMedia.admin.routes'
 import { productCategoriesAdminRoutes } from './routes/productCategories.admin.routes'
 import { productCategoriesPublicRoutes } from './routes/productCategories.public.routes'
@@ -211,6 +212,7 @@ app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
+app.use('/api/admin', couponsAdminRoutes)
 app.use('/api/admin', bhAdminRoutes)
 
 app.get('/api/health', (_req, res) => {

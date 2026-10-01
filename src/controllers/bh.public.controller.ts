@@ -16,7 +16,7 @@ import {
   resolveBhAffiliateFromRequest,
 } from '../services/bhAffiliate.service'
 import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
-import { createBhCentralCheckoutOrder } from '../services/bhCentralCheckout.service'
+import { createBhCentralCheckoutOrder, validateBilirkisiCheckoutCoupon } from '../services/bhCentralCheckout.service'
 
 function customerUpstreamMessage(error: string): string {
   if (/fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(error)) {
@@ -339,6 +339,8 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
       campaignPublicCode: String(body.campaignId || body.campaign_id || body.campaignPublicCode || '')
         .trim() || null,
       renewalToken: String(body.renewalToken || '').trim() || null,
+      couponCode: String(body.couponCode || '').trim() || null,
+      paymentProvider: body.paymentProvider === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'PAYTR',
       billingInfo,
       legalConsents:
         (body.legalConsents as Record<string, unknown>) ||
@@ -353,7 +355,9 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
         orderId: created.orderId,
         totalTl: created.totalTl,
         saleRef: created.saleRef,
-        paymentProvider: 'PAYTR',
+        paymentProvider: body.paymentProvider === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'PAYTR',
+        amountFormatted: created.amountFormatted ?? null,
+        bankTransfer: created.bankTransfer ?? null,
       },
     })
   } catch (e) {
@@ -366,6 +370,36 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
       success: false,
       code: err.code || null,
       message,
+    })
+  }
+}
+
+export async function postBhCheckoutCouponValidate(req: Request, res: Response) {
+  const body = (req.body || {}) as Record<string, unknown>
+  const productTypeRaw = String(body.productType || body.product_type || '')
+    .trim()
+    .toLowerCase()
+  const productType = productTypeRaw === 'monthly' || productTypeRaw === 'annual' ? productTypeRaw : null
+  const couponCode = String(body.couponCode || body.code || '').trim()
+  if (!productType) {
+    return res.status(400).json({ success: false, message: 'productType monthly|annual gerekli.' })
+  }
+  if (!couponCode) {
+    return res.status(400).json({ success: false, message: 'Bu kupon bulunamadı.' })
+  }
+  try {
+    const quote = await validateBilirkisiCheckoutCoupon({
+      productType,
+      couponCode,
+      customerEmail: req.customer?.email || String(body.customerEmail || '').trim() || null,
+      campaignPublicCode: String(body.campaignPublicCode || body.campaignId || '').trim() || null,
+    })
+    return res.json({ success: true, data: quote })
+  } catch (e) {
+    const err = e as Error & { status?: number; publicMessage?: string }
+    return res.status(err.status || 400).json({
+      success: false,
+      message: err.publicMessage || err.message || 'Kupon doğrulanamadı',
     })
   }
 }

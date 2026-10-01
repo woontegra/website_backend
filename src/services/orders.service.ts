@@ -55,6 +55,7 @@ import {
 } from './license.service'
 import { renderLegalTemplate } from './legalTemplate.service'
 import { campaignsService } from './campaigns.service'
+import { couponsService } from './coupons.service'
 import { saveCustomerAddressFromCheckout } from './customerAddressCheckout.service'
 
 function isUniqueViolation(err: unknown): boolean {
@@ -95,6 +96,8 @@ export type CreateOrderInput = {
   selectedAddressId?: string | null
   /** MK SaaS mevcut hesap lisanslama (demo → ücretli) */
   renewalToken?: string | null
+  /** Checkout’ta uygulanan kupon kodu. Sunucu yeniden doğrular. */
+  couponCode?: string | null
 }
 
 /** Müşteri tarafında indirme / teslim bağlantısı gösterimi */
@@ -750,6 +753,25 @@ export const ordersService = {
       })
     }
 
+    let couponQuote: Awaited<ReturnType<typeof couponsService.quoteCouponForPricedLines>> | null = null
+    const requestedCoupon = input.couponCode?.trim() || ''
+    if (requestedCoupon) {
+      couponQuote = await couponsService.quoteCouponForPricedLines({
+        code: requestedCoupon,
+        customerEmail: input.customerEmail,
+        lines: lineSnapshots.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          unitPrice: Number(line.unitPrice),
+        })),
+      })
+    }
+
+    const merchandise = subtotal
+    const total = couponQuote
+      ? new Prisma.Decimal((Number(merchandise) - couponQuote.discountAmount).toFixed(2))
+      : merchandise
+
     const cartProductTypes = uniqueCartProductTypes(lineSnapshots.map((l) => l.productType))
     const legalFlags = resolveOrderLegalConsentFlags(cartProductTypes)
     if (
@@ -768,7 +790,6 @@ export const ordersService = {
       throw err
     }
 
-    const total = subtotal
     const now = new Date()
     const paymentProvider =
       input.paymentProvider === 'BANK_TRANSFER' ? PaymentProvider.BANK_TRANSFER : PaymentProvider.PAYTR
@@ -790,7 +811,11 @@ export const ordersService = {
         const qtyText = web ? `${l.quantity} yıl` : `${l.quantity} adet`
         return `<li>${escapeHtml(l.productName)} — ${escapeHtml(qtyText)} — ${Number(l.total).toFixed(2)} ${escapeHtml(currencyDisplay)}</li>`
       })
-      .join('')}</ul>`
+      .join('')}${
+        couponQuote
+          ? `<li>Kupon ${escapeHtml(couponQuote.code)} — indirim — -${couponQuote.discountAmount.toFixed(2)} ${escapeHtml(currencyDisplay)}</li>`
+          : ''
+      }</ul>`
 
     for (let attempt = 0; attempt < 20; attempt++) {
       const orderNo = await allocateOrderNo()
@@ -807,9 +832,19 @@ export const ordersService = {
             taxNumber: input.taxNumber?.trim() || null,
             companyName: input.companyName?.trim() || null,
             paymentProvider,
-            subtotal: total,
+            subtotal: merchandise,
             total,
             currency,
+            couponCodeSnapshot: couponQuote?.code ?? null,
+            couponCampaignSlugSnapshot: couponQuote?.couponId ?? null,
+            couponCampaignNameSnapshot: couponQuote?.couponName ?? null,
+            couponDiscountTypeSnapshot: couponQuote?.discountType ?? null,
+            couponDiscountValueSnapshot: couponQuote
+              ? new Prisma.Decimal(couponQuote.discountValue.toFixed(2))
+              : null,
+            couponDiscountAmount: couponQuote
+              ? new Prisma.Decimal(couponQuote.discountAmount.toFixed(2))
+              : null,
             preInfoAcceptedAt: now,
             distanceSalesAcceptedAt: now,
             kvkkReadAt: now,
@@ -1868,6 +1903,13 @@ export const ordersAdminService = {
       paymentConfirmedByEmail,
       subtotal: Number(order.subtotal),
       total: Number(order.total),
+      couponCodeSnapshot: order.couponCodeSnapshot,
+      couponCampaignSlugSnapshot: order.couponCampaignSlugSnapshot,
+      couponCampaignNameSnapshot: order.couponCampaignNameSnapshot,
+      couponDiscountTypeSnapshot: order.couponDiscountTypeSnapshot,
+      couponDiscountValueSnapshot:
+        order.couponDiscountValueSnapshot != null ? Number(order.couponDiscountValueSnapshot) : null,
+      couponDiscountAmount: order.couponDiscountAmount != null ? Number(order.couponDiscountAmount) : null,
       currency: order.currency,
       paidAt: order.paidAt?.toISOString() ?? null,
       downloadEmailSentAt: order.downloadEmailSentAt?.toISOString() ?? null,

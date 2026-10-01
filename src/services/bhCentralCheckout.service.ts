@@ -16,6 +16,9 @@ import {
   type BhListedProduct,
 } from './bhWebapi.client'
 import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
+import { couponsService } from './coupons.service'
+import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
+import { BILIRKISI_HESAP_PRODUCT_SLUG } from '../lib/bhAffiliateConstants'
 
 export type BhCheckoutBilling = {
   invoiceType?: string
@@ -97,7 +100,16 @@ export async function createBhCentralCheckoutOrder(input: {
   billingInfo: BhCheckoutBilling
   legalConsents?: Record<string, unknown>
   checkoutIdempotencyKey?: string | null
-}): Promise<{ orderId: string; orderNo: string; totalTl: number; saleRef: string }> {
+  couponCode?: string | null
+  paymentProvider?: 'PAYTR' | 'BANK_TRANSFER'
+}): Promise<{
+  orderId: string
+  orderNo: string
+  totalTl: number
+  saleRef: string
+  amountFormatted?: string
+  bankTransfer?: Record<string, string>
+}> {
   const email = String(input.customerEmail || '').trim().toLowerCase()
   if (!email) {
     const err = new Error('Müşteri e-postası gerekli') as Error & { status: number }
@@ -115,6 +127,18 @@ export async function createBhCentralCheckoutOrder(input: {
         totalTl: Number(existing.total),
         saleRef: existing.bhSaleRef || existing.orderNo,
       }
+    }
+  }
+
+  const paymentProvider =
+    input.paymentProvider === 'BANK_TRANSFER' ? PaymentProvider.BANK_TRANSFER : PaymentProvider.PAYTR
+  let bankDisplay: Awaited<ReturnType<typeof getPublicBankTransferDisplay>> | undefined
+  if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
+    bankDisplay = await getPublicBankTransferDisplay()
+    if (!bankDisplay.bankTransferEnabled) {
+      const err = new Error('Havale/EFT ödeme yöntemi şu anda kullanılamıyor.') as Error & { status: number }
+      err.status = 400
+      throw err
     }
   }
 
@@ -238,7 +262,35 @@ export async function createBhCentralCheckoutOrder(input: {
     throw err
   }
 
-  const total = kurusToTryDecimal(finalKurus)
+  const merchandise = kurusToTryDecimal(finalKurus)
+  let couponQuote: Awaited<ReturnType<typeof couponsService.quoteCouponForPricedLines>> | null = null
+  const requestedCoupon = input.couponCode?.trim() || ''
+  if (requestedCoupon) {
+    try {
+      couponQuote = await couponsService.quoteCouponForPricedLines({
+        code: requestedCoupon,
+        customerEmail: email,
+        lines: [{ productId: product.id, quantity: 1, unitPrice: Number(merchandise) }],
+      })
+    } catch (err) {
+      if (saleRef) {
+        try {
+          await bhUpstreamFetch(
+            'POST',
+            '/api/payment/woontegra/abandon-sale',
+            { merchantOid: saleRef, saleRef },
+            { headers: channelHeaders, timeoutMs: 30_000 },
+          )
+        } catch {
+          /* kupon reddi asıl hatadır */
+        }
+      }
+      throw err
+    }
+  }
+  const total = couponQuote
+    ? new Prisma.Decimal((Number(merchandise) - couponQuote.discountAmount).toFixed(2))
+    : merchandise
   const orderNo = allocateOrderNo()
   const ip = getClientIp(input.req)
   const ua = String(input.req.headers['user-agent'] || '').slice(0, 500) || null
@@ -259,10 +311,20 @@ export async function createBhCentralCheckoutOrder(input: {
         : String(billing.identityNumber || '').trim() || null,
       companyName: corporate ? String(billing.companyName || '').trim() || null : null,
       status: OrderStatus.PENDING,
-      paymentProvider: PaymentProvider.PAYTR,
-      subtotal: total,
+      paymentProvider,
+      subtotal: merchandise,
       total,
       currency: 'TRY',
+      couponCodeSnapshot: couponQuote?.code ?? null,
+      couponCampaignSlugSnapshot: couponQuote?.couponId ?? null,
+      couponCampaignNameSnapshot: couponQuote?.couponName ?? null,
+      couponDiscountTypeSnapshot: couponQuote?.discountType ?? null,
+      couponDiscountValueSnapshot: couponQuote
+        ? new Prisma.Decimal(couponQuote.discountValue.toFixed(2))
+        : null,
+      couponDiscountAmount: couponQuote
+        ? new Prisma.Decimal(couponQuote.discountAmount.toFixed(2))
+        : null,
       acceptedIp: ip || null,
       acceptedUserAgent: ua,
       preInfoAcceptedAt: new Date(),
@@ -304,9 +366,9 @@ export async function createBhCentralCheckoutOrder(input: {
             productId: product.id,
             productName: product.name,
             productSlug: product.slug,
-            unitPrice: total,
+            unitPrice: merchandise,
             quantity: 1,
-            total,
+            total: merchandise,
             downloadUrl: `saas:${product.slug}`,
           },
         ],
@@ -314,12 +376,94 @@ export async function createBhCentralCheckoutOrder(input: {
     },
   })
 
+  let amountFormatted: string | undefined
+  let bankTransfer: Record<string, string> | undefined
+  if (paymentProvider === PaymentProvider.BANK_TRANSFER) {
+    const info = await getBankTransferCustomerInfo(
+      { orderNo: order.orderNo, total: Number(order.total), currency: order.currency },
+      bankDisplay,
+    )
+    if (!info) {
+      const err = new Error('Havale/EFT ödeme yöntemi şu anda kullanılamıyor.') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+    amountFormatted = info.amountFormatted
+    bankTransfer = {
+      bankName: info.bankName,
+      accountHolder: info.accountHolder,
+      iban: info.iban,
+      ...(info.branchName ? { branchName: info.branchName } : {}),
+      ...(info.accountNumber ? { accountNumber: info.accountNumber } : {}),
+      paymentReference: info.paymentReference,
+    }
+  }
+
   return {
     orderId: order.id,
     orderNo: order.orderNo,
     totalTl: Number(order.total),
     saleRef: saleRef || order.orderNo,
+    amountFormatted,
+    bankTransfer,
   }
+}
+
+export async function validateBilirkisiCheckoutCoupon(input: {
+  productType: 'monthly' | 'annual'
+  couponCode: string
+  customerEmail?: string | null
+  campaignPublicCode?: string | null
+}) {
+  const code = input.couponCode.trim()
+  if (!code) {
+    const err = new Error('Bu kupon bulunamadı.') as Error & { status: number; publicMessage?: string }
+    err.status = 400
+    err.publicMessage = err.message
+    throw err
+  }
+  const product = await prisma.product.findUnique({
+    where: { slug: BILIRKISI_HESAP_PRODUCT_SLUG },
+    select: { id: true },
+  })
+  if (!product) {
+    const err = new Error('Bu kupon seçili ürün için geçerli değildir.') as Error & {
+      status: number
+      publicMessage?: string
+    }
+    err.status = 400
+    err.publicMessage = err.message
+    throw err
+  }
+  const productRead = await readBhPublicProduct()
+  const listed = listedFromProductRead(productRead.data)
+  const quote = listed ? quoteFromBhListedProduct(listed, input.productType) : null
+  if (!productRead.ok || !quote) {
+    const err = new Error('Seçilen paket için fiyat bulunamadı.') as Error & { status: number }
+    err.status = 502
+    throw err
+  }
+  let merchandiseTl = quote.finalPrice
+  if (input.campaignPublicCode) {
+    const upstream = await bhUpstreamFetch('POST', '/api/campaigns/quote', {
+      productType: input.productType,
+      product_type: input.productType,
+      campaignPublicCode: input.campaignPublicCode,
+      campaignId: input.campaignPublicCode,
+    })
+    const body = upstream.ok ? (upstream.data as { quote?: { normalPrice?: unknown; finalPrice?: unknown } }) : null
+    const normal = Number(body?.quote?.normalPrice)
+    const final = Number(body?.quote?.finalPrice)
+    if (Number.isFinite(normal) && normal > 0 && Number.isFinite(final) && final >= 0 && final < normal) {
+      merchandiseTl = Math.round(quote.normalPrice * (final / normal) * 100) / 100
+    }
+  }
+  const evaluated = await couponsService.quoteCouponForPricedLines({
+    code,
+    customerEmail: input.customerEmail,
+    lines: [{ productId: product.id, quantity: 1, unitPrice: merchandiseTl }],
+  })
+  return { ...evaluated, currency: 'TRY' }
 }
 
 export async function ensureBilirkisiHesapFulfillment(orderId: string): Promise<{

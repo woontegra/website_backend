@@ -110,7 +110,14 @@ export const campaignsService = {
       throw err
     }
     const type = input.type
-    if (type !== 'announcement' && type !== 'banner' && type !== 'product_discount' && type !== 'coupon') {
+    if (type === 'coupon') {
+      const err = new Error('Kupon kodları Kampanyalar ekranından tanımlanamaz. Kupon Kodları ekranını kullanın.') as Error & {
+        status: number
+      }
+      err.status = 400
+      throw err
+    }
+    if (type !== 'announcement' && type !== 'banner' && type !== 'product_discount') {
       const err = new Error('Geçersiz kampanya tipi') as Error & { status: number }
       err.status = 400
       throw err
@@ -151,6 +158,13 @@ export const campaignsService = {
       throw err
     }
     const current = campaigns[idx]
+    if (patch.type === 'coupon' && current.type !== 'coupon') {
+      const err = new Error('Kupon kodları Kampanyalar ekranından tanımlanamaz. Kupon Kodları ekranını kullanın.') as Error & {
+        status: number
+      }
+      err.status = 400
+      throw err
+    }
     const nextName = patch.name != null ? String(patch.name).trim() : current.name
     if (nextName.length < 2) {
       const err = new Error('Kampanya adı en az 2 karakter olmalıdır') as Error & { status: number }
