@@ -40,6 +40,21 @@ function resolveCatalogUploadDir(): string {
   return dir
 }
 
+/** Hero videosu Blob’a gider; görsel optimizasyonuna ve R2 indirme akışına girmez. */
+export function isCatalogWebsiteVideo(mimetype: string, originalName: string): boolean {
+  const m = (mimetype || '').toLowerCase().split(';')[0]?.trim() ?? ''
+  if (m === 'video/mp4' || m === 'video/webm') return true
+  const lower = (originalName || '').toLowerCase()
+  if (!/\.(mp4|webm)$/.test(lower)) return false
+  return m === '' || m === 'application/octet-stream'
+}
+
+function catalogVideoContentType(mimetype: string, originalName: string): string {
+  const m = (mimetype || '').toLowerCase().split(';')[0]?.trim() ?? ''
+  if (m === 'video/mp4' || m === 'video/webm') return m
+  return (originalName || '').toLowerCase().endsWith('.webm') ? 'video/webm' : 'video/mp4'
+}
+
 export function classifyCatalogFileType(mimetype: string, originalName: string): CatalogMediaFileType {
   const m = (mimetype || '').toLowerCase().split(';')[0]?.trim() ?? ''
   if (/^image\//.test(m)) return 'IMAGE'
@@ -66,6 +81,8 @@ function safeExt(originalName: string, mimetype: string): string {
     'application/x-msdownload': 'exe',
     'application/x-msi': 'msi',
     'application/x-apple-diskimage': 'dmg',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
   }
   return map[mimetype.toLowerCase()] || 'bin'
 }
@@ -368,6 +385,29 @@ export const catalogMediaService = {
     const fileName = storageFileName
     const mediaFolder = normalizeWebsiteMediaFolder(options?.folder)
     const blobStatus = getVercelBlobConfigStatus()
+
+    if (isCatalogWebsiteVideo(file.mimetype, rawOriginal)) {
+      assertVercelBlobConfigured()
+      const videoFile =
+        file.mimetype === catalogVideoContentType(file.mimetype, rawOriginal)
+          ? file
+          : { ...file, mimetype: catalogVideoContentType(file.mimetype, rawOriginal) }
+      const row = await persistUploadToVercelBlob(
+        videoFile,
+        id,
+        fileName,
+        displayOriginalName,
+        'DOCUMENT',
+        mediaFolder,
+      )
+      console.info('[catalogMedia] upload', {
+        fileType: 'DOCUMENT',
+        folder: mediaFolder,
+        storage: 'vercel-blob',
+        video: true,
+      })
+      return row
+    }
 
     if (fileType === 'IMAGE') {
       assertRasterImageByteLimit(file)

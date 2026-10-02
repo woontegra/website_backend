@@ -21,6 +21,8 @@ const MIME_BY_EXT: Record<string, string> = {
   exe: 'application/x-msdownload',
   msi: 'application/x-msi',
   dmg: 'application/x-apple-diskimage',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
 }
 
 export type R2CatalogFolder = 'products' | 'categories' | 'general' | 'builder'

@@ -3,7 +3,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { classifyCatalogFileType } from '../services/catalogMedia.service'
+import { classifyCatalogFileType, isCatalogWebsiteVideo } from '../services/catalogMedia.service'
 import {
   assertRasterImageByteLimit,
   assertSafePixelCount,
@@ -20,6 +20,17 @@ test('IMAGE olmayan installer/document dosyaları optimize edilmez', () => {
   assert.equal(shouldAttemptRasterOptimization('application/x-msdownload'), false)
   assert.equal(shouldAttemptRasterOptimization('application/pdf'), false)
   assert.equal(shouldAttemptRasterOptimization('application/zip'), false)
+})
+
+test('mp4 ve webm görsel sayılmaz, blob videosu olarak ayrılır', () => {
+  assert.equal(isCatalogWebsiteVideo('video/mp4', 'hero.mp4'), true)
+  assert.equal(isCatalogWebsiteVideo('video/webm', 'hero.webm'), true)
+  assert.equal(isCatalogWebsiteVideo('application/octet-stream', 'hero.mp4'), true)
+  assert.equal(isCatalogWebsiteVideo('image/jpeg', 'photo.jpg'), false)
+  assert.equal(isCatalogWebsiteVideo('image/png', 'clip.mp4'), false)
+  assert.equal(classifyCatalogFileType('image/jpeg', 'photo.jpg'), 'IMAGE')
+  assert.equal(shouldAttemptRasterOptimization('video/mp4'), false)
+  assert.equal(shouldAttemptRasterOptimization('video/webm'), false)
 })
 
 test('SVG rasterize edilmez, JPEG/PNG/WebP/AVIF optimize edilir', () => {
