@@ -17,6 +17,10 @@ import {
 } from './bhWebapi.client'
 import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 import { couponsService } from './coupons.service'
+import {
+  CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE,
+  institutionalCampaignDiscountActive,
+} from '../lib/bhCampaignCouponExclusive'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
 import { BILIRKISI_HESAP_PRODUCT_SLUG } from '../lib/bhAffiliateConstants'
 
@@ -265,6 +269,31 @@ export async function createBhCentralCheckoutOrder(input: {
   const merchandise = kurusToTryDecimal(finalKurus)
   let couponQuote: Awaited<ReturnType<typeof couponsService.quoteCouponForPricedLines>> | null = null
   const requestedCoupon = input.couponCode?.trim() || ''
+  const campaignRate = Number(prep.campaignDiscountRate)
+  const campaignDiscountActive = institutionalCampaignDiscountActive({
+    discountRate: Number.isFinite(campaignRate) ? campaignRate : null,
+  })
+  if (requestedCoupon && campaignDiscountActive) {
+    if (saleRef) {
+      try {
+        await bhUpstreamFetch(
+          'POST',
+          '/api/payment/woontegra/abandon-sale',
+          { merchantOid: saleRef, saleRef },
+          { headers: channelHeaders, timeoutMs: 30_000 },
+        )
+      } catch {
+        /* kampanya+kupon reddi asıl hatadır */
+      }
+    }
+    const err = new Error(CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE) as Error & {
+      status: number
+      publicMessage?: string
+    }
+    err.status = 400
+    err.publicMessage = CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE
+    throw err
+  }
   if (requestedCoupon) {
     try {
       couponQuote = await couponsService.quoteCouponForPricedLines({
@@ -451,11 +480,36 @@ export async function validateBilirkisiCheckoutCoupon(input: {
       campaignPublicCode: input.campaignPublicCode,
       campaignId: input.campaignPublicCode,
     })
-    const body = upstream.ok ? (upstream.data as { quote?: { normalPrice?: unknown; finalPrice?: unknown } }) : null
-    const normal = Number(body?.quote?.normalPrice)
-    const final = Number(body?.quote?.finalPrice)
-    if (Number.isFinite(normal) && normal > 0 && Number.isFinite(final) && final >= 0 && final < normal) {
-      merchandiseTl = Math.round(quote.normalPrice * (final / normal) * 100) / 100
+    const body = upstream.ok
+      ? (upstream.data as {
+          quote?: { normalPrice?: unknown; finalPrice?: unknown; campaign?: { discountRate?: unknown } | null }
+          campaign?: { discountRate?: unknown } | null
+        })
+      : null
+    const upstreamQuote = body?.quote
+    const normal = Number(upstreamQuote?.normalPrice)
+    const final = Number(upstreamQuote?.finalPrice)
+    const rate = Number(upstreamQuote?.campaign?.discountRate ?? body?.campaign?.discountRate)
+    const campaignApplied =
+      institutionalCampaignDiscountActive({
+        discountRate: Number.isFinite(rate) ? rate : null,
+        hasCampaign: true,
+        normalPrice: Number.isFinite(normal) ? normal : null,
+        finalPrice: Number.isFinite(final) ? final : null,
+      }) ||
+      (Number.isFinite(normal) &&
+        normal > 0 &&
+        Number.isFinite(final) &&
+        final >= 0 &&
+        final < normal)
+    if (campaignApplied) {
+      const err = new Error(CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE) as Error & {
+        status: number
+        publicMessage?: string
+      }
+      err.status = 400
+      err.publicMessage = CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE
+      throw err
     }
   }
   const evaluated = await couponsService.quoteCouponForPricedLines({
