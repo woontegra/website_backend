@@ -42,6 +42,11 @@ import { resolveCartProductKeys } from '../lib/resolveCartProductKeys'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
 import { mailService } from './mail.service'
 import {
+  bilirkisiPackageLabel,
+  formatBankTransferMailAmount,
+  shouldSendBilirkisiSubscriptionActivatedMail,
+} from '../lib/bhBankTransferMail'
+import {
   assertOrderDownloadLinesResolvableForCustomerMail,
   buildPaidDownloadMailLinesFromItems,
   checkOrderDownloadLinesForPaidMail,
@@ -1334,6 +1339,53 @@ export type ConfirmBankPaymentInput = {
   adminUserId: string
 }
 
+async function maybeSendBilirkisiSubscriptionActivatedMail(input: {
+  orderId: string
+  paymentProvider: PaymentProvider
+  bhSaleRef: string | null
+  fulfillmentStatusBefore: string | null
+  customerName: string
+  customerEmail: string
+  orderNo: string
+}): Promise<void> {
+  const after = await prisma.order.findUnique({
+    where: { id: input.orderId },
+    select: {
+      bhFulfillmentStatus: true,
+      bhProductType: true,
+      bhSubscriptionPeriod: true,
+      total: true,
+      currency: true,
+      items: { orderBy: { id: 'asc' }, take: 1, select: { productName: true } },
+    },
+  })
+  if (
+    !shouldSendBilirkisiSubscriptionActivatedMail({
+      paymentProvider: input.paymentProvider,
+      bhSaleRef: input.bhSaleRef,
+      fulfillmentStatusBefore: input.fulfillmentStatusBefore,
+      fulfillmentStatusAfter: after?.bhFulfillmentStatus,
+    })
+  ) {
+    return
+  }
+  try {
+    await mailService.sendBilirkisiSubscriptionActivated({
+      customerName: input.customerName,
+      customerEmail: input.customerEmail,
+      orderNo: input.orderNo,
+      productName: after?.items[0]?.productName || 'Bilirkişi Hesap',
+      packageLabel: bilirkisiPackageLabel(after?.bhProductType, after?.bhSubscriptionPeriod),
+      amountFormatted: formatBankTransferMailAmount(Number(after?.total ?? 0), after?.currency || 'TRY'),
+    })
+  } catch (e) {
+    console.error('[orders] bilirkisi havale aktivasyon maili gönderilemedi', {
+      orderNo: input.orderNo,
+      message: e instanceof Error ? e.message : String(e),
+    })
+  }
+}
+
 export const ordersAdminService = {
   async list(q: AdminOrderListQuery) {
     const ppFilter = q.paymentProvider?.trim().toUpperCase().replace(/-/g, '_')
@@ -1480,6 +1532,7 @@ export const ordersAdminService = {
       throw err
     }
     if (order.status === 'PAID' || order.status === 'PROCESSING') {
+      const fulfillmentBefore = order.bhFulfillmentStatus
       try {
         await fulfillPaidOrderDelivery(order.id, undefined)
       } catch (e) {
@@ -1489,6 +1542,15 @@ export const ordersAdminService = {
           message: e instanceof Error ? e.message : String(e),
         })
       }
+      await maybeSendBilirkisiSubscriptionActivatedMail({
+        orderId: order.id,
+        paymentProvider: order.paymentProvider,
+        bhSaleRef: order.bhSaleRef,
+        fulfillmentStatusBefore: fulfillmentBefore,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        orderNo: order.orderNo,
+      })
       return { orderNo: order.orderNo, alreadyPaid: true as const }
     }
     if (order.status !== 'PENDING') {
@@ -1578,15 +1640,17 @@ export const ordersAdminService = {
       msgLines.push('Masaüstü program satırı varsa indirme veya lisans bilgileriniz ayrıca iletilecektir.')
     }
 
-    try {
-      await mailService.sendBankTransferPaymentApproved({
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
-        orderNo: order.orderNo,
-        messageLines: msgLines,
-      })
-    } catch (e) {
-      console.error('[orders] bank approval notice mail failed', e)
+    if (!order.bhSaleRef) {
+      try {
+        await mailService.sendBankTransferPaymentApproved({
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          orderNo: order.orderNo,
+          messageLines: msgLines,
+        })
+      } catch (e) {
+        console.error('[orders] bank approval notice mail failed', e)
+      }
     }
 
     try {
@@ -1598,6 +1662,16 @@ export const ordersAdminService = {
         message: e instanceof Error ? e.message : String(e),
       })
     }
+
+    await maybeSendBilirkisiSubscriptionActivatedMail({
+      orderId: order.id,
+      paymentProvider: order.paymentProvider,
+      bhSaleRef: order.bhSaleRef,
+      fulfillmentStatusBefore: order.bhFulfillmentStatus,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      orderNo: order.orderNo,
+    })
 
     const failedCentral = await prisma.orderItem.findMany({
       where: { orderId: order.id, licenseServerLastError: { not: null } },

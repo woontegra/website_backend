@@ -14,6 +14,10 @@ import {
 } from '../lib/mailDownloadLink'
 import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { shouldDeferPaytrAdminMailUntilPaid } from '../lib/orderAdminMail'
+import {
+  buildBankTransferReceivedMail,
+  buildBilirkisiSubscriptionActivatedMail,
+} from '../lib/bhBankTransferMail'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -871,6 +875,9 @@ export const mailService = {
   async sendBankTransferOrderCreated(data: {
     customerName: string
     customerEmail: string
+    productName?: string | null
+    packageLabel?: string | null
+    includeActivationNote?: boolean
     info: {
       bankName: string
       accountHolder: string
@@ -886,52 +893,48 @@ export const mailService = {
     }
   }) {
     const i = data.info
-    const safeName = escapeHtml(data.customerName)
-    const warn =
-      'Lütfen ödeme açıklamasına sipariş numaranızı yazınız. Açıklama yazılmadığında ödeme onayı gecikebilir.'
-    const linesHtml: string[] = [
-      `<tr><td><b>Sipariş no</b></td><td>${escapeHtml(i.paymentReference)}</td></tr>`,
-      `<tr><td><b>Ödenecek tutar</b></td><td>${escapeHtml(i.amountFormatted)}</td></tr>`,
-      `<tr><td><b>Banka</b></td><td>${escapeHtml(i.bankName)}</td></tr>`,
-      `<tr><td><b>Alıcı / hesap sahibi</b></td><td>${escapeHtml(i.accountHolder)}</td></tr>`,
-    ]
-    if (i.branchName) linesHtml.push(`<tr><td><b>Şube</b></td><td>${escapeHtml(i.branchName)}</td></tr>`)
-    if (i.accountNumber) linesHtml.push(`<tr><td><b>Hesap no</b></td><td>${escapeHtml(i.accountNumber)}</td></tr>`)
-    linesHtml.push(`<tr><td><b>IBAN</b></td><td style="font-family:monospace">${escapeHtml(i.iban)}</td></tr>`)
-    linesHtml.push(
-      `<tr><td><b>Ödeme açıklaması</b></td><td style="font-family:monospace;font-weight:bold">${escapeHtml(i.paymentReference)}</td></tr>`,
-    )
-    const textLines = [
-      `Sipariş no: ${i.paymentReference}`,
-      `Ödenecek tutar: ${i.amountFormatted}`,
-      `Banka: ${i.bankName}`,
-      `Alıcı / hesap sahibi: ${i.accountHolder}`,
-      ...(i.branchName ? [`Şube: ${i.branchName}`] : []),
-      ...(i.accountNumber ? [`Hesap no: ${i.accountNumber}`] : []),
-      `IBAN: ${i.ibanCompact}`,
-      `Ödeme açıklaması (EFT/Havale açıklama alanına yazın): ${i.paymentReference}`,
-      '',
-      warn,
-    ]
-    if (i.instructions) {
-      textLines.splice(textLines.length - 2, 0, `Not: ${i.instructions}`, '')
-      linesHtml.push(`<tr><td colspan="2"><i>${escapeHtml(i.instructions)}</i></td></tr>`)
-    }
-    const textBody = [`Merhaba ${data.customerName},`, '', 'Siparişiniz alındı. Havale/EFT ile ödeme için bilgileriniz:', '', ...textLines, '', 'İyi günler,', 'Woontegra'].join('\n')
+    const mail = buildBankTransferReceivedMail({
+      customerName: data.customerName,
+      orderNo: i.paymentReference,
+      amountFormatted: i.amountFormatted,
+      bankName: i.bankName,
+      accountHolder: i.accountHolder,
+      iban: i.iban,
+      productName: data.productName,
+      packageLabel: data.packageLabel,
+      branchName: i.branchName,
+      accountNumber: i.accountNumber,
+      instructions: i.instructions,
+      includeActivationNote: data.includeActivationNote,
+    })
     await dispatchMail({
       to: data.customerEmail,
-      subject: `Siparişiniz alındı — Havale/EFT ödeme bilgileri — ${i.paymentReference}`,
-      text: textBody,
-      html: `
-        <p>Merhaba ${safeName},</p>
-        <p>Siparişiniz alındı. Aşağıdaki hesaba <b>${escapeHtml(i.amountFormatted)}</b> tutarında Havale veya EFT yapabilirsiniz.</p>
-        <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse;border-color:#ccc;max-width:560px">
-          ${linesHtml.join('')}
-        </table>
-        <p style="margin-top:16px;padding:12px;background:#fff8e6;border:1px solid #f0d060;border-radius:8px"><b>Önemli:</b> ${escapeHtml(warn)}</p>
-        <p>Sorularınız için: <a href="mailto:info@woontegra.com">info@woontegra.com</a></p>
-        <p>İyi günler,<br/>Woontegra</p>
-      `,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    })
+  },
+
+  async sendBilirkisiSubscriptionActivated(data: {
+    customerName: string
+    customerEmail: string
+    orderNo: string
+    productName: string
+    packageLabel: string
+    amountFormatted: string
+  }) {
+    const mail = buildBilirkisiSubscriptionActivatedMail({
+      customerName: data.customerName,
+      orderNo: data.orderNo,
+      productName: data.productName,
+      packageLabel: data.packageLabel,
+      amountFormatted: data.amountFormatted,
+    })
+    await dispatchMail({
+      to: data.customerEmail,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     })
   },
 

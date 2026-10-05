@@ -22,6 +22,11 @@ import {
   institutionalCampaignDiscountActive,
 } from '../lib/bhCampaignCouponExclusive'
 import { getBankTransferCustomerInfo, getPublicBankTransferDisplay } from './bankTransferSettings.service'
+import { mailService } from './mail.service'
+import {
+  bilirkisiPackageLabel,
+  shouldSendBankTransferOrderReceivedMail,
+} from '../lib/bhBankTransferMail'
 import { BILIRKISI_HESAP_PRODUCT_SLUG } from '../lib/bhAffiliateConstants'
 
 export type BhCheckoutBilling = {
@@ -425,6 +430,27 @@ export async function createBhCentralCheckoutOrder(input: {
       ...(info.branchName ? { branchName: info.branchName } : {}),
       ...(info.accountNumber ? { accountNumber: info.accountNumber } : {}),
       paymentReference: info.paymentReference,
+    }
+    if (
+      shouldSendBankTransferOrderReceivedMail({
+        paymentProvider: 'BANK_TRANSFER',
+        createdNewOrder: true,
+      })
+    ) {
+      const receivedMail = {
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        productName: product.name || 'Bilirkişi Hesap',
+        packageLabel: bilirkisiPackageLabel(order.bhProductType, order.bhSubscriptionPeriod),
+        includeActivationNote: true,
+        info,
+      }
+      void mailService.sendBankTransferOrderCreated(receivedMail).catch((mailErr) => {
+        console.error('[bh-checkout] havale sipariş maili gönderilemedi', {
+          orderNo: order.orderNo,
+          message: mailErr instanceof Error ? mailErr.message : String(mailErr),
+        })
+      })
     }
   }
 
