@@ -199,7 +199,10 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
   })
   if (!order) return { errors, provisioned }
   if (order.status !== 'PAID' && order.status !== 'PROCESSING') return { errors, provisioned }
-  if (order.desktopLicensePurchaseContext === 'DESKTOP_LICENSE_RENEWAL') {
+  if (
+    order.desktopLicensePurchaseContext === 'DESKTOP_LICENSE_RENEWAL' ||
+    order.desktopLicensePurchaseContext === 'BILIRKISI_DESKTOP_FIRST_PURCHASE'
+  ) {
     return { errors, provisioned }
   }
 

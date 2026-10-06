@@ -7,6 +7,8 @@ export type WebsiteOrderLicenseRequest = {
   downloadUrl?: string | null
   licenseDays?: number
   maxDevices?: number
+  /** Bilirkişi Desktop ilk satın alma. Diğer ürünlerde gönderilmez. */
+  platform?: 'WINDOWS' | 'MACOS'
   /** Mevcut lisans için mail yeniden denemesinde aktivasyon şifresi üretir */
   resendCredentials?: boolean
 }
@@ -283,6 +285,7 @@ export async function requestWebsiteOrderLicense(
         downloadUrl: input.downloadUrl ?? undefined,
         licenseDays: input.licenseDays,
         maxDevices: input.maxDevices,
+        ...(input.platform ? { platform: input.platform } : {}),
         resendCredentials: input.resendCredentials === true ? true : undefined,
       }),
     })
@@ -449,4 +452,36 @@ export async function requestWebsiteRenewLicense(input: {
     newExpiresAt: typeof result.data.newExpiresAt === 'string' ? result.data.newExpiresAt : undefined,
     error: typeof result.data.error === 'string' ? result.data.error : undefined,
   }
+}
+
+export async function resolveBilirkisiDesktopPurchase(purchaseToken: string): Promise<{
+  ok: boolean
+  status: number
+  data: Record<string, unknown>
+}> {
+  return licenseServerFetch('/api/integrations/website/desktop-purchase/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ purchaseToken }),
+  })
+}
+
+export async function consumeBilirkisiDesktopPurchase(input: {
+  tokenHash: string
+  orderNo: string
+  customerName: string
+  customerEmail: string
+  customerPhone?: string | null
+}): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return licenseServerFetch('/api/integrations/website/desktop-purchase/consume', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tokenHash: input.tokenHash,
+      orderNo: input.orderNo,
+      customerName: input.customerName,
+      customerEmail: input.customerEmail,
+      customerPhone: input.customerPhone ?? null,
+    }),
+  })
 }

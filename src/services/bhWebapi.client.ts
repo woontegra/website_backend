@@ -6,6 +6,7 @@ import {
   resolveBhWebapiBaseUrl,
   resolveBhWebapiRemoteBaseUrl,
 } from '../lib/assertSafeBhUpstream'
+import { applyBhDesktopYearlyOffer } from '../lib/bhDesktopYearlyOffer'
 import {
   mergeListedPriceOverride,
   readBhListedPriceOverride,
@@ -203,6 +204,34 @@ async function readAdminListedPrices(): Promise<{ price: number; priceMonthly: n
   )
 }
 
+/** Sunucu içi okuma. İndirme adresini public ürün cevabına koymaz. */
+export async function readBhAdminProductRow(): Promise<Record<string, unknown> | null> {
+  const { getBhAdminAuthorization, getBhRemoteAdminAuthorization } = await import('./bhAdminAuth.service')
+  const fromResult = (result: BhUpstreamResult): Record<string, unknown> | null => {
+    if (!result.ok) return null
+    return unwrapProductRow(result.data)
+  }
+
+  if (isBhRemoteReadAllowed()) {
+    const remoteAuth = await getBhRemoteAdminAuthorization()
+    if (remoteAuth.ok) {
+      const remote = await bhUpstreamRemoteReadGet('/api/admin/product', {
+        authorization: remoteAuth.authorization,
+      })
+      const row = fromResult(remote)
+      if (row) return row
+    }
+  }
+
+  const localAuth = await getBhAdminAuthorization()
+  if (!localAuth.ok) return null
+  return fromResult(
+    await bhUpstreamFetch('GET', '/api/admin/product', undefined, {
+      authorization: localAuth.authorization,
+    }),
+  )
+}
+
 /** Ürün okuması. Yerel servis kapalıysa yalnız uzak GET kullanılır. */
 export async function readBhPublicProduct(): Promise<BhUpstreamResult> {
   const local = await bhUpstreamFetch('GET', '/api/product')
@@ -219,6 +248,7 @@ export async function readBhPublicProduct(): Promise<BhUpstreamResult> {
     if (adminPrices) data = mergeListedPriceOverride(data, adminPrices)
     const override = await readBhListedPriceOverride()
     if (override) data = mergeListedPriceOverride(data, override)
+    data = applyBhDesktopYearlyOffer(data)
     return { ok: true, status: base.status, data }
   } catch {
     return base

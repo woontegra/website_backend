@@ -13,6 +13,7 @@ import {
   getBhRemoteAdminAuthorization,
 } from '../services/bhAdminAuth.service'
 import { isBhRemoteReadAllowed } from '../lib/assertSafeBhUpstream'
+import { applyBhDesktopYearlyOffer } from '../lib/bhDesktopYearlyOffer'
 import {
   clearBhListedPriceOverride,
   mergeListedPriceOverride,
@@ -251,11 +252,13 @@ export async function getBhAdminProduct(_req: Request, res: Response) {
   if (!result.ok) return sendUpstream(res, result)
   try {
     const override = await readBhListedPriceOverride()
-    if (!override) return sendUpstream(res, result)
+    let data = result.data
+    if (override) data = mergeListedPriceOverride(data, override)
+    data = applyBhDesktopYearlyOffer(data)
     return sendUpstream(res, {
       ok: true,
       status: result.status,
-      data: mergeListedPriceOverride(result.data, override),
+      data,
     })
   } catch {
     return sendUpstream(res, result)

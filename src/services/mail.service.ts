@@ -604,6 +604,7 @@ export const mailService = {
     const desktopLines = entries.filter((l) => !l.downloadUrl.startsWith('saas:'))
 
     for (const l of desktopLines) {
+      if (l.downloadUrl.startsWith('license:')) continue
       if (!resolveDownloadSourceFromRawUrl(l.downloadUrl)) {
         console.error('[mail] sendPaidDownloadOrder: unresolved source after pre-check', {
           orderNo: data.orderNo,
@@ -669,12 +670,16 @@ export const mailService = {
           ? mailInfoTable(licenseRows)
           : `<p style="margin:0 0 12px;font-size:14px;color:#475569;">${escapeMailHtml(l.productName)}</p>`
 
+      const fileBlock = l.downloadUrl.startsWith('license:')
+        ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Kurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.</p>`
+        : `<h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
+          ${mailDownloadButton(downloadHref, 'Programı İndir')}
+          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantısı ödeme onayınıza özel oluşturulmuştur. Linki üçüncü kişilerle paylaşmayınız.</p>`
+
       productSectionsHtml.push(`
         <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #e2e8f0;">
           ${licenseTable}
-          <h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
-          ${mailDownloadButton(downloadHref, 'Programı İndir')}
-          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantısı ödeme onayınıza özel oluşturulmuştur. Linki üçüncü kişilerle paylaşmayınız.</p>
+          ${fileBlock}
         </div>`)
 
       const textLicense =
@@ -689,7 +694,9 @@ export const mailService = {
           : `Program: ${plainName}`
 
       productSectionsText.push(
-        `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
+        l.downloadUrl.startsWith('license:')
+          ? `${textLicense}\nKurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.`
+          : `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
       )
     }
 

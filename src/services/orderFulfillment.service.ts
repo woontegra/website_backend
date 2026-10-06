@@ -33,6 +33,8 @@ import {
   isMkSaasOrderItem,
 } from '../lib/mkSaasDeliveryHelpers'
 import { ensureBilirkisiHesapFulfillment } from './bhCentralCheckout.service'
+import { ensureBilirkisiDesktopFirstPurchases } from './bhDesktopPurchaseFulfill.service'
+import { isBilirkisiDesktopFirstPurchaseContext } from '../lib/desktopLicensePurchaseContext'
 
 const paidOrderDeliveryItemInclude = {
   product: {
@@ -127,7 +129,7 @@ export function checkOrderDownloadLinesForPaidMail(items: OrderItemForDeliveryCh
       })
       return false
     }
-    if (!effective.startsWith('saas:')) {
+    if (!effective.startsWith('saas:') && !effective.startsWith('license:')) {
       if (!resolveDownloadSourceFromRawUrl(effective)) {
         console.error('[orders] Paid digital order delivery URL missing', {
           productName: item.productName,
@@ -202,7 +204,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   const items = fresh.items as unknown as OrderItemForDeliveryCheck[]
 
   // Bilirkişi Hesap: WT PayTR PAID → BH complete-sale (license + BH mail). No WT BH mail.
-  if (fresh.bhSaleRef) {
+  if (fresh.bhSaleRef && !isBilirkisiDesktopFirstPurchaseContext(fresh.desktopLicensePurchaseContext)) {
     const bhResult = await ensureBilirkisiHesapFulfillment(fresh.id)
     if (!bhResult.ok && bhResult.attempted) {
       console.error('[orders] bilirkisi hesap fulfillment error', {
@@ -250,6 +252,15 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   }
 
   const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
+  const desktopFirstResult = await ensureBilirkisiDesktopFirstPurchases(fresh.id)
+  if (desktopFirstResult.errors.length > 0) {
+    console.error('[orders] bilirkisi desktop first purchase errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: desktopFirstResult.errors,
+    })
+  }
+  externalResult.provisioned.push(...desktopFirstResult.provisioned)
   if (externalResult.errors.length > 0) {
     console.error('[orders] external license server errors', {
       orderId: fresh.id,
@@ -305,7 +316,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
 
   if (shouldSendActivationMail && allMailCandidates.length > 0) {
     for (const line of allMailCandidates) {
-      if (line.downloadUrl.startsWith('saas:')) continue
+      if (line.downloadUrl.startsWith('saas:') || line.downloadUrl.startsWith('license:')) continue
       const rawForSource = items.find((i) => i.id === line.id)
         ? mergeOrderItemDownloadUrl(items.find((i) => i.id === line.id)!)
         : line.downloadUrl

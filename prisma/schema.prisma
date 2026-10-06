@@ -618,6 +618,8 @@ model Order {
   desktopLicenseCustomerNumber  String?       @db.VarChar(32)
   desktopLicensePreviousEndDate DateTime?
   desktopLicenseNewEndDate      DateTime?
+  /// Bilirkişi Desktop ilk satın alma platformu. Yenileme alanı değildir.
+  desktopPurchasePlatform       String?       @db.VarChar(16)
   /// Bilirkişi Hesap Woontegra-central PayTR: NEW | RENEWAL
   bhPurchaseContext         String?       @db.VarChar(64)
   /// BH pending payment merchantOid (WTBH…)

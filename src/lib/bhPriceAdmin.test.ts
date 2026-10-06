@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { shouldWaiveMissingCoverOnUpdate } from './publishImageValidation'
 import { publishedProductGalleryUrls } from './publishedProductGallery'
+import { applyBhDesktopYearlyOffer } from './bhDesktopYearlyOffer'
 import { mergeListedPriceOverride, tlInputToKurus } from '../services/bhListedPriceOverride.service'
 
 describe('bilirkişi admin fiyat ve görsel', () => {
@@ -9,6 +10,33 @@ describe('bilirkişi admin fiyat ve görsel', () => {
     assert.equal(tlInputToKurus('20000'), 2_000_000)
     assert.equal(tlInputToKurus('2000'), 200_000)
     assert.equal(tlInputToKurus(''), null)
+  })
+
+  it('masaüstü yıllık fiyat SaaS 20.000 / 2.000 alanlarından gelmez', () => {
+    const merged = applyBhDesktopYearlyOffer({
+      success: true,
+      data: {
+        name: 'Bilirkişi Hesaplama Yazılımı',
+        price: 2_000_000,
+        priceMonthly: 200_000,
+      },
+    }) as {
+      data: {
+        price: number
+        priceMonthly: number
+        windowsPriceYearly: number
+        macosPriceYearly: number
+        windowsLicenseDays: number
+        macosDeviceLimit: number
+      }
+    }
+    assert.equal(merged.data.price, 2_000_000)
+    assert.equal(merged.data.priceMonthly, 200_000)
+    assert.equal(merged.data.windowsPriceYearly, 1_500_000)
+    assert.equal(merged.data.macosPriceYearly, 1_500_000)
+    assert.equal(merged.data.windowsLicenseDays, 365)
+    assert.equal(merged.data.macosDeviceLimit, 1)
+    assert.equal('windowsPriceMonthly' in merged.data, false)
   })
 
   it('override yalnız price ve priceMonthly alanlarını değiştirir', () => {

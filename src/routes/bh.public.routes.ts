@@ -26,6 +26,9 @@ r.get('/payment/bank-transfer-availability', limiter, bh.getBhBankTransferAvaila
 r.post('/payment/bank-transfer-order', limiter, customerAuthMiddleware, bh.postBhBankTransferOrder)
 r.post('/checkout/coupon/validate', limiter, optionalCustomerAuth, bh.postBhCheckoutCouponValidate)
 r.post('/checkout/create-order', limiter, customerAuthMiddleware, bh.postBhCheckoutCreateOrder)
+r.post('/desktop-purchase/resolve', limiter, bh.postBhDesktopPurchaseResolve)
+r.post('/desktop-purchase/quote', limiter, bh.postBhDesktopPlatformQuote)
+r.post('/desktop-purchase/checkout', limiter, customerAuthMiddleware, bh.postBhDesktopPurchaseCheckout)
 r.get('/payment/public-status', limiter, bh.getBhPaymentPublicStatus)
 r.post('/payment/paytr-token-guest', limiter, customerAuthMiddleware, bh.postBhPaytrTokenGuest)
 

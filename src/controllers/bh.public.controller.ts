@@ -17,6 +17,7 @@ import {
 } from '../services/bhAffiliate.service'
 import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
 import { createBhCentralCheckoutOrder, validateBilirkisiCheckoutCoupon } from '../services/bhCentralCheckout.service'
+import { createBhDesktopFirstPurchaseOrder, loadDesktopPurchaseQuote } from '../services/bhDesktopPurchase.service'
 
 function customerUpstreamMessage(error: string): string {
   if (/fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(error)) {
@@ -371,6 +372,102 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
       code: err.code || null,
       message,
     })
+  }
+}
+
+const DESKTOP_CONSENT_KEYS = [
+  'PRE_INFORMATION',
+  'DISTANCE_SALE',
+  'SUBSCRIPTION_AGREEMENT',
+  'KVKK',
+  'WITHDRAWAL_EXCEPTION',
+] as const
+
+function desktopConsentsAccepted(body: Record<string, unknown>): boolean {
+  const raw = (body.legalConsents || body.legal_consents) as Record<string, unknown> | undefined
+  if (!raw || typeof raw !== 'object') return false
+  return DESKTOP_CONSENT_KEYS.every((key) => raw[key] === true)
+}
+
+export async function postBhDesktopPlatformQuote(req: Request, res: Response) {
+  const platformRaw = String(req.body?.platform || req.query?.platform || '').trim().toUpperCase()
+  const platform = platformRaw === 'WINDOWS' || platformRaw === 'MACOS' ? platformRaw : null
+  if (!platform) {
+    return res.status(400).json({ success: false, message: 'Platform WINDOWS veya MACOS olmalıdır.' })
+  }
+  try {
+    const loaded = await loadDesktopPurchaseQuote({ platform })
+    return res.json({ success: true, data: loaded.quote })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    return res.status(err.status || 400).json({ success: false, message: err.message || 'Fiyat alınamadı' })
+  }
+}
+
+export async function postBhDesktopPurchaseResolve(req: Request, res: Response) {
+  const purchaseToken = String(req.body?.purchaseToken || '').trim()
+  if (!purchaseToken) {
+    return res.status(400).json({ success: false, message: 'purchaseToken gerekli.' })
+  }
+  try {
+    const loaded = await loadDesktopPurchaseQuote({ purchaseToken })
+    return res.json({ success: true, data: loaded.quote })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    return res.status(err.status || 400).json({ success: false, message: err.message || 'Satın alma doğrulanamadı' })
+  }
+}
+
+export async function postBhDesktopPurchaseCheckout(req: Request, res: Response) {
+  if (!req.customer?.id || !req.customer.email) {
+    return res.status(401).json({ success: false, message: 'Giriş gerekli.' })
+  }
+  const body = (req.body || {}) as Record<string, unknown>
+  if (body.renewalToken || body.renew) {
+    return res.status(400).json({ success: false, message: 'Lisans yenileme bu satın alma akışında yapılmaz.' })
+  }
+  if (!desktopConsentsAccepted(body)) {
+    return res.status(400).json({ success: false, message: 'Sözleşme onayları gerekli.' })
+  }
+  const billingRaw =
+    body.billingInfo && typeof body.billingInfo === 'object'
+      ? (body.billingInfo as Record<string, unknown>)
+      : {}
+  const sanitized = sanitizeBhCheckoutBilling(billingRaw, req.customer.email)
+  if (!sanitized.ok) {
+    return res.status(400).json({ success: false, message: sanitized.message })
+  }
+  const platformRaw = String(body.platform || '').trim().toUpperCase()
+  const platform = platformRaw === 'WINDOWS' || platformRaw === 'MACOS' ? platformRaw : null
+  const purchaseToken = String(body.purchaseToken || '').trim() || null
+  try {
+    const created = await createBhDesktopFirstPurchaseOrder({
+      req,
+      customerId: req.customer.id,
+      customerEmail: req.customer.email,
+      customerName: String(sanitized.billingInfo.fullName || sanitized.billingInfo.name || req.customer.email),
+      customerPhone: String(sanitized.billingInfo.phone || '').trim() || null,
+      purchaseToken,
+      platform,
+      billingInfo: sanitized.billingInfo,
+      checkoutIdempotencyKey: String(body.checkoutIdempotencyKey || '').trim() || null,
+      paymentProvider: body.paymentProvider === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'PAYTR',
+    })
+    return res.status(201).json({
+      success: true,
+      data: {
+        orderNo: created.orderNo,
+        orderId: created.orderId,
+        totalTl: created.totalTl,
+        platform: created.platform,
+        paymentProvider: body.paymentProvider === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'PAYTR',
+        amountFormatted: created.amountFormatted ?? null,
+        bankTransfer: created.bankTransfer ?? null,
+      },
+    })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    return res.status(err.status || 400).json({ success: false, message: err.message || 'Sipariş oluşturulamadı' })
   }
 }
 
