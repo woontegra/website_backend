@@ -945,6 +945,47 @@ export const mailService = {
     })
   },
 
+  async sendBilirkisiDesktopTrialMail(data: {
+    customerName: string
+    customerEmail: string
+    platformLabel: string
+    trialDays: number
+    expiresAt: string
+    downloadUrl: string
+  }) {
+    const safeName = escapeHtml(data.customerName)
+    const safePlatform = escapeHtml(data.platformLabel)
+    const safeUrl = escapeHtml(data.downloadUrl)
+    const expiresLabel = escapeHtml(
+      new Date(data.expiresAt).toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short' }),
+    )
+    const subject = `Bilirkişi Hesap ${data.platformLabel} deneme lisansınız`
+    const text = [
+      `Merhaba ${data.customerName},`,
+      '',
+      `Bilirkişi Hesap ${data.platformLabel} denemeniz ${data.trialDays} gün süreyle oluşturuldu.`,
+      `Bitiş: ${new Date(data.expiresAt).toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short' })}`,
+      '',
+      'Kurulumu İndir:',
+      data.downloadUrl,
+      '',
+      'Woontegra',
+    ].join('\n')
+    const html = mailHtmlDocument(
+      'Bilirkişi Hesap',
+      `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Merhaba ${safeName},</p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Bilirkişi Hesap ${safePlatform} denemeniz ${data.trialDays} gün süreyle oluşturuldu. Bitiş: ${expiresLabel}.</p>
+      ${mailDownloadButton(data.downloadUrl, 'Kurulumu İndir')}
+      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;word-break:break-all;"><a href="${safeUrl}" style="color:#2563eb;text-decoration:none;">${safeUrl}</a></p>`,
+    )
+    await dispatchMail({
+      to: data.customerEmail,
+      subject,
+      text,
+      html,
+    })
+  },
+
   async sendDesktopLicenseMail(data: {
     customerName: string
     customerEmail: string

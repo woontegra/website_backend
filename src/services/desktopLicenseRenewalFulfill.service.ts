@@ -20,8 +20,10 @@ export type DesktopLicenseRenewalSuccess = {
 
 function renewalDaysForItem(item: {
   quantity: number
+  downloadUrl?: string | null
   product?: { licenseDays: number | null } | null
 }): number {
+  if (item.downloadUrl === 'license:BILIRKISI_DESKTOP') return 365
   const perUnit = Math.max(1, item.product?.licenseDays ?? 365)
   const qty = Math.max(1, item.quantity)
   return perUnit * qty
@@ -30,7 +32,9 @@ function renewalDaysForItem(item: {
 function isDesktopRenewalOrderItem(item: {
   product?: { slug: string | null; licenseAppCode: string | null; licenseRequired: boolean | null; productType: string } | null
   productSlug: string | null
+  downloadUrl?: string | null
 }): boolean {
+  if (item.downloadUrl === 'license:BILIRKISI_DESKTOP') return true
   return isCentralDesktopLicenseProduct({
     slug: item.productSlug ?? item.product?.slug,
     licenseAppCode: item.product?.licenseAppCode,

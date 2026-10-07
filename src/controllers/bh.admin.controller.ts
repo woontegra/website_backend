@@ -21,6 +21,15 @@ import {
   saveBhListedPriceOverrideFromTl,
 } from '../services/bhListedPriceOverride.service'
 
+/**
+ * BH servis hesabı 401/403, Woontegra admin oturumunun geçersiz olduğu anlamına gelmez.
+ * Oturum kontrolü route üzerindeki authMiddleware üzerinde kalır.
+ */
+function withoutWebsiteSessionStatus(result: BhUpstreamResult): BhUpstreamResult {
+  if (result.ok || (result.status !== 401 && result.status !== 403)) return result
+  return { ...result, status: 502 }
+}
+
 function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstreamFetch>>) {
   if (result.ok) {
     return res.status(result.status).json(result.data ?? { success: true })
@@ -247,6 +256,54 @@ async function readBhAdminProductUpstream(timeoutMs = 30_000): Promise<BhUpstrea
   })
 }
 
+const DESKTOP_DELIVERY_KEYS = [
+  'windowsDownloadUrl',
+  'windowsVersion',
+  'windowsFileSize',
+  'windowsDownloadButtonLabel',
+  'macosDownloadUrl',
+  'macosVersion',
+  'macosFileSize',
+  'macosDownloadButtonLabel',
+] as const
+
+function unwrapAdminProduct(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object') return null
+  const body = data as { data?: unknown }
+  if (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
+    return body.data as Record<string, unknown>
+  }
+  return data as Record<string, unknown>
+}
+
+/** Kayıt yerel BH ürününe yazılır. Form yenilenince uzak okumanın üzerine bu alanlar gelir. */
+function overlayLocalDesktopDelivery(data: unknown, local: Record<string, unknown> | null): unknown {
+  if (!local || !data || typeof data !== 'object') return data
+  const apply = (row: Record<string, unknown>) => {
+    const next = { ...row }
+    for (const key of DESKTOP_DELIVERY_KEYS) {
+      const value = local[key]
+      if (typeof value === 'string' && value.trim()) next[key] = value
+    }
+    return next
+  }
+  const obj = data as Record<string, unknown>
+  if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
+    return { ...obj, data: apply(obj.data as Record<string, unknown>) }
+  }
+  return apply(obj)
+}
+
+async function readLocalDesktopDelivery(): Promise<Record<string, unknown> | null> {
+  const auth = await getBhAdminAuthorization()
+  if (!auth.ok) return null
+  const local = await bhUpstreamFetch('GET', '/api/admin/product?readOnly=1', undefined, {
+    authorization: auth.authorization,
+  })
+  if (!local.ok) return null
+  return unwrapAdminProduct(local.data)
+}
+
 export async function getBhAdminProduct(_req: Request, res: Response) {
   const result = await readBhAdminProductUpstream()
   if (!result.ok) return sendUpstream(res, result)
@@ -254,6 +311,7 @@ export async function getBhAdminProduct(_req: Request, res: Response) {
     const override = await readBhListedPriceOverride()
     let data = result.data
     if (override) data = mergeListedPriceOverride(data, override)
+    data = overlayLocalDesktopDelivery(data, await readLocalDesktopDelivery())
     data = applyBhDesktopYearlyOffer(data)
     return sendUpstream(res, {
       ok: true,
@@ -294,7 +352,8 @@ export async function postBhAdminProduct(req: Request, res: Response) {
   const auth = await getBhAdminAuthorization()
   if (!auth.ok) {
     if (localBhUnreachable(auth.status)) return respondWithSavedListedPrices(res, body)
-    return res.status(auth.status).json({ success: false, message: auth.error })
+    const status = auth.status === 401 || auth.status === 403 ? 502 : auth.status
+    return res.status(status).json({ success: false, message: auth.error })
   }
   const result = await bhUpstreamFetch('POST', '/api/admin/product', body, {
     authorization: auth.authorization,
@@ -308,7 +367,7 @@ export async function postBhAdminProduct(req: Request, res: Response) {
     }
     return sendUpstream(res, result)
   }
-  if (!localBhUpstreamDown(result)) return sendUpstream(res, result)
+  if (!localBhUpstreamDown(result)) return sendUpstream(res, withoutWebsiteSessionStatus(result))
   return respondWithSavedListedPrices(res, body)
 }
 

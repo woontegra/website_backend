@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import '../types/express-request-customer'
 import {
   bhManualCallback,
   bhUpstreamFetch,
@@ -18,6 +19,7 @@ import {
 import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
 import { createBhCentralCheckoutOrder, validateBilirkisiCheckoutCoupon } from '../services/bhCentralCheckout.service'
 import { createBhDesktopFirstPurchaseOrder, loadDesktopPurchaseQuote } from '../services/bhDesktopPurchase.service'
+import { startBhDesktopTrial } from '../services/bhDesktopTrial.service'
 
 function customerUpstreamMessage(error: string): string {
   if (/fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(error)) {
@@ -396,7 +398,14 @@ export async function postBhDesktopPlatformQuote(req: Request, res: Response) {
     return res.status(400).json({ success: false, message: 'Platform WINDOWS veya MACOS olmalıdır.' })
   }
   try {
-    const loaded = await loadDesktopPurchaseQuote({ platform })
+    const loaded = await loadDesktopPurchaseQuote({
+      platform,
+      campaignPublicCode: String(req.body?.campaignPublicCode || req.body?.campaignId || '').trim() || null,
+      couponCode: String(req.body?.couponCode || '').trim() || null,
+      customerEmail: req.customer?.email || null,
+      purpose: req.body?.purpose === 'RENEWAL' ? 'RENEWAL' : 'NEW',
+      barAssociationKey: String(req.body?.barAssociationKey || '').trim() || null,
+    })
     return res.json({ success: true, data: loaded.quote })
   } catch (e) {
     const err = e as Error & { status?: number }
@@ -410,7 +419,12 @@ export async function postBhDesktopPurchaseResolve(req: Request, res: Response) 
     return res.status(400).json({ success: false, message: 'purchaseToken gerekli.' })
   }
   try {
-    const loaded = await loadDesktopPurchaseQuote({ purchaseToken })
+    const loaded = await loadDesktopPurchaseQuote({
+      purchaseToken,
+      campaignPublicCode: String(req.body?.campaignPublicCode || req.body?.campaignId || '').trim() || null,
+      couponCode: String(req.body?.couponCode || '').trim() || null,
+      customerEmail: req.customer?.email || null,
+    })
     return res.json({ success: true, data: loaded.quote })
   } catch (e) {
     const err = e as Error & { status?: number }
@@ -423,7 +437,7 @@ export async function postBhDesktopPurchaseCheckout(req: Request, res: Response)
     return res.status(401).json({ success: false, message: 'Giriş gerekli.' })
   }
   const body = (req.body || {}) as Record<string, unknown>
-  if (body.renewalToken || body.renew) {
+  if (body.renew && !body.renewalToken) {
     return res.status(400).json({ success: false, message: 'Lisans yenileme bu satın alma akışında yapılmaz.' })
   }
   if (!desktopConsentsAccepted(body)) {
@@ -448,7 +462,10 @@ export async function postBhDesktopPurchaseCheckout(req: Request, res: Response)
       customerName: String(sanitized.billingInfo.fullName || sanitized.billingInfo.name || req.customer.email),
       customerPhone: String(sanitized.billingInfo.phone || '').trim() || null,
       purchaseToken,
+      renewalToken: String(body.renewalToken || '').trim() || null,
       platform,
+      campaignPublicCode: String(body.campaignPublicCode || body.campaignId || '').trim() || null,
+      couponCode: String(body.couponCode || '').trim() || null,
       billingInfo: sanitized.billingInfo,
       checkoutIdempotencyKey: String(body.checkoutIdempotencyKey || '').trim() || null,
       paymentProvider: body.paymentProvider === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'PAYTR',
@@ -478,6 +495,33 @@ export async function postBhCheckoutCouponValidate(req: Request, res: Response) 
     .toLowerCase()
   const productType = productTypeRaw === 'monthly' || productTypeRaw === 'annual' ? productTypeRaw : null
   const couponCode = String(body.couponCode || body.code || '').trim()
+  const desktopPlatformRaw = String(body.desktopPlatform || '').trim().toUpperCase()
+  const desktopPlatform = desktopPlatformRaw === 'WINDOWS' || desktopPlatformRaw === 'MACOS' ? desktopPlatformRaw : null
+  if (desktopPlatform) {
+    if (!couponCode) {
+      return res.status(400).json({ success: false, message: 'Bu kupon bulunamadı.' })
+    }
+    try {
+      const loaded = await loadDesktopPurchaseQuote({
+        platform: desktopPlatform,
+        campaignPublicCode: String(body.campaignPublicCode || body.campaignId || '').trim() || null,
+        couponCode,
+        customerEmail: req.customer?.email || String(body.customerEmail || '').trim() || null,
+        purpose: body.purpose === 'RENEWAL' ? 'RENEWAL' : 'NEW',
+        barAssociationKey: String(body.barAssociationKey || '').trim() || null,
+      })
+      if (!loaded.couponQuote) {
+        return res.status(400).json({ success: false, message: 'Bu kupon bu sepet için indirim uygulamıyor.' })
+      }
+      return res.json({ success: true, data: { ...loaded.couponQuote, currency: 'TRY' } })
+    } catch (e) {
+      const err = e as Error & { status?: number; publicMessage?: string }
+      return res.status(err.status || 400).json({
+        success: false,
+        message: err.publicMessage || err.message || 'Kupon doğrulanamadı.',
+      })
+    }
+  }
   if (!productType) {
     return res.status(400).json({ success: false, message: 'productType monthly|annual gerekli.' })
   }
@@ -703,6 +747,15 @@ export async function postBhRenewalResolve(req: Request, res: Response) {
     timeoutMs: 20_000,
   })
   return sendUpstream(res, result)
+}
+
+export async function postBhDesktopTrial(req: Request, res: Response) {
+  const body = (req.body || {}) as Record<string, unknown>
+  const result = await startBhDesktopTrial({
+    platformRaw: body.platform,
+    profileRaw: body,
+  })
+  return res.status(result.status).json(result.body)
 }
 
 export async function postBhRenewalQuote(req: Request, res: Response) {

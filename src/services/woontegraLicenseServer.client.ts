@@ -7,7 +7,9 @@ export type WebsiteOrderLicenseRequest = {
   downloadUrl?: string | null
   licenseDays?: number
   maxDevices?: number
-  /** Bilirkişi Desktop ilk satın alma. Diğer ürünlerde gönderilmez. */
+  /** Yalnız AKTUERYA_SAAS. Diğer ürünlerde gönderilmez. */
+  plan?: 'monthly' | 'yearly'
+  /** Yalnız AKTUERYA_DESKTOP. Diğer ürünlerde gönderilmez. */
   platform?: 'WINDOWS' | 'MACOS'
   /** Mevcut lisans için mail yeniden denemesinde aktivasyon şifresi üretir */
   resendCredentials?: boolean
@@ -285,6 +287,7 @@ export async function requestWebsiteOrderLicense(
         downloadUrl: input.downloadUrl ?? undefined,
         licenseDays: input.licenseDays,
         maxDevices: input.maxDevices,
+        ...(input.plan ? { plan: input.plan } : {}),
         ...(input.platform ? { platform: input.platform } : {}),
         resendCredentials: input.resendCredentials === true ? true : undefined,
       }),
@@ -451,6 +454,60 @@ export async function requestWebsiteRenewLicense(input: {
     previousExpiresAt: typeof result.data.previousExpiresAt === 'string' ? result.data.previousExpiresAt : undefined,
     newExpiresAt: typeof result.data.newExpiresAt === 'string' ? result.data.newExpiresAt : undefined,
     error: typeof result.data.error === 'string' ? result.data.error : undefined,
+  }
+}
+
+export type BilirkisiDesktopTrialRequest = {
+  email: string
+  phone: string
+  platform: 'WINDOWS' | 'MACOS'
+  trialDays: number
+}
+
+export type BilirkisiDesktopTrialResult = {
+  success: boolean
+  code?: string
+  message?: string
+  grantId?: string
+  platform?: string
+  expiresAt?: string
+  resumed?: boolean
+  offlineGraceDays?: number
+}
+
+export async function requestBilirkisiDesktopTrial(
+  input: BilirkisiDesktopTrialRequest,
+): Promise<BilirkisiDesktopTrialResult> {
+  const result = await licenseServerFetch('/api/integrations/website/bilirkisi-desktop-trial', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      appCode: 'BILIRKISI_DESKTOP',
+      email: input.email,
+      phone: input.phone,
+      platform: input.platform,
+      trialDays: input.trialDays,
+    }),
+  })
+  const code = typeof result.data.code === 'string' ? result.data.code : undefined
+  const message =
+    typeof result.data.message === 'string'
+      ? result.data.message
+      : typeof result.data.error === 'string'
+        ? result.data.error
+        : undefined
+  if (!result.ok || result.data.success !== true) {
+    return { success: false, code, message: message || 'Deneme lisansı oluşturulamadı' }
+  }
+  return {
+    success: true,
+    code,
+    message,
+    grantId: typeof result.data.grantId === 'string' ? result.data.grantId : undefined,
+    platform: typeof result.data.platform === 'string' ? result.data.platform : input.platform,
+    expiresAt: typeof result.data.expiresAt === 'string' ? result.data.expiresAt : undefined,
+    resumed: result.data.resumed === true,
+    offlineGraceDays: typeof result.data.offlineGraceDays === 'number' ? result.data.offlineGraceDays : 0,
   }
 }
 

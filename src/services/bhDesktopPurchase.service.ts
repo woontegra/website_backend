@@ -2,13 +2,29 @@ import { PaymentProvider, Prisma, ProductType } from '@prisma/client'
 import type { Request } from 'express'
 import { prisma } from '../lib/prisma'
 import { getClientIp } from '../lib/clientIp'
-import { selectDesktopYearlyOffer } from '../lib/bhDesktopYearlyOffer'
+import {
+  BH_DESKTOP_LICENSE_DAYS,
+  BH_DESKTOP_MAX_DEVICES,
+  BH_DESKTOP_YEARLY_PRICE_KURUS,
+  selectDesktopYearlyOffer,
+} from '../lib/bhDesktopYearlyOffer'
 import {
   hashDesktopPurchaseToken,
   isOpaqueDesktopPurchaseToken,
   publicDesktopPurchaseQuote,
 } from '../lib/bhDesktopPurchaseQuote'
-import { BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT } from '../lib/desktopLicensePurchaseContext'
+import {
+  BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT,
+  DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL,
+} from '../lib/desktopLicensePurchaseContext'
+import { chargeBhDesktop } from '../lib/bhDesktopPayable'
+import { CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE } from '../lib/bhCampaignCouponExclusive'
+import { bhUpstreamFetch } from './bhWebapi.client'
+import { couponsService } from './coupons.service'
+import {
+  bindDesktopLicenseRenewalToken,
+  resolveDesktopLicenseRenewalToken,
+} from './desktopLicenseRenewal.service'
 import { readBhPublicProduct } from './bhWebapi.client'
 import { ensureBilirkisiHesapCatalogProduct } from './ensureBilirkisiHesapProduct.service'
 import { getPublicBankTransferDisplay, getBankTransferCustomerInfo } from './bankTransferSettings.service'
@@ -24,9 +40,144 @@ function kurusToTryDecimal(kurus: number): Prisma.Decimal {
   return new Prisma.Decimal((Math.round(kurus) / 100).toFixed(2))
 }
 
+async function previousDesktopBarCampaignCode(customerEmail: string | null | undefined): Promise<string | null> {
+  const email = customerEmail?.trim().toLowerCase() || ''
+  if (!email) return null
+  const previous = await prisma.order.findFirst({
+    where: {
+      customerEmail: { equals: email, mode: 'insensitive' },
+      status: { in: ['PAID', 'PROCESSING'] },
+      bhCampaignPublicCode: { not: null },
+      items: { some: { downloadUrl: 'license:BILIRKISI_DESKTOP' } },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { bhCampaignPublicCode: true },
+  })
+  const code = previous?.bhCampaignPublicCode?.trim() || ''
+  return code || null
+}
+
+async function readDesktopCampaignRate(input: {
+  purpose: 'NEW' | 'RENEWAL'
+  campaignPublicCode?: string | null
+  barAssociationKey?: string | null
+}) {
+  const code = input.campaignPublicCode?.trim() || ''
+  const barKey = input.barAssociationKey?.trim() || ''
+  if (input.purpose === 'NEW' && !code) return { discountRate: 0, campaign: null as Record<string, unknown> | null }
+  if (input.purpose === 'RENEWAL' && !code && !barKey) {
+    return { discountRate: 0, campaign: null as Record<string, unknown> | null }
+  }
+  const result = await bhUpstreamFetch(
+    'POST',
+    '/api/campaigns/desktop-discount',
+    {
+      purpose: input.purpose,
+      campaignPublicCode: code || undefined,
+      barAssociationKey: barKey || undefined,
+    },
+    { timeoutMs: 20_000 },
+  )
+  if (!result.ok) {
+    const err = new Error('Kampanya oranı doğrulanamadı') as Error & { status: number }
+    err.status = 503
+    throw err
+  }
+  const data = (result.data || {}) as { discountRate?: unknown; campaign?: Record<string, unknown> | null }
+  const rate = Number(data.discountRate)
+  return {
+    discountRate: Number.isFinite(rate) && rate > 0 ? rate : 0,
+    campaign: data.campaign ?? null,
+  }
+}
+
+function desktopYearlyOffer(productData: unknown, platform: 'WINDOWS' | 'MACOS') {
+  return (
+    selectDesktopYearlyOffer(productData, platform) ??
+    selectDesktopYearlyOffer(
+      {
+        windowsPriceYearly: BH_DESKTOP_YEARLY_PRICE_KURUS,
+        macosPriceYearly: BH_DESKTOP_YEARLY_PRICE_KURUS,
+        windowsLicenseDays: BH_DESKTOP_LICENSE_DAYS,
+        macosLicenseDays: BH_DESKTOP_LICENSE_DAYS,
+        windowsDeviceLimit: BH_DESKTOP_MAX_DEVICES,
+        macosDeviceLimit: BH_DESKTOP_MAX_DEVICES,
+      },
+      platform,
+    )
+  )
+}
+
+async function applyDesktopCommercialPrice<T extends { priceKurus: number; platform: 'WINDOWS' | 'MACOS' }>(
+  quote: T,
+  input: {
+    purpose: 'NEW' | 'RENEWAL'
+    campaignPublicCode?: string | null
+    barAssociationKey?: string | null
+    couponCode?: string | null
+    customerEmail?: string | null
+  },
+) {
+  const listTl = quote.priceKurus / 100
+  let campaignPublicCode = input.campaignPublicCode
+  let barAssociationKey = input.barAssociationKey
+  if (input.purpose === 'RENEWAL' && !campaignPublicCode?.trim() && !barAssociationKey?.trim()) {
+    campaignPublicCode = await previousDesktopBarCampaignCode(input.customerEmail)
+  }
+  const campaign = await readDesktopCampaignRate({
+    purpose: input.purpose,
+    campaignPublicCode,
+    barAssociationKey,
+  })
+  const requestedCoupon = input.couponCode?.trim() || ''
+  if (requestedCoupon && campaign.discountRate > 0) {
+    const err = new Error(CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE) as Error & { status: number }
+    err.status = 400
+    throw err
+  }
+  let couponPercent: number | null = null
+  let couponQuote: Awaited<ReturnType<typeof couponsService.quoteCouponForPricedLines>> | null = null
+  if (requestedCoupon) {
+    const catalog = await ensureBilirkisiHesapCatalogProduct()
+    couponQuote = await couponsService.quoteCouponForPricedLines({
+      code: requestedCoupon,
+      customerEmail: input.customerEmail,
+      lines: [{ productId: catalog.id, quantity: 1, unitPrice: listTl }],
+    })
+    if (couponQuote.discountType === 'percent') couponPercent = couponQuote.discountValue
+  }
+  const charged = chargeBhDesktop({
+    listTl,
+    campaignDiscountRate: campaign.discountRate,
+    couponPercent,
+    couponRequested: Boolean(requestedCoupon),
+  })
+  if (!charged.ok) {
+    const err = new Error(charged.message) as Error & { status: number }
+    err.status = 400
+    throw err
+  }
+  const totalTl = couponQuote && campaign.discountRate <= 0 ? couponQuote.total : charged.charge.totalTl
+  return {
+    quote: {
+      ...quote,
+      priceKurus: Math.round(totalTl * 100),
+      normalPriceKurus: quote.priceKurus,
+      campaign: campaign.campaign,
+    },
+    couponQuote,
+    campaignRate: campaign.discountRate,
+  }
+}
+
 export async function loadDesktopPurchaseQuote(input: {
   purchaseToken?: string | null
   platform?: 'WINDOWS' | 'MACOS' | null
+  campaignPublicCode?: string | null
+  barAssociationKey?: string | null
+  couponCode?: string | null
+  customerEmail?: string | null
+  purpose?: 'NEW' | 'RENEWAL'
 }) {
   const product = await readBhPublicProduct()
   if (!product.ok) {
@@ -55,14 +206,15 @@ export async function loadDesktopPurchaseQuote(input: {
       err.status = 400
       throw err
     }
-    const offer = selectDesktopYearlyOffer(product.data, platform)
+    const offer = desktopYearlyOffer(product.data, platform)
     const quote = offer ? publicDesktopPurchaseQuote(resolved.data, offer) : null
     if (!quote) {
       const err = new Error('Masaüstü yıllık fiyatı bulunamadı') as Error & { status: number }
       err.status = 409
       throw err
     }
-    return { quote, tokenHash: hashDesktopPurchaseToken(token) }
+    const priced = await applyDesktopCommercialPrice(quote, { ...input, purpose: input.purpose ?? 'NEW' })
+    return { ...priced, tokenHash: hashDesktopPurchaseToken(token), renewalToken: null as string | null }
   }
 
   const platform = input.platform
@@ -71,25 +223,26 @@ export async function loadDesktopPurchaseQuote(input: {
     err.status = 400
     throw err
   }
-  const offer = selectDesktopYearlyOffer(product.data, platform)
+  const offer = desktopYearlyOffer(product.data, platform)
   if (!offer) {
     const err = new Error('Masaüstü yıllık fiyatı bulunamadı') as Error & { status: number }
     err.status = 409
     throw err
   }
-  return {
-    quote: {
+  const priced = await applyDesktopCommercialPrice(
+    {
       product: 'BILIRKISI_DESKTOP' as const,
       platform,
       period: 'yearly' as const,
-      purpose: 'FIRST_PURCHASE' as const,
+      purpose: input.purpose === 'RENEWAL' ? ('RENEWAL' as const) : ('FIRST_PURCHASE' as const),
       fromTrial: false,
       priceKurus: offer.priceKurus,
       licenseDays: offer.licenseDays,
       maxDevices: offer.maxDevices,
     },
-    tokenHash: null as string | null,
-  }
+    { ...input, purpose: input.purpose ?? 'NEW' },
+  )
+  return { ...priced, tokenHash: null as string | null, renewalToken: null as string | null }
 }
 
 export async function createBhDesktopFirstPurchaseOrder(input: {
@@ -99,7 +252,10 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
   customerName: string
   customerPhone?: string | null
   purchaseToken?: string | null
+  renewalToken?: string | null
   platform?: 'WINDOWS' | 'MACOS' | null
+  campaignPublicCode?: string | null
+  couponCode?: string | null
   billingInfo: Record<string, unknown>
   checkoutIdempotencyKey?: string | null
   paymentProvider?: 'PAYTR' | 'BANK_TRANSFER'
@@ -108,7 +264,11 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
   const idem = input.checkoutIdempotencyKey?.trim() || null
   if (idem) {
     const existing = await prisma.order.findUnique({ where: { checkoutIdempotencyKey: idem } })
-    if (existing && existing.desktopLicensePurchaseContext === BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT) {
+    if (
+      existing &&
+      (existing.desktopLicensePurchaseContext === BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT ||
+        existing.desktopLicensePurchaseContext === DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL)
+    ) {
       return {
         orderId: existing.id,
         orderNo: existing.orderNo,
@@ -118,9 +278,28 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
     }
   }
 
+  const renewalToken = input.renewalToken?.trim() || ''
+  let renewalView: Awaited<ReturnType<typeof resolveDesktopLicenseRenewalToken>> | null = null
+  if (renewalToken) {
+    if (input.purchaseToken?.trim()) {
+      const err = new Error('Yenileme ve ilk satın alma aynı siparişte birleşmez.') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+    renewalView = await resolveDesktopLicenseRenewalToken(renewalToken)
+    if (renewalView.productCode !== 'BILIRKISI_DESKTOP') {
+      const err = new Error('Bu yenileme bağlantısı Bilirkişi Desktop lisansı için değil.') as Error & { status: number }
+      err.status = 400
+      throw err
+    }
+  }
   const loaded = await loadDesktopPurchaseQuote({
-    purchaseToken: input.purchaseToken,
+    purchaseToken: renewalView ? null : input.purchaseToken,
     platform: input.platform,
+    campaignPublicCode: input.campaignPublicCode,
+    couponCode: input.couponCode,
+    customerEmail: email,
+    purpose: renewalView ? 'RENEWAL' : 'NEW',
   })
   const paymentProvider =
     input.paymentProvider === 'BANK_TRANSFER' ? PaymentProvider.BANK_TRANSFER : PaymentProvider.PAYTR
@@ -166,9 +345,26 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
       digitalServiceWaiverAcceptedAt: new Date(),
       legalCartProductTypes: String(ProductType.DOWNLOAD),
       checkoutIdempotencyKey: idem,
-      desktopLicensePurchaseContext: BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT,
-      desktopLicenseSessionId: loaded.tokenHash,
+      desktopLicensePurchaseContext: renewalView
+        ? DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL
+        : BILIRKISI_DESKTOP_FIRST_PURCHASE_CONTEXT,
+      desktopLicenseSessionId: renewalView ? null : loaded.tokenHash,
       desktopPurchasePlatform: loaded.quote.platform,
+      couponCodeSnapshot: loaded.couponQuote?.code ?? null,
+      couponCampaignSlugSnapshot: loaded.couponQuote?.couponId ?? null,
+      couponCampaignNameSnapshot: loaded.couponQuote?.couponName ?? null,
+      couponDiscountTypeSnapshot: loaded.couponQuote?.discountType ?? null,
+      couponDiscountValueSnapshot: loaded.couponQuote
+        ? new Prisma.Decimal(loaded.couponQuote.discountValue.toFixed(2))
+        : null,
+      couponDiscountAmount: loaded.couponQuote
+        ? new Prisma.Decimal(loaded.couponQuote.discountAmount.toFixed(2))
+        : null,
+      campaignDiscountRateSnapshot: Math.round(loaded.campaignRate),
+      bhCampaignPublicCode:
+        loaded.quote.campaign && typeof loaded.quote.campaign.publicCode === 'string'
+          ? loaded.quote.campaign.publicCode
+          : input.campaignPublicCode?.trim() || null,
       bhPurchaseContext: null,
       bhSaleRef: null,
       items: {
@@ -186,6 +382,10 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
       },
     },
   })
+
+  if (renewalToken) {
+    await bindDesktopLicenseRenewalToken({ renewalToken, externalOrderId: order.orderNo })
+  }
 
   let amountFormatted: string | undefined
   let bankTransfer: Record<string, string> | undefined

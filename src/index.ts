@@ -267,4 +267,8 @@ app.listen(PORT, () => {
   } else {
     console.log('[startup] Merkezi lisans sunucusu:', process.env.LICENSE_SERVER_URL ?? 'http://localhost:4001')
   }
+  console.log(
+    '[startup] GMAIL_APP_PASSWORD:',
+    process.env.GMAIL_APP_PASSWORD?.trim() ? 'configured' : 'missing',
+  )
 })

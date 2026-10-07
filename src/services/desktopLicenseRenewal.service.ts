@@ -132,7 +132,7 @@ export async function issueDesktopLicenseRenewalLink(input: {
   licenseKey: string
   deviceHash: string
   appCode: string
-}): Promise<{ purchaseUrl: string; expiresAt: string }> {
+}): Promise<{ purchaseUrl: string; expiresAt: string; renewalToken?: string }> {
   const licenseKey = normalizeLicenseKey(input.licenseKey)
   const deviceHash = input.deviceHash.trim()
   const appCode = normalizeLicenseAppCodeInput(input.appCode)
@@ -141,6 +141,33 @@ export async function issueDesktopLicenseRenewalLink(input: {
   }
   if (!isValidLicenseAppCodeFormat(appCode)) {
     throw new Error('LICENSE_RENEWAL_UNSUPPORTED_PRODUCT')
+  }
+
+  if (appCode === 'BILIRKISI_DESKTOP') {
+    const validation = await publicValidateLicense({ licenseKey, deviceHash, appCode })
+    if (!validation.valid) throw new Error('LICENSE_RENEWAL_NOT_ELIGIBLE')
+    const open = await requestDesktopRenewalOpen({ licenseKey, deviceHash, appCode })
+    if (!isDesktopRenewalOpenSuccessful(open)) throw new Error('LICENSE_RENEWAL_NOT_ELIGIBLE')
+    const licenseExpiresAt = validation.expiresAt ? new Date(validation.expiresAt) : open.expiresAt ? new Date(open.expiresAt) : null
+    const plainToken = randomBytes(32).toString('base64url')
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS)
+    await prisma.desktopLicenseRenewalSession.create({
+      data: {
+        tokenHash: hashToken(plainToken),
+        licenseId: open.licenseId ?? null,
+        licenseKeyHash: hashLicenseKey(licenseKey),
+        targetLicenseKey: licenseKey,
+        appCode,
+        deviceHash,
+        customerNumber: open.customerNumber ?? null,
+        customerName: open.customerName ?? null,
+        licenseExpiresAt,
+        purpose: PURPOSE,
+        expiresAt,
+      },
+    })
+    const purchaseUrl = `${woontegraWebsiteBaseUrl()}/yazilimlar/bilirkisi-hesap/satin-al?renewalToken=${encodeURIComponent(plainToken)}`
+    return { purchaseUrl, expiresAt: expiresAt.toISOString(), renewalToken: plainToken }
   }
 
   const catalogProduct = await prisma.product.findFirst({

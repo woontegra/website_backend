@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import * as freeDownloads from '../controllers/freeProductDownload.controller'
 import * as orderDownloads from '../controllers/orderProductDownload.controller'
+import * as bhDesktopTrialDownloads from '../controllers/bhDesktopTrialDownload.controller'
 
 export const downloadsFreeRoutes = Router()
 
@@ -9,3 +10,4 @@ downloadsFreeRoutes.get('/free/:productSlug/:fileType', freeDownloads.getFreePro
 
 downloadsFreeRoutes.head('/order/:token', orderDownloads.headOrderDownload)
 downloadsFreeRoutes.get('/order/:token', orderDownloads.getOrderDownload)
+downloadsFreeRoutes.get('/bh-desktop-trial/:token', bhDesktopTrialDownloads.getBhDesktopTrialDownload)
