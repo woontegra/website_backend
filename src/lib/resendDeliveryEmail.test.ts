@@ -143,6 +143,18 @@ test('SaaS yeniden gönderimi masaüstü kurulum bilgisi eklemez', () => {
   assert.equal(line.licenses, undefined)
 })
 
+test('katalog ürün tipi SAAS olsa da Bilirkişi masaüstü satırı SaaS mailine dönüşmez', () => {
+  const order = desktopOrder()
+  order.items[0]!.productType = 'SAAS'
+  order.items[0]!.productSlug = 'bilirkisi-hesap'
+  const built = buildResendDeliveryMailLines(order, { windows: windowsUrl, macos: null })
+  assert.equal(built.ok, true)
+  if (!built.ok) return
+  assert.equal(built.lines[0]?.downloadUrl, 'license:BILIRKISI_DESKTOP')
+  assert.equal(built.lines[0]?.saas, undefined)
+  assert.equal(built.lines[0]?.windowsInstallerUrl, windowsUrl)
+})
+
 test('lisans anahtarı yoksa yeni anahtar üretilmez', () => {
   const order = desktopOrder()
   order.items[0]!.licenseServerLicenseKey = null

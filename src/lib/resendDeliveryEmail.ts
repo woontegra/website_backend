@@ -83,6 +83,7 @@ export function deliveryResendBlockReason(input: {
 }
 
 function isSaasItem(item: ResendOrderItemInput): boolean {
+  if (isBhDesktopItem(item)) return false
   const url = (item.downloadUrl ?? '').trim()
   if (url.startsWith('saas:')) return true
   if (item.productType === 'SAAS') return true
@@ -138,36 +139,6 @@ export function buildResendDeliveryMailLines(
 
   const lines: ResendDeliveryMailLine[] = []
   for (const item of order.items) {
-    if (isSaasItem(item)) {
-      const membership = membershipForItem(order.orderNo, item, order.memberships)
-      if (!membership?.licenseKey.trim() || !membership.ownerEmail.trim()) {
-        return { ok: false, message: 'Mevcut SaaS erişim kaydı bulunamadı. Yeni üyelik oluşturulmaz.' }
-      }
-      const downloadUrl = (item.downloadUrl ?? '').trim().startsWith('saas:')
-        ? item.downloadUrl!.trim()
-        : 'saas:muvekkil-kasa'
-      lines.push({
-        id: item.id,
-        productName: item.productName,
-        productId: item.productId ?? undefined,
-        downloadUrl,
-        saas: {
-          licenseKey: membership.licenseKey.trim(),
-          ownerEmail: membership.ownerEmail.trim(),
-          ownerUsername: null,
-          temporaryPassword: null,
-          loginUrl: null,
-          musteriNo: null,
-          tenantSlug: membership.tenantSlug,
-          tenantName: membership.tenantSlug,
-          licenseStartDate: membership.licenseStartDate.toISOString(),
-          licenseEndDate: membership.licenseEndDate.toISOString(),
-          mkActivationMailSent: false,
-        },
-      })
-      continue
-    }
-
     if (isBhDesktopItem(item)) {
       const licenseKey = existingLicenseKey(item, order.licenses)
       if (!licenseKey) {
@@ -212,6 +183,36 @@ export function buildResendDeliveryMailLines(
         }
       }
       lines.push(line)
+      continue
+    }
+
+    if (isSaasItem(item)) {
+      const membership = membershipForItem(order.orderNo, item, order.memberships)
+      if (!membership?.licenseKey.trim() || !membership.ownerEmail.trim()) {
+        return { ok: false, message: 'Mevcut SaaS erişim kaydı bulunamadı. Yeni üyelik oluşturulmaz.' }
+      }
+      const downloadUrl = (item.downloadUrl ?? '').trim().startsWith('saas:')
+        ? item.downloadUrl!.trim()
+        : 'saas:muvekkil-kasa'
+      lines.push({
+        id: item.id,
+        productName: item.productName,
+        productId: item.productId ?? undefined,
+        downloadUrl,
+        saas: {
+          licenseKey: membership.licenseKey.trim(),
+          ownerEmail: membership.ownerEmail.trim(),
+          ownerUsername: null,
+          temporaryPassword: null,
+          loginUrl: null,
+          musteriNo: null,
+          tenantSlug: membership.tenantSlug,
+          tenantName: membership.tenantSlug,
+          licenseStartDate: membership.licenseStartDate.toISOString(),
+          licenseEndDate: membership.licenseEndDate.toISOString(),
+          mkActivationMailSent: false,
+        },
+      })
       continue
     }
 
