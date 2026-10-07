@@ -19,6 +19,7 @@ import {
   buildBilirkisiSubscriptionActivatedMail,
 } from '../lib/bhBankTransferMail'
 import {
+  bhPurchaseInstallerMail,
   bhWindowsPurchaseInstallerMail,
   resolveBilirkisiWindowsPurchaseInstallerUrl,
 } from '../lib/bhDesktopPurchaseMail'
@@ -119,6 +120,10 @@ type PaidOrderMailLine = {
   licenseId?: string
   /** Admin windowsDownloadUrl. Yalnız BILIRKISI_DESKTOP Windows satın alma mailinde kullanılır. */
   windowsInstallerUrl?: string | null
+  /** Yeniden gönderimde macOS gibi Windows dışı kurulum. Boşsa otomatik mail yolu değişmez. */
+  purchaseInstaller?: { url: string; label: string; heading: string } | null
+  /** Yeniden gönderimde platform ve lisans süresi. Otomatik mail bu alanı doldurmaz. */
+  deliveryFacts?: { label: string; value: string }[]
   saas?: PaidOrderMailSaasDetails
 }
 
@@ -594,7 +599,7 @@ export const mailService = {
     customerEmail: string
     orderNo: string
     lines: PaidOrderMailLine[]
-  }) {
+  }): Promise<boolean> {
     const support = 'destek@woontegra.com'
     const safeName = escapeHtml(data.customerName)
     const safeOrder = escapeHtml(data.orderNo)
@@ -603,7 +608,7 @@ export const mailService = {
     const entries = data.lines.filter((x) => x.downloadUrl?.trim())
     if (entries.length === 0) {
       console.warn('[mail] sendPaidDownloadOrder skipped: no delivery lines', { orderNo: data.orderNo })
-      return
+      return false
     }
 
     const saasLines = entries.filter(isSaasMailLine)
@@ -616,7 +621,7 @@ export const mailService = {
           orderNo: data.orderNo,
           productName: l.productName,
         })
-        return
+        return false
       }
     }
 
@@ -628,7 +633,7 @@ export const mailService = {
         saasLines,
         support,
       })
-      return
+      return true
     }
 
     const productSectionsHtml: string[] = []
@@ -670,6 +675,12 @@ export const mailService = {
           mono: true,
         })
       }
+      for (const fact of l.deliveryFacts ?? []) {
+        const label = fact.label.trim()
+        const value = fact.value.trim()
+        if (!label || !value) continue
+        licenseRows.push({ label, value: escapeMailHtml(value) })
+      }
 
       const licenseTable =
         licenseRows.length > 1
@@ -680,7 +691,11 @@ export const mailService = {
         l.downloadUrl,
         l.windowsInstallerUrl,
       )
-      const windowsInstaller = windowsInstallerUrl ? bhWindowsPurchaseInstallerMail(windowsInstallerUrl) : null
+      const windowsInstaller = l.purchaseInstaller
+        ? bhPurchaseInstallerMail(l.purchaseInstaller)
+        : windowsInstallerUrl
+          ? bhWindowsPurchaseInstallerMail(windowsInstallerUrl)
+          : null
       const fileBlock = windowsInstaller
         ? windowsInstaller.html
         : l.downloadUrl.startsWith('license:')
@@ -705,19 +720,23 @@ export const mailService = {
               })
               .join('\n')
           : `Program: ${plainName}`
+      const factLines = (l.deliveryFacts ?? [])
+        .filter((fact) => fact.label.trim() && fact.value.trim())
+        .map((fact) => `${fact.label.trim()}: ${fact.value.trim()}`)
+      const textLicenseWithFacts = factLines.length > 0 ? `${textLicense}\n${factLines.join('\n')}` : textLicense
 
       productSectionsText.push(
         windowsInstaller
-          ? `${textLicense}\n${windowsInstaller.text}`
+          ? `${textLicenseWithFacts}\n${windowsInstaller.text}`
           : l.downloadUrl.startsWith('license:')
-            ? `${textLicense}\nKurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.`
-            : `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
+            ? `${textLicenseWithFacts}\nKurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.`
+            : `${textLicenseWithFacts}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
       )
     }
 
     if (productSectionsHtml.length === 0) {
       console.warn('[mail] sendPaidDownloadOrder skipped: no renderable lines', { orderNo: data.orderNo })
-      return
+      return false
     }
 
     const hasDesktopLicenseMail = desktopLines.some(
@@ -779,6 +798,7 @@ export const mailService = {
       text: textBody,
       html: mailHtmlDocument(docTitle, bodyHtml),
     })
+    return true
   },
 
   /** Yeni sipariş — admin / iletişim e-postasına bildirim */

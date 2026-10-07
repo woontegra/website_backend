@@ -592,6 +592,11 @@ model Order {
   paymentConfirmedAt        DateTime?
   paymentConfirmedById      String?
   downloadEmailSentAt       DateTime?
+  /// Admin “E-postayı Tekrar Gönder” başarılı olduğunda. İlk ödeme mailinin zamanı downloadEmailSentAt olarak kalır.
+  deliveryEmailResentAt     DateTime?
+  deliveryEmailResendCount  Int           @default(0)
+  /// Çift tıklamada ikinci gönderimi engellemek için kısa süreli kilit. Başarılı veya hatalı bitince temizlenir.
+  deliveryEmailResendLockAt DateTime?
   preInfoAcceptedAt         DateTime?
   distanceSalesAcceptedAt   DateTime?
   kvkkReadAt                DateTime?

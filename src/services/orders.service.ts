@@ -2008,6 +2008,8 @@ export const ordersAdminService = {
       currency: order.currency,
       paidAt: order.paidAt?.toISOString() ?? null,
       downloadEmailSentAt: order.downloadEmailSentAt?.toISOString() ?? null,
+      deliveryEmailResentAt: order.deliveryEmailResentAt?.toISOString() ?? null,
+      deliveryEmailResendCount: order.deliveryEmailResendCount ?? 0,
       deliveryEmailStatus,
       deliveryEmailStatusLabel: deliveryEmailStatusLabel(deliveryEmailStatus),
       saasDeliveryStatus,

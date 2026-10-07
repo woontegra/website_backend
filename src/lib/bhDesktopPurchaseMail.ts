@@ -15,11 +15,21 @@ export function resolveBilirkisiWindowsPurchaseInstallerUrl(
 }
 
 export function bhWindowsPurchaseInstallerMail(url: string): { html: string; text: string } {
-  const safeUrl = escapeMailHtml(url)
+  return bhPurchaseInstallerMail({
+    url,
+    label: BH_WINDOWS_INSTALLER_BUTTON_LABEL,
+    heading: 'Windows kurulumu',
+  })
+}
+
+/** Platforma göre kurulum düğmesi. Otomatik Windows maili bhWindowsPurchaseInstallerMail kullanmaya devam eder. */
+export function bhPurchaseInstallerMail(input: { url: string; label: string; heading: string }): { html: string; text: string } {
+  const safeUrl = escapeMailHtml(input.url)
+  const safeHeading = escapeMailHtml(input.heading)
   return {
-    html: `<h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Windows kurulumu</h3>
-      ${mailDownloadButton(url, BH_WINDOWS_INSTALLER_BUTTON_LABEL)}
+    html: `<h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">${safeHeading}</h3>
+      ${mailDownloadButton(input.url, input.label)}
       <p style="margin:8px 0 0;font-size:13px;line-height:1.6;word-break:break-all;"><a href="${safeUrl}" style="color:#2563eb;text-decoration:none;">${safeUrl}</a></p>`,
-    text: `${BH_WINDOWS_INSTALLER_BUTTON_LABEL}:\n${url}`,
+    text: `${input.label}:\n${input.url}`,
   }
 }

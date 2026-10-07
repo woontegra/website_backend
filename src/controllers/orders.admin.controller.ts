@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { JwtPayload } from '../middleware/auth.middleware'
 import { ordersAdminService } from '../services/orders.service'
+import { ResendDeliveryEmailError, resendPaidDeliveryEmail } from '../services/resendDeliveryEmail.service'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -103,6 +104,21 @@ export async function adminUpdateOrder(req: Request, res: Response) {
     const err = e as Error & { status?: number }
     const code = err.status ?? 500
     return res.status(code).json({ success: false, message: err.message || 'Güncellenemedi' })
+  }
+}
+
+export async function adminResendDeliveryEmail(req: Request, res: Response) {
+  const id = String(req.params.id ?? '').trim()
+  if (!id) {
+    return res.status(400).json({ success: false, message: 'Geçersiz id' })
+  }
+  try {
+    const data = await resendPaidDeliveryEmail(id)
+    return res.json({ success: true, data })
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    const code = e instanceof ResendDeliveryEmailError ? e.status : (err.status ?? 500)
+    return res.status(code).json({ success: false, message: err.message || 'Teslimat e-postası gönderilemedi' })
   }
 }
 
