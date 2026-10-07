@@ -6,7 +6,10 @@ import { resolveDownloadSourceFromRawUrl } from '../lib/downloadStream'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl } from '../lib/productDeliveryUrl'
 import { resolveMuvekkilKasaSaasLoginHref } from '../lib/mailDownloadLink'
+import { BILIRKISI_DESKTOP_ORDER_DOWNLOAD } from '../lib/bhDesktopPurchaseMail'
+import { selectBhDesktopInstallerUrl } from '../lib/bhDesktopTrialDownload'
 import { mailService } from './mail.service'
+import { bhUpstreamFetch, readBhAdminProductRow } from './bhWebapi.client'
 import {
   ensureExternalLicenseServerOrders,
   ensurePaidOrderLicenses,
@@ -89,7 +92,7 @@ export function buildPaidDownloadMailLinesFromItems(
 function buildMailLinesFromExternalLicenses(
   provisioned: ExternalLicenseProvisionSuccess[],
   items: OrderItemForDeliveryCheck[],
-): { id: string; productName: string; downloadUrl: string; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
+): { id: string; productName: string; downloadUrl: string; windowsInstallerUrl: string | null; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
   const itemById = new Map(items.map((i) => [i.id, i]))
   return provisioned
     .filter(
@@ -104,6 +107,7 @@ function buildMailLinesFromExternalLicenses(
         id: p.orderItemId,
         productName: p.productName,
         downloadUrl,
+        windowsInstallerUrl: null as string | null,
         licenses: [
           {
             licenseKey: p.licenseKey!,
@@ -113,6 +117,16 @@ function buildMailLinesFromExternalLicenses(
       }
     })
     .filter((l) => l.downloadUrl)
+}
+
+async function currentBilirkisiWindowsInstallerUrl(): Promise<string | null> {
+  const product = await readBhAdminProductRow()
+  const localProduct = await bhUpstreamFetch('GET', '/api/product')
+  const localRow =
+    localProduct.ok && localProduct.data && typeof localProduct.data === 'object'
+      ? (((localProduct.data as { data?: unknown }).data as Record<string, unknown> | null) ?? null)
+      : null
+  return selectBhDesktopInstallerUrl(localRow, 'WINDOWS') || selectBhDesktopInstallerUrl(product, 'WINDOWS')
 }
 
 /**
@@ -277,7 +291,16 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
   })
 
   const itemsForLocalMail = items.filter((i) => !i.product?.licenseRequired)
-  const externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
+  let externalMailLines = buildMailLinesFromExternalLicenses(externalResult.provisioned, items)
+  if (
+    fresh.desktopPurchasePlatform === 'WINDOWS' &&
+    externalMailLines.some((line) => line.downloadUrl === BILIRKISI_DESKTOP_ORDER_DOWNLOAD)
+  ) {
+    const windowsInstallerUrl = await currentBilirkisiWindowsInstallerUrl()
+    externalMailLines = externalMailLines.map((line) =>
+      line.downloadUrl === BILIRKISI_DESKTOP_ORDER_DOWNLOAD ? { ...line, windowsInstallerUrl } : line,
+    )
+  }
   const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
   const mkSaasRenewMailLines = await buildMuvekkilKasaSaasRenewMailLines(items, mkSaasRenewResult.renewed)
   const mkSaasLicensePurchaseMailLines = await buildMuvekkilKasaSaasLicensePurchaseMailLines(
@@ -293,6 +316,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     productName: string
     downloadUrl: string
     licenses?: { licenseKey: string; activationPassword?: string }[]
+    windowsInstallerUrl?: string | null
   }[] = [...externalMailLines, ...mkSaasMailLines, ...mkSaasRenewMailLines, ...mkSaasLicensePurchaseMailLines]
 
   if (localLinesRaw.length > 0) {

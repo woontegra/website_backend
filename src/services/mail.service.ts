@@ -18,6 +18,10 @@ import {
   buildBankTransferReceivedMail,
   buildBilirkisiSubscriptionActivatedMail,
 } from '../lib/bhBankTransferMail'
+import {
+  bhWindowsPurchaseInstallerMail,
+  resolveBilirkisiWindowsPurchaseInstallerUrl,
+} from '../lib/bhDesktopPurchaseMail'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -113,6 +117,8 @@ type PaidOrderMailLine = {
   licenseKeys?: string[]
   licenses?: { licenseKey: string; activationPassword?: string }[]
   licenseId?: string
+  /** Admin windowsDownloadUrl. Yalnız BILIRKISI_DESKTOP Windows satın alma mailinde kullanılır. */
+  windowsInstallerUrl?: string | null
   saas?: PaidOrderMailSaasDetails
 }
 
@@ -670,9 +676,16 @@ export const mailService = {
           ? mailInfoTable(licenseRows)
           : `<p style="margin:0 0 12px;font-size:14px;color:#475569;">${escapeMailHtml(l.productName)}</p>`
 
-      const fileBlock = l.downloadUrl.startsWith('license:')
-        ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Kurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.</p>`
-        : `<h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
+      const windowsInstallerUrl = resolveBilirkisiWindowsPurchaseInstallerUrl(
+        l.downloadUrl,
+        l.windowsInstallerUrl,
+      )
+      const windowsInstaller = windowsInstallerUrl ? bhWindowsPurchaseInstallerMail(windowsInstallerUrl) : null
+      const fileBlock = windowsInstaller
+        ? windowsInstaller.html
+        : l.downloadUrl.startsWith('license:')
+          ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#475569;">Kurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.</p>`
+          : `<h3 style="margin:20px 0 8px;font-size:15px;color:#0f172a;">Program dosyası</h3>
           ${mailDownloadButton(downloadHref, 'Programı İndir')}
           <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#64748b;">İndirme bağlantısı ödeme onayınıza özel oluşturulmuştur. Linki üçüncü kişilerle paylaşmayınız.</p>`
 
@@ -694,9 +707,11 @@ export const mailService = {
           : `Program: ${plainName}`
 
       productSectionsText.push(
-        l.downloadUrl.startsWith('license:')
-          ? `${textLicense}\nKurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.`
-          : `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
+        windowsInstaller
+          ? `${textLicense}\n${windowsInstaller.text}`
+          : l.downloadUrl.startsWith('license:')
+            ? `${textLicense}\nKurulum dosyası hazır olduğunda hesabınızdaki siparişten indirilebilir.`
+            : `${textLicense}\nProgramı İndir: ${downloadHref}\n(İndirme bağlantısı ödeme onayınıza özeldir.)`,
       )
     }
 
