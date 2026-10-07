@@ -18,6 +18,7 @@ import {
   DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL,
 } from '../lib/desktopLicensePurchaseContext'
 import { chargeBhDesktop } from '../lib/bhDesktopPayable'
+import { invoiceAddressFromBilling } from '../lib/orderInvoiceAddress'
 import { CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE } from '../lib/bhCampaignCouponExclusive'
 import { bhUpstreamFetch } from './bhWebapi.client'
 import { couponsService } from './coupons.service'
@@ -330,6 +331,7 @@ export async function createBhDesktopFirstPurchaseOrder(input: {
         ? String(billing.taxNumber || '').trim() || null
         : String(billing.identityNumber || '').trim() || null,
       companyName: corporate ? String(billing.companyName || '').trim() || null : null,
+      ...invoiceAddressFromBilling(billing as Record<string, unknown>),
       status: 'PENDING',
       paymentProvider,
       subtotal: total,

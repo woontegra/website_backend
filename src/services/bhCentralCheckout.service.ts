@@ -17,6 +17,7 @@ import {
 } from './bhWebapi.client'
 import { safeProcessAffiliateCommissionForOrder } from './affiliateCommission.service'
 import { couponsService } from './coupons.service'
+import { invoiceAddressFromBilling } from '../lib/orderInvoiceAddress'
 import {
   CAMPAIGN_COUPON_EXCLUSIVE_MESSAGE,
   institutionalCampaignDiscountActive,
@@ -344,6 +345,7 @@ export async function createBhCentralCheckoutOrder(input: {
         ? String(billing.taxNumber || '').trim() || null
         : String(billing.identityNumber || '').trim() || null,
       companyName: corporate ? String(billing.companyName || '').trim() || null : null,
+      ...invoiceAddressFromBilling(billing as Record<string, unknown>),
       status: OrderStatus.PENDING,
       paymentProvider,
       subtotal: merchandise,

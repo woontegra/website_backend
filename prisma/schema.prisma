@@ -575,6 +575,10 @@ model Order {
   taxOffice                 String?
   taxNumber                 String?
   companyName               String?
+  /// Checkout anındaki fatura adresi. Müşteri adres defterinden ayrıdır.
+  billingCity               String?
+  billingDistrict           String?
+  billingAddress            String?       @db.Text
   status                    OrderStatus   @default(PENDING)
   paymentProvider           PaymentProvider @default(PAYTR)
   subtotal                  Decimal       @db.Decimal(12, 2)

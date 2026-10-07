@@ -62,6 +62,11 @@ import { renderLegalTemplate } from './legalTemplate.service'
 import { campaignsService } from './campaigns.service'
 import { couponsService } from './coupons.service'
 import { saveCustomerAddressFromCheckout } from './customerAddressCheckout.service'
+import {
+  invoiceAddressFromCheckoutBook,
+  invoiceAddressFromDelivery,
+  resolveOrderInvoiceAddress,
+} from '../lib/orderInvoiceAddress'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -836,6 +841,7 @@ export const ordersService = {
             taxOffice: input.taxOffice?.trim() || null,
             taxNumber: input.taxNumber?.trim() || null,
             companyName: input.companyName?.trim() || null,
+            ...invoiceAddressFromDelivery(input),
             paymentProvider,
             subtotal: merchandise,
             total,
@@ -1878,6 +1884,21 @@ export const ordersAdminService = {
     })
     if (!order) return null
 
+    const checkoutAddresses = order.customerId
+      ? await prisma.customerAddress.findMany({
+          where: { customerId: order.customerId },
+          select: { city: true, district: true, addressLine: true, createdAt: true },
+        })
+      : []
+    const invoiceAddress = resolveOrderInvoiceAddress(
+      {
+        billingCity: order.billingCity?.trim() || null,
+        billingDistrict: order.billingDistrict?.trim() || null,
+        billingAddress: order.billingAddress?.trim() || null,
+      },
+      invoiceAddressFromCheckoutBook(order.createdAt, checkoutAddresses),
+    )
+
     const deliveryItems = order.items as unknown as OrderItemForDeliveryCheck[]
     const mailLines = buildPaidDownloadMailLinesFromItems(deliveryItems)
     const deliveryCheckOk = checkOrderDownloadLinesForPaidMail(deliveryItems)
@@ -2033,6 +2054,9 @@ export const ordersAdminService = {
         taxOffice: order.taxOffice,
         taxNumber: order.taxNumber,
         companyName: order.companyName,
+        billingCity: invoiceAddress.billingCity,
+        billingDistrict: invoiceAddress.billingDistrict,
+        billingAddress: invoiceAddress.billingAddress,
       },
       licenses: order.licenses.map((lic) => {
         const activeActs = lic.activations.filter((a) => a.status === 'ACTIVE')
