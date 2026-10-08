@@ -24,6 +24,7 @@ import {
   resolveBilirkisiWindowsPurchaseInstallerUrl,
 } from '../lib/bhDesktopPurchaseMail'
 import { buildBilirkisiDesktopDemoApplicationMail } from '../lib/bhDesktopDemoApplication'
+import { buildCustomerRegistrationAdminMail } from '../lib/customerRegistrationAdminMail'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -1247,6 +1248,21 @@ export const mailService = {
         logoUrl,
         footerHtml,
       }),
+    })
+  },
+
+  /** Yeni müşteri kaydı — yönetici bildirimi. Şifre içermez. */
+  async sendCustomerRegistrationAdminNotification(data: {
+    customerName: string
+    customerEmail: string
+    registeredAt: Date
+  }) {
+    const mail = buildCustomerRegistrationAdminMail(data)
+    await dispatchMail({
+      to: mail.to,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     })
   },
 

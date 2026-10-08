@@ -185,6 +185,19 @@ export const customersService = {
           })
         })
 
+      void mailService
+        .sendCustomerRegistrationAdminNotification({
+          customerName: name,
+          customerEmail: email,
+          registeredAt: c.createdAt,
+        })
+        .catch((err) => {
+          console.error('[customers] Yeni müşteri kaydı bildirimi gönderilemedi', {
+            email,
+            error: err instanceof Error ? err.message : err,
+          })
+        })
+
       return result
     } catch (e) {
       if (isUniqueViolation(e)) throw new Error('Bu e-posta adresi zaten kayıtlı')
