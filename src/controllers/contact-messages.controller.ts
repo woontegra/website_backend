@@ -53,7 +53,8 @@ export async function create(req: Request, res: Response) {
 
     res.status(201).json({ success: true, data: contactMessage })
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Mesaj gönderilemedi', error })
+    console.error('[contact-messages] create failed', error)
+    res.status(500).json({ success: false, message: 'Mesaj gönderilemedi. Lütfen tekrar deneyin.' })
   }
 }
 

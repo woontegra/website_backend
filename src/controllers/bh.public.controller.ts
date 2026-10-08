@@ -20,6 +20,7 @@ import { buildWoontegraBhSalesChannelHeaders } from '../lib/bhSalesChannel'
 import { createBhCentralCheckoutOrder, validateBilirkisiCheckoutCoupon } from '../services/bhCentralCheckout.service'
 import { createBhDesktopFirstPurchaseOrder, loadDesktopPurchaseQuote } from '../services/bhDesktopPurchase.service'
 import { startBhDesktopTrial } from '../services/bhDesktopTrial.service'
+import { presentPublicClientError } from '../lib/publicClientError'
 
 function customerUpstreamMessage(error: string): string {
   if (/fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(error)) {
@@ -32,11 +33,23 @@ function sendUpstream(res: Response, result: Awaited<ReturnType<typeof bhUpstrea
   if (result.ok) {
     return res.status(result.status).json(result.data ?? { success: true })
   }
-  const payload =
-    result.data && typeof result.data === 'object'
-      ? result.data
-      : { success: false, message: customerUpstreamMessage(result.error) }
-  return res.status(result.status || 502).json(payload)
+  const rawMessage =
+    result.data && typeof result.data === 'object' && typeof (result.data as { message?: unknown }).message === 'string'
+      ? String((result.data as { message: string }).message)
+      : customerUpstreamMessage(result.error)
+  const presented = presentPublicClientError(result.data, {
+    status: result.status || 502,
+    message: rawMessage,
+    fallback: 'Bilirkişi Hesap servisine şu an ulaşılamıyor. Lütfen kısa süre sonra tekrar deneyin.',
+  })
+  if (presented.body.message !== rawMessage.trim()) {
+    return res.status(presented.status).json(presented.body)
+  }
+  if (result.data && typeof result.data === 'object') {
+    const { stack: _stack, ...rest } = result.data as Record<string, unknown>
+    return res.status(result.status || 502).json(rest)
+  }
+  return res.status(result.status || 502).json(presented.body)
 }
 
 /**
@@ -369,10 +382,14 @@ export async function postBhCheckoutCreateOrder(req: Request, res: Response) {
     const message = /fetch failed|econnrefused|enotfound|econnreset|socket|zaman aşımı/i.test(raw)
       ? 'Bilirkişi Hesap servisine şu an ulaşılamıyor. Lütfen kısa süre sonra tekrar deneyin.'
       : raw
-    return res.status(err.status || 500).json({
-      success: false,
-      code: err.code || null,
+    const presented = presentPublicClientError(err, {
+      status: err.status || 500,
       message,
+      fallback: 'Sipariş oluşturulamadı',
+    })
+    return res.status(presented.status).json({
+      ...presented.body,
+      ...(presented.body.message === message && err.code ? { code: err.code } : {}),
     })
   }
 }
@@ -409,7 +426,12 @@ export async function postBhDesktopPlatformQuote(req: Request, res: Response) {
     return res.json({ success: true, data: loaded.quote })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status || 400).json({ success: false, message: err.message || 'Fiyat alınamadı' })
+    const presented = presentPublicClientError(err, {
+      status: err.status || 400,
+      message: err.message || 'Fiyat alınamadı',
+      fallback: 'Fiyat alınamadı',
+    })
+    return res.status(presented.status).json(presented.body)
   }
 }
 
@@ -428,7 +450,12 @@ export async function postBhDesktopPurchaseResolve(req: Request, res: Response) 
     return res.json({ success: true, data: loaded.quote })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status || 400).json({ success: false, message: err.message || 'Satın alma doğrulanamadı' })
+    const presented = presentPublicClientError(err, {
+      status: err.status || 400,
+      message: err.message || 'Satın alma doğrulanamadı',
+      fallback: 'Satın alma doğrulanamadı',
+    })
+    return res.status(presented.status).json(presented.body)
   }
 }
 
@@ -484,7 +511,12 @@ export async function postBhDesktopPurchaseCheckout(req: Request, res: Response)
     })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status || 400).json({ success: false, message: err.message || 'Sipariş oluşturulamadı' })
+    const presented = presentPublicClientError(err, {
+      status: err.status || 400,
+      message: err.message || 'Sipariş oluşturulamadı',
+      fallback: 'Sipariş oluşturulamadı',
+    })
+    return res.status(presented.status).json(presented.body)
   }
 }
 
@@ -516,10 +548,12 @@ export async function postBhCheckoutCouponValidate(req: Request, res: Response) 
       return res.json({ success: true, data: { ...loaded.couponQuote, currency: 'TRY' } })
     } catch (e) {
       const err = e as Error & { status?: number; publicMessage?: string }
-      return res.status(err.status || 400).json({
-        success: false,
+      const presented = presentPublicClientError(err, {
+        status: err.status || 400,
         message: err.publicMessage || err.message || 'Kupon doğrulanamadı.',
+        fallback: 'Kupon doğrulanamadı.',
       })
+      return res.status(presented.status).json(presented.body)
     }
   }
   if (!productType) {
@@ -538,10 +572,12 @@ export async function postBhCheckoutCouponValidate(req: Request, res: Response) 
     return res.json({ success: true, data: quote })
   } catch (e) {
     const err = e as Error & { status?: number; publicMessage?: string }
-    return res.status(err.status || 400).json({
-      success: false,
+    const presented = presentPublicClientError(err, {
+      status: err.status || 400,
       message: err.publicMessage || err.message || 'Kupon doğrulanamadı',
+      fallback: 'Kupon doğrulanamadı',
     })
+    return res.status(presented.status).json(presented.body)
   }
 }
 

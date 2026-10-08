@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { getPublicBankTransferDisplay } from '../services/bankTransferSettings.service'
 import { paytrService } from '../services/paytr.service'
+import { presentPublicClientError } from '../lib/publicClientError'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -27,11 +28,12 @@ export async function paytrStart(req: Request, res: Response) {
     })
   } catch (e) {
     const err = e as Error & { status?: number; publicMessage?: string }
-    const code = err.status ?? 500
-    return res.status(code).json({
-      success: false,
-      message: err.publicMessage || err.message || 'PayTR başlatılamadı',
+    const presented = presentPublicClientError(err, {
+      status: err.status ?? 500,
+      message: err.publicMessage || err.message || 'Ödeme başlatılamadı. Lütfen tekrar deneyin.',
+      fallback: 'Ödeme başlatılamadı. Lütfen tekrar deneyin.',
     })
+    return res.status(presented.status).json(presented.body)
   }
 }
 

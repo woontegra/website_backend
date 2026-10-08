@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { ordersService } from '../services/orders.service'
 import { couponsService } from '../services/coupons.service'
 import { isIndividualBillingType, validateTurkishIdentityNumber } from '../lib/turkishIdentityNumber'
+import { presentPublicClientError } from '../lib/publicClientError'
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -60,10 +61,12 @@ export async function validateCoupon(req: Request, res: Response) {
   } catch (e) {
     const err = e as Error & { status?: number; publicMessage?: string }
     const codeStatus = err.status ?? 400
-    return res.status(codeStatus).json({
-      success: false,
+    const presented = presentPublicClientError(err, {
+      status: codeStatus,
       message: err.publicMessage || err.message || 'Kupon doğrulanamadı',
+      fallback: 'Kupon doğrulanamadı',
     })
+    return res.status(presented.status).json(presented.body)
   }
 }
 
@@ -185,9 +188,14 @@ export async function createOrder(req: Request, res: Response) {
           ? 'Sepetinizdeki bazı ürünler artık satın alınamıyor. Lütfen sepetinizi güncelleyip tekrar deneyin.'
           : err.message) ||
       'Sipariş oluşturulamadı'
-    const payload: { success: false; message: string; details?: unknown } = { success: false, message }
-    if (err.invalidDetails !== undefined) payload.details = err.invalidDetails
-    return res.status(code).json(payload)
+    const presented = presentPublicClientError(err, {
+      status: code,
+      message,
+      fallback: 'Sipariş oluşturulamadı',
+    })
+    const payload: { success: false; message: string; code?: string; details?: unknown } = { ...presented.body }
+    if (err.invalidDetails !== undefined && presented.body.message === message) payload.details = err.invalidDetails
+    return res.status(presented.status).json(payload)
   }
 }
 
@@ -203,8 +211,12 @@ export async function orderLookup(req: Request, res: Response) {
     return res.json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }
-    const code = err.status ?? 500
-    return res.status(code).json({ success: false, message: err.message || 'Hata' })
+    const presented = presentPublicClientError(err, {
+      status: err.status ?? 500,
+      message: err.message || 'Sipariş bulunamadı',
+      fallback: 'Sipariş bulunamadı',
+    })
+    return res.status(presented.status).json(presented.body)
   }
 }
 
@@ -224,7 +236,11 @@ export async function orderSuccess(req: Request, res: Response) {
     return res.json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }
-    const code = err.status ?? 500
-    return res.status(code).json({ success: false, message: err.message || 'Hata' })
+    const presented = presentPublicClientError(err, {
+      status: err.status ?? 500,
+      message: err.message || 'Sipariş bulunamadı',
+      fallback: 'Sipariş bulunamadı',
+    })
+    return res.status(presented.status).json(presented.body)
   }
 }

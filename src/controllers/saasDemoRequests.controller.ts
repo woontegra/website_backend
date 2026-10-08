@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { muvekkilKasaSaasDemoService } from '../services/muvekkilKasaSaasDemo.service'
+import { presentPublicClientError } from '../lib/publicClientError'
 
 function readString(body: Record<string, unknown>, key: string): string {
   const v = body[key]
@@ -29,10 +30,15 @@ export async function createMuvekkilKasaDemoRequest(req: Request, res: Response)
   } catch (e) {
     const err = e as Error & { status?: number; publicMessage?: string; code?: string }
     const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 500
-    return res.status(status).json({
-      success: false,
-      message: err.publicMessage || err.message || 'Demo talebi işlenemedi',
-      code: err.code ?? undefined,
+    const message = err.publicMessage || err.message || 'Demo talebi işlenemedi'
+    const presented = presentPublicClientError(err, {
+      status,
+      message,
+      fallback: 'Demo talebi işlenemedi',
+    })
+    return res.status(presented.status).json({
+      ...presented.body,
+      ...(presented.body.message === message && err.code ? { code: err.code } : {}),
     })
   }
 }

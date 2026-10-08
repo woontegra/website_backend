@@ -1,6 +1,13 @@
 import { Request, Response } from 'express'
 import { customersService } from '../services/customers.service'
 import { customerPasswordResetService } from '../services/customerPasswordReset.service'
+import { presentPublicClientError } from '../lib/publicClientError'
+
+function replyPublicError(res: Response, err: unknown, status: number, fallback: string) {
+  const raw = err instanceof Error ? err.message : fallback
+  const presented = presentPublicClientError(err, { status, message: raw, fallback })
+  return res.status(presented.status).json(presented.body)
+}
 
 function readString(body: Record<string, unknown>, key: string): string | undefined {
   const v = body[key]
@@ -23,7 +30,7 @@ export async function register(req: Request, res: Response) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Kayıt başarısız'
     const code = msg.includes('zaten') ? 409 : 400
-    return res.status(code).json({ success: false, message: msg })
+    return replyPublicError(res, e, code, 'Kayıt başarısız')
   }
 }
 
@@ -72,8 +79,8 @@ export async function resetPassword(req: Request, res: Response) {
     return res.json(result)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Şifre güncellenemedi'
-    const status = msg.includes('Geçersiz veya süresi dolmuş') ? 400 : 400
-    return res.status(status).json({ ok: false, message: msg })
+    const presented = presentPublicClientError(e, { status: 400, message: msg, fallback: 'Şifre güncellenemedi' })
+    return res.status(presented.status).json({ ok: false, message: presented.body.message })
   }
 }
 
@@ -87,8 +94,7 @@ export async function me(req: Request, res: Response) {
     const data = await customersService.getMe(req.customer.id)
     return res.json({ success: true, data })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Hata'
-    return res.status(404).json({ success: false, message: msg })
+    return replyPublicError(res, e, 404, 'Hesap bulunamadı')
   }
 }
 
@@ -104,8 +110,7 @@ export async function patchMe(req: Request, res: Response) {
     })
     return res.json({ success: true, data })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Güncellenemedi'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Güncellenemedi')
   }
 }
 
@@ -121,8 +126,7 @@ export async function patchPassword(req: Request, res: Response) {
     await customersService.changePassword(req.customer.id, currentPassword, newPassword)
     return res.json({ success: true, message: 'Şifre güncellendi' })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Hata'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Şifre güncellenemedi')
   }
 }
 
@@ -158,8 +162,7 @@ export async function createAddress(req: Request, res: Response) {
     })
     return res.status(201).json({ success: true, data: { id: row.id } })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Kayıt başarısız'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Adres kaydedilemedi')
   }
 }
 
@@ -189,8 +192,7 @@ export async function saveDefaultAddressFromCheckout(req: Request, res: Response
     })
     return res.json({ success: true, data: result })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Adres kaydedilemedi'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Adres kaydedilemedi')
   }
 }
 
@@ -215,8 +217,7 @@ export async function patchAddress(req: Request, res: Response) {
     })
     return res.json({ success: true })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Hata'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Adres güncellenemedi')
   }
 }
 
@@ -227,8 +228,7 @@ export async function deleteAddress(req: Request, res: Response) {
     await customersService.deleteAddress(req.customer.id, id)
     return res.json({ success: true })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Hata'
-    return res.status(404).json({ success: false, message: msg })
+    return replyPublicError(res, e, 404, 'Adres silinemedi')
   }
 }
 
@@ -246,7 +246,7 @@ export async function getOrder(req: Request, res: Response) {
     return res.json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status ?? 500).json({ success: false, message: err.message || 'Hata' })
+    return replyPublicError(res, err, err.status ?? 500, 'Sipariş bulunamadı')
   }
 }
 
@@ -272,7 +272,7 @@ export async function getSaasRenewQuote(req: Request, res: Response) {
     return res.json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status ?? 500).json({ success: false, message: err.message || 'Hata' })
+    return replyPublicError(res, err, err.status ?? 500, 'Fiyat alınamadı')
   }
 }
 
@@ -318,7 +318,7 @@ export async function createSaasRenewOrder(req: Request, res: Response) {
     return res.status(201).json({ success: true, data })
   } catch (e) {
     const err = e as Error & { status?: number }
-    return res.status(err.status ?? 500).json({ success: false, message: err.message || 'Sipariş oluşturulamadı' })
+    return replyPublicError(res, err, err.status ?? 500, 'Sipariş oluşturulamadı')
   }
 }
 
@@ -336,8 +336,7 @@ export async function addFavorite(req: Request, res: Response) {
     await customersService.addFavorite(req.customer.id, productId)
     return res.status(201).json({ success: true })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Hata'
-    return res.status(400).json({ success: false, message: msg })
+    return replyPublicError(res, e, 400, 'Favorilere eklenemedi')
   }
 }
 
