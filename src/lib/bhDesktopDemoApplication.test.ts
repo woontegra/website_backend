@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import {
   BH_DESKTOP_DEMO_APPLICATION_SUBJECT,
   buildBilirkisiDesktopDemoApplicationMail,
@@ -104,10 +104,7 @@ test('published Windows installer is accepted and an empty macOS address is not 
 })
 
 test('the site trial handler does not open a license-server demo', () => {
-  const source = fs.readFileSync(
-    fileURLToPath(new URL('../services/bhDesktopTrial.service.ts', import.meta.url)),
-    'utf8',
-  )
+  const source = fs.readFileSync(path.join(process.cwd(), 'src/services/bhDesktopTrial.service.ts'), 'utf8')
   assert.equal(source.includes('requestBilirkisiDesktopTrial'), false)
   assert.equal(source.includes('reserveOnly'), false)
   assert.equal(source.includes('expiresAt'), false)
