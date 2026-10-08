@@ -23,6 +23,7 @@ import {
   bhWindowsPurchaseInstallerMail,
   resolveBilirkisiWindowsPurchaseInstallerUrl,
 } from '../lib/bhDesktopPurchaseMail'
+import { buildBilirkisiDesktopDemoApplicationMail } from '../lib/bhDesktopDemoApplication'
 import { settingsService } from './settings.service'
 
 const DEFAULT_MAILBOX = 'info@woontegra.com'
@@ -971,6 +972,25 @@ export const mailService = {
       productName: data.productName,
       packageLabel: data.packageLabel,
       amountFormatted: data.amountFormatted,
+    })
+    await dispatchMail({
+      to: data.customerEmail,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    })
+  },
+
+  async sendBilirkisiDesktopInstallerMail(data: {
+    customerName: string
+    customerEmail: string
+    platformLabel: string
+    downloadUrl: string
+  }) {
+    const mail = buildBilirkisiDesktopDemoApplicationMail({
+      customerName: data.customerName,
+      platformLabel: data.platformLabel,
+      downloadUrl: data.downloadUrl,
     })
     await dispatchMail({
       to: data.customerEmail,

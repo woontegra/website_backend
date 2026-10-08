@@ -1,11 +1,10 @@
 import { bhUpstreamFetch, readBhAdminProductRow } from './bhWebapi.client'
-import { requestBilirkisiDesktopTrial } from './woontegraLicenseServer.client'
 import { mailService } from './mail.service'
+import { selectBhDesktopInstallerUrl } from '../lib/bhDesktopTrialDownload'
 import {
-  bhDesktopTrialDownloadPath,
-  readBhDesktopTrialDays,
-  selectBhDesktopInstallerUrl,
-} from '../lib/bhDesktopTrialDownload'
+  BH_DESKTOP_DEMO_APPLICATION_MESSAGE,
+  desktopDemoApplicationAction,
+} from '../lib/bhDesktopDemoApplication'
 import { normalizeDesktopEntitlementPlatform, type DesktopEntitlementPlatform } from '../lib/desktopEntitlementPlatform'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -24,7 +23,6 @@ export type BhDesktopTrialStartResult = {
     success: true
     platform: DesktopEntitlementPlatform
     platformLabel: string
-    expiresAt: string
     trialDays: number
     resumed: boolean
     downloadReady: boolean
@@ -48,11 +46,8 @@ function platformLabel(platform: DesktopEntitlementPlatform): string {
   return platform === 'WINDOWS' ? 'Windows' : 'macOS'
 }
 
-const ALREADY_USED_MESSAGE =
-  'Bu e-posta adresi veya telefon numarasıyla daha önce Bilirkişi Hesap Desktop demosu kullanılmış. Windows ve macOS için ayrı demo hakkı yoktur.'
-
 const PROFILE_SAVE_FAILED_MESSAGE =
-  'Deneme lisansı oluşturuldu fakat profil kaydı yazılamadı. Aynı bilgileri tekrar gönderin; ikinci bir lisans oluşturulmaz.'
+  'Başvuru kaydı yazılamadı. Deneme süresi başlatılmadı. Aynı bilgileri tekrar gönderebilirsiniz.'
 
 export type DesktopDemoProfile = {
   name: string
@@ -175,24 +170,13 @@ export async function startBhDesktopTrial(input: {
   }
 
   const prior = await desktopDemoProfile({ ...profile.profile, platform, record: false })
-  if (prior.alreadyUsed) {
-    return {
-      ok: false,
-      status: 400,
-      body: { success: false, code: 'TRIAL_ALREADY_USED', message: prior.message || ALREADY_USED_MESSAGE },
-    }
-  }
-  if (!prior.ok) {
+  const application = desktopDemoApplicationAction(prior)
+  if (application === 'profile-unavailable') {
     return {
       ok: false,
       status: prior.status || 502,
       body: { success: false, code: 'DEMO_PROFILE_UNAVAILABLE', message: prior.message || 'Demo talebi doğrulanamadı.' },
     }
-  }
-
-  const targetError = localDesktopTrialTargetError()
-  if (targetError) {
-    return { ok: false, status: 503, body: { success: false, code: 'LOCAL_LICENSE_SERVER_REQUIRED', message: targetError } }
   }
 
   const product = await readBhAdminProductRow()
@@ -208,7 +192,6 @@ export async function startBhDesktopTrial(input: {
     }
   }
 
-  const trialDays = readBhDesktopTrialDays(product, platform)
   const localProduct = await bhUpstreamFetch('GET', '/api/product')
   const localRow =
     localProduct.ok && localProduct.data && typeof localProduct.data === 'object'
@@ -217,32 +200,6 @@ export async function startBhDesktopTrial(input: {
   const downloadUrl =
     selectBhDesktopInstallerUrl(localRow, platform) || selectBhDesktopInstallerUrl(product, platform)
 
-  const licensed = await requestBilirkisiDesktopTrial({
-    email: profile.profile.email,
-    phone: profile.profile.phone,
-    platform,
-    trialDays,
-  })
-  if (!licensed.success || !licensed.grantId || !licensed.expiresAt) {
-    const code = licensed.code || 'TRIAL_FAILED'
-    if (code === 'TRIAL_ALREADY_USED') {
-      const saved = await persistDesktopDemoProfile({ ...profile.profile, platform })
-      if (!profileWasStored(saved)) return profileSaveFailure()
-    }
-    return {
-      ok: false,
-      status: code === 'TRIAL_ALREADY_USED' ? 400 : 502,
-      body: {
-        success: false,
-        code,
-        message: code === 'TRIAL_ALREADY_USED' ? ALREADY_USED_MESSAGE : licensed.message || 'Deneme başlatılamadı.',
-      },
-    }
-  }
-
-  const saved = await persistDesktopDemoProfile({ ...profile.profile, platform })
-  if (!profileWasStored(saved)) return profileSaveFailure()
-
   if (!downloadUrl) {
     return {
       ok: false,
@@ -250,18 +207,21 @@ export async function startBhDesktopTrial(input: {
       body: {
         success: false,
         code: 'INSTALLER_URL_MISSING',
-        message: 'Deneme kaydı oluşturuldu fakat kurulum bağlantısı olmadığı için e-posta gönderilemedi.',
+        message: 'Kurulum bağlantısı olmadığı için e-posta gönderilemedi.',
       },
     }
   }
 
+  if (application === 'save-application') {
+    const saved = await persistDesktopDemoProfile({ ...profile.profile, platform })
+    if (!profileWasStored(saved)) return profileSaveFailure()
+  }
+
   try {
-    await mailService.sendBilirkisiDesktopTrialMail({
+    await mailService.sendBilirkisiDesktopInstallerMail({
       customerName: profile.profile.name,
       customerEmail: profile.profile.email,
       platformLabel: platformLabel(platform),
-      trialDays,
-      expiresAt: licensed.expiresAt,
       downloadUrl,
     })
   } catch (error) {
@@ -272,29 +232,24 @@ export async function startBhDesktopTrial(input: {
       body: {
         success: false,
         code: 'EMAIL_SEND_FAILED',
-        message: 'Deneme kaydı oluşturuldu fakat e-posta gönderilemedi.',
+        message: 'Kurulum bağlantısı e-postası gönderilemedi. Deneme süresi başlatılmadı.',
       },
     }
   }
 
-  const downloadPath = bhDesktopTrialDownloadPath(licensed.grantId, platform, product)
-
   return {
     ok: true,
-    status: licensed.resumed ? 200 : 201,
+    status: 200,
     body: {
       success: true,
       platform,
       platformLabel: platformLabel(platform),
-      expiresAt: licensed.expiresAt,
-      trialDays,
-      resumed: licensed.resumed === true,
-      downloadReady: Boolean(downloadPath),
-      downloadPath,
+      trialDays: 7,
+      resumed: false,
+      downloadReady: true,
+      downloadPath: null,
       downloadUrl,
-      message: licensed.resumed
-        ? 'Mevcut 7 günlük denemeniz devam ediyor.'
-        : '7 günlük ücretsiz denemeniz başladı.',
+      message: BH_DESKTOP_DEMO_APPLICATION_MESSAGE,
     },
   }
 }
