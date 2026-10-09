@@ -6,6 +6,16 @@ import {
 } from './bhDesktopPurchaseQuote'
 import { selectDesktopYearlyOffer } from './bhDesktopYearlyOffer'
 
+test('macOS yıllık teklif 15.000 TL, 1 yıl ve 1 cihazdır', () => {
+  const offer = selectDesktopYearlyOffer({ data: { price: 2_000_000, priceMonthly: 200_000 } }, 'MACOS')
+  assert.deepEqual(offer, {
+    platform: 'MACOS',
+    priceKurus: 1_500_000,
+    licenseDays: 365,
+    maxDevices: 1,
+  })
+})
+
 test('masaüstü teklif SaaS 20.000 / 2.000 fiyatını kullanmaz', () => {
   const offer = selectDesktopYearlyOffer(
     {

@@ -92,7 +92,14 @@ export function buildPaidDownloadMailLinesFromItems(
 function buildMailLinesFromExternalLicenses(
   provisioned: ExternalLicenseProvisionSuccess[],
   items: OrderItemForDeliveryCheck[],
-): { id: string; productName: string; downloadUrl: string; windowsInstallerUrl: string | null; licenses: { licenseKey: string; activationPassword?: string }[] }[] {
+): {
+  id: string
+  productName: string
+  downloadUrl: string
+  windowsInstallerUrl: string | null
+  purchaseInstaller?: { url: string; label: string; heading: string } | null
+  licenses: { licenseKey: string; activationPassword?: string }[]
+}[] {
   const itemById = new Map(items.map((i) => [i.id, i]))
   return provisioned
     .filter(
@@ -127,6 +134,16 @@ async function currentBilirkisiWindowsInstallerUrl(): Promise<string | null> {
       ? (((localProduct.data as { data?: unknown }).data as Record<string, unknown> | null) ?? null)
       : null
   return selectBhDesktopInstallerUrl(localRow, 'WINDOWS') || selectBhDesktopInstallerUrl(product, 'WINDOWS')
+}
+
+async function currentBilirkisiMacosInstallerUrl(): Promise<string | null> {
+  const product = await readBhAdminProductRow()
+  const localProduct = await bhUpstreamFetch('GET', '/api/product')
+  const localRow =
+    localProduct.ok && localProduct.data && typeof localProduct.data === 'object'
+      ? (((localProduct.data as { data?: unknown }).data as Record<string, unknown> | null) ?? null)
+      : null
+  return selectBhDesktopInstallerUrl(localRow, 'MACOS') || selectBhDesktopInstallerUrl(product, 'MACOS')
 }
 
 /**
@@ -301,6 +318,26 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       line.downloadUrl === BILIRKISI_DESKTOP_ORDER_DOWNLOAD ? { ...line, windowsInstallerUrl } : line,
     )
   }
+  if (
+    fresh.desktopPurchasePlatform === 'MACOS' &&
+    externalMailLines.some((line) => line.downloadUrl === BILIRKISI_DESKTOP_ORDER_DOWNLOAD)
+  ) {
+    const macosInstallerUrl = await currentBilirkisiMacosInstallerUrl()
+    if (macosInstallerUrl) {
+      externalMailLines = externalMailLines.map((line) =>
+        line.downloadUrl === BILIRKISI_DESKTOP_ORDER_DOWNLOAD
+          ? {
+              ...line,
+              purchaseInstaller: {
+                url: macosInstallerUrl,
+                label: 'macOS Kurulumunu İndir',
+                heading: 'macOS kurulumu',
+              },
+            }
+          : line,
+      )
+    }
+  }
   const mkSaasMailLines = buildMuvekkilKasaSaasMailLines(items, mkSaasResult.provisioned)
   const mkSaasRenewMailLines = await buildMuvekkilKasaSaasRenewMailLines(items, mkSaasRenewResult.renewed)
   const mkSaasLicensePurchaseMailLines = await buildMuvekkilKasaSaasLicensePurchaseMailLines(
@@ -317,6 +354,7 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     downloadUrl: string
     licenses?: { licenseKey: string; activationPassword?: string }[]
     windowsInstallerUrl?: string | null
+    purchaseInstaller?: { url: string; label: string; heading: string } | null
   }[] = [...externalMailLines, ...mkSaasMailLines, ...mkSaasRenewMailLines, ...mkSaasLicensePurchaseMailLines]
 
   if (localLinesRaw.length > 0) {

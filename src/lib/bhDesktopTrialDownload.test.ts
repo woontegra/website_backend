@@ -23,6 +23,16 @@ test('installer selection stays on the requested platform and ignores raw public
   assert.equal(readBhDesktopTrialDays({ macosTrialDays: 0 }, 'MACOS'), 7)
 })
 
+test('published arm64 dmg is the macOS installer and does not replace the windows exe', () => {
+  const macosDownloadUrl =
+    'https://download.woontegra.com/downloads/bilirkisihesap/macos/Bilirkisi-Hesap-3.6.7-mac-arm64.dmg'
+  const windowsDownloadUrl =
+    'https://download.woontegra.com/downloads/bilirkisihesap/windows/Bilirkisi-Hesap-Setup-3.6.4.exe'
+  const row = { windowsDownloadUrl, macosDownloadUrl }
+  assert.equal(selectBhDesktopInstallerUrl(row, 'MACOS'), macosDownloadUrl)
+  assert.equal(selectBhDesktopInstallerUrl(row, 'WINDOWS'), windowsDownloadUrl)
+})
+
 test('development trial calls refuse a non-local license server', () => {
   assert.equal(
     localDesktopTrialTargetError({ NODE_ENV: 'development', LICENSE_SERVER_URL: 'https://lisans.example.test' }),
