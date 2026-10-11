@@ -377,6 +377,8 @@ export type DesktopRenewalOpenResponse = {
   customerNumber?: string
   customerName?: string
   expiresAt?: string
+  /** Eski Lisans Server sürümleri göndermez; o durumda undefined kalır. */
+  platform?: 'WINDOWS' | 'MACOS'
 }
 
 /** Masaüstü yenileme oturumu — lisans + cihaz doğrulaması (entegrasyon). */
@@ -403,6 +405,7 @@ export async function requestDesktopRenewalOpen(input: {
     customerNumber: typeof d.customerNumber === 'string' ? d.customerNumber : undefined,
     customerName: typeof d.customerName === 'string' ? d.customerName : undefined,
     expiresAt: typeof d.expiresAt === 'string' ? d.expiresAt : undefined,
+    platform: d.platform === 'WINDOWS' || d.platform === 'MACOS' ? d.platform : undefined,
   }
 }
 

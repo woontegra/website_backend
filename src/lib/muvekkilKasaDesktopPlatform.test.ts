@@ -3,8 +3,10 @@ import assert from 'node:assert/strict'
 import {
   MUVEKKIL_KASA_DESKTOP_MACOS_SLUG,
   MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG,
+  isDesktopRenewalOrderPlatformAllowed,
   muvekkilKasaDesktopOrderLicenseExtras,
   muvekkilKasaDesktopPlatformForSlug,
+  selectDesktopRenewalCatalogProduct,
 } from './muvekkilKasaDesktopPlatform'
 import {
   isMuvekkilKasaDesktopCentralLicenseProduct,
@@ -41,6 +43,37 @@ test('MK Desktop sipariş lisansı platformu ürün slug’ından gelir; eski si
   assert.deepEqual(extras('muvekkil-kasa-defteri-desktop'), { platform: 'WINDOWS' })
   assert.deepEqual(extras(null), { platform: 'WINDOWS' })
   assert.deepEqual(extras('eski-bilinmeyen-slug'), { platform: 'WINDOWS' })
+})
+
+test('MK yenileme bağlantısı lisans platformunun ürününe gider', () => {
+  // updatedAt desc: macOS ürünü en son güncellenmiş olsa da Windows lisansı Windows ürününe gider.
+  const products = [{ slug: MUVEKKIL_KASA_DESKTOP_MACOS_SLUG }, { slug: MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG }]
+  const pick = (platform: 'WINDOWS' | 'MACOS' | null, list = products, appCode = 'MUVEKKIL_KASA_DESKTOP') =>
+    selectDesktopRenewalCatalogProduct({ appCode, platform, products: list })?.slug ?? null
+  assert.equal(pick('WINDOWS'), MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG)
+  assert.equal(pick('MACOS'), MUVEKKIL_KASA_DESKTOP_MACOS_SLUG)
+  assert.equal(pick('WINDOWS', [...products].reverse()), MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG)
+  assert.equal(pick('MACOS', [...products].reverse()), MUVEKKIL_KASA_DESKTOP_MACOS_SLUG)
+  assert.equal(pick('MACOS', [{ slug: MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG }]), null, 'macOS ürünü yoksa Windows ürününe düşmez')
+  assert.equal(pick('WINDOWS', [{ slug: 'muvekkil-kasa-defteri-desktop' }]), 'muvekkil-kasa-defteri-desktop')
+  assert.equal(pick(null), MUVEKKIL_KASA_DESKTOP_MACOS_SLUG, 'platform bilinmiyorsa önceki davranış korunur')
+  assert.equal(pick('WINDOWS', [{ slug: 'aktuerya-hesaplama' }], 'AKTUERYA_DESKTOP'), 'aktuerya-hesaplama')
+  assert.equal(pick(null, []), null)
+})
+
+test('MK yenileme siparişi yalnız lisans platformunun ürünüyle bağlanır', () => {
+  const allowed = (sessionPlatform: string | null, productSlugs: (string | null)[], appCode = 'MUVEKKIL_KASA_DESKTOP') =>
+    isDesktopRenewalOrderPlatformAllowed({ appCode, sessionPlatform, productSlugs })
+  assert.equal(allowed('WINDOWS', [MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG]), true)
+  assert.equal(allowed('WINDOWS', ['muvekkil-kasa-defteri-desktop']), true)
+  assert.equal(allowed('WINDOWS', [MUVEKKIL_KASA_DESKTOP_MACOS_SLUG]), false)
+  assert.equal(allowed('MACOS', [MUVEKKIL_KASA_DESKTOP_MACOS_SLUG]), true)
+  assert.equal(allowed('MACOS', [MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG]), false)
+  assert.equal(allowed('MACOS', [null]), false, 'slug bilinmeyen kalem platformu karşılamaz')
+  assert.equal(allowed('WINDOWS', []), false)
+  assert.equal(allowed(null, [MUVEKKIL_KASA_DESKTOP_MACOS_SLUG]), true, 'eski oturumda platform varsayılmaz')
+  assert.equal(allowed(null, [MUVEKKIL_KASA_DESKTOP_WINDOWS_SLUG]), true)
+  assert.equal(allowed('WINDOWS', ['bilirkisi-hesap'], 'BILIRKISI_DESKTOP'), true, 'MK dışı ürünler etkilenmez')
 })
 
 test('MK dışındaki ürünlere platform eklenmez', () => {

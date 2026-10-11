@@ -15,6 +15,10 @@ import {
 } from '../lib/centralDesktopLicenseProduct'
 import { DESKTOP_LICENSE_PURCHASE_CONTEXT_RENEWAL } from '../lib/desktopLicensePurchaseContext'
 import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
+import {
+  isDesktopRenewalOrderPlatformAllowed,
+  selectDesktopRenewalCatalogProduct,
+} from '../lib/muvekkilKasaDesktopPlatform'
 import { requestDesktopRenewalOpen, requestWebsiteRenewLicense } from './woontegraLicenseServer.client'
 
 const TOKEN_TTL_MS = 20 * 60 * 1000
@@ -34,6 +38,7 @@ export type DesktopLicenseRenewalPublicView = {
   expiresAt: string
   status: DesktopLicenseRenewalSessionStatus
   boundExternalOrderId: string | null
+  platform: string | null
 }
 
 export type DesktopLicenseRenewalPreview = {
@@ -109,6 +114,7 @@ function toPublicView(session: DesktopLicenseRenewalSession, licenseKeyMasked: s
     expiresAt: session.expiresAt.toISOString(),
     status: session.status,
     boundExternalOrderId: session.boundExternalOrderId,
+    platform: session.platform,
   }
 }
 
@@ -170,23 +176,25 @@ export async function issueDesktopLicenseRenewalLink(input: {
     return { purchaseUrl, expiresAt: expiresAt.toISOString(), renewalToken: plainToken }
   }
 
-  const catalogProduct = await prisma.product.findFirst({
-    where: {
-      licenseAppCode: appCode,
-      licenseRequired: true,
-      productType: ProductType.DOWNLOAD,
-      isActive: true,
-    },
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      slug: true,
-      licenseAppCode: true,
-      licenseRequired: true,
-      productType: true,
-      isActive: true,
-    },
-  })
-  if (!catalogProduct || !isCentralDesktopLicenseProduct(catalogProduct)) {
+  const catalogProducts = (
+    await prisma.product.findMany({
+      where: {
+        licenseAppCode: appCode,
+        licenseRequired: true,
+        productType: ProductType.DOWNLOAD,
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        slug: true,
+        licenseAppCode: true,
+        licenseRequired: true,
+        productType: true,
+        isActive: true,
+      },
+    })
+  ).filter((p) => isCentralDesktopLicenseProduct(p))
+  if (catalogProducts.length === 0) {
     throw new Error('LICENSE_RENEWAL_UNSUPPORTED_PRODUCT')
   }
 
@@ -200,6 +208,11 @@ export async function issueDesktopLicenseRenewalLink(input: {
     throw new Error('LICENSE_RENEWAL_NOT_ELIGIBLE')
   }
   const licenseExpiresAt = validation.expiresAt ? new Date(validation.expiresAt) : open.expiresAt ? new Date(open.expiresAt) : null
+  const platform = open.platform ?? null
+  const catalogProduct = selectDesktopRenewalCatalogProduct({ appCode, platform, products: catalogProducts })
+  if (!catalogProduct) {
+    throw new Error('LICENSE_RENEWAL_UNSUPPORTED_PRODUCT')
+  }
 
   const plainToken = randomBytes(32).toString('base64url')
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS)
@@ -212,6 +225,7 @@ export async function issueDesktopLicenseRenewalLink(input: {
       targetLicenseKey: licenseKey,
       appCode,
       deviceHash,
+      platform,
       customerNumber: open.customerNumber ?? null,
       customerName: open.customerName ?? null,
       licenseExpiresAt,
@@ -265,6 +279,19 @@ export async function bindDesktopLicenseRenewalToken(input: {
   if (session.status === 'CONSUMED') throw new Error('LICENSE_RENEWAL_TOKEN_CONSUMED')
   if (session.boundExternalOrderId && session.boundExternalOrderId !== input.externalOrderId) {
     throw new Error('LICENSE_RENEWAL_TOKEN_BOUND')
+  }
+  const orderItems = await prisma.orderItem.findMany({
+    where: { order: { orderNo: input.externalOrderId } },
+    select: { productSlug: true },
+  })
+  if (
+    !isDesktopRenewalOrderPlatformAllowed({
+      appCode: session.appCode,
+      sessionPlatform: session.platform,
+      productSlugs: orderItems.map((i) => i.productSlug),
+    })
+  ) {
+    throw new Error('LICENSE_RENEWAL_PLATFORM_MISMATCH')
   }
 
   const updated = await prisma.desktopLicenseRenewalSession.update({

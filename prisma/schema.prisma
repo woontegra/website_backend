@@ -836,6 +836,8 @@ model DesktopLicenseRenewalSession {
   appCode              String
   productCode          String                           @default("MUVEKKIL_KASA_DESKTOP")
   deviceHash           String
+  /// Lisans Server'ın bildirdiği WINDOWS/MACOS; bilinmiyorsa null (eski oturum/lisans).
+  platform             String?                          @db.VarChar(16)
   customerNumber       String?
   customerName         String?
   licenseExpiresAt     DateTime?
