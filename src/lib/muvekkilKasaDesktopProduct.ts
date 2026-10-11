@@ -1,9 +1,11 @@
 import { PRODUCT_CODE_MUVEKKIL_KASA_DESKTOP } from './productCode'
 import { parseProductDownloadFiles, type PublicProductDownloadFile } from './productDownloadFiles'
+import { MUVEKKIL_KASA_DESKTOP_MACOS_SLUG, muvekkilKasaDesktopPlatformForSlug } from './muvekkilKasaDesktopPlatform'
 
 const MK_DESKTOP_SLUGS = new Set([
   'muvekkil-kasa-defteri-yazilimi',
   'muvekkil-kasa-defteri-desktop',
+  MUVEKKIL_KASA_DESKTOP_MACOS_SLUG,
 ])
 
 export type MuvekkilKasaDesktopProductRef = {
@@ -72,6 +74,20 @@ export function isPublicWindowsSetupInstallerUrl(url: string | null | undefined)
   }
 }
 
+/** macOS ürünü Kurulum sürümü: yalnızca public https .dmg. */
+export function isPublicMacosSetupInstallerUrl(url: string | null | undefined): boolean {
+  const raw = (url ?? '').trim()
+  if (!raw) return false
+  if (isAutoUpdateDistributionUrl(raw)) return false
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'https:') return false
+    return filenameFromUrl(raw).toLowerCase().endsWith('.dmg')
+  } catch {
+    return false
+  }
+}
+
 /**
  * Public ürün API’sine konan Müvekkil Kasa Desktop trial installer.
  * Kaynak: admin Product.downloadFiles files[].url (type=setup).
@@ -83,8 +99,12 @@ export function publicMuvekkilKasaDesktopInstallerFiles(product: {
   downloadFiles?: unknown
 }): PublicProductDownloadFile[] {
   if (!isMuvekkilKasaDesktopSalesProduct(product)) return []
+  const isInstaller =
+    muvekkilKasaDesktopPlatformForSlug(product.slug) === 'MACOS'
+      ? isPublicMacosSetupInstallerUrl
+      : isPublicWindowsSetupInstallerUrl
   const setup = parseProductDownloadFiles(product.downloadFiles).files.find(
-    (file) => file.type === 'setup' && isPublicWindowsSetupInstallerUrl(file.url),
+    (file) => file.type === 'setup' && isInstaller(file.url),
   )
   if (!setup) return []
   const href = setup.url.trim()

@@ -17,6 +17,7 @@ import {
   resolveProductCodeFromProduct,
 } from '../lib/productCode'
 import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
+import { muvekkilKasaDesktopOrderLicenseExtras } from '../lib/muvekkilKasaDesktopPlatform'
 import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
@@ -227,6 +228,10 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
     const downloadUrl = resolveItemDownloadUrlForLicenseServer(item)
     const licenseDays = Math.max(1, product.licenseDays ?? 365)
     const maxDevices = Math.max(1, product.licenseMaxDevices ?? 1)
+    const licenseExtras = muvekkilKasaDesktopOrderLicenseExtras({
+      appCode,
+      productSlug: item.productSlug,
+    })
 
     const pushProvisioned = (
       licenseKey: string | undefined,
@@ -278,6 +283,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         downloadUrl,
         licenseDays,
         maxDevices,
+        ...licenseExtras,
         resendCredentials: true,
       })
 
@@ -321,6 +327,7 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
         downloadUrl,
         licenseDays,
         maxDevices,
+        ...licenseExtras,
       })
 
       if (!centralProvisionSucceeded(result)) {
