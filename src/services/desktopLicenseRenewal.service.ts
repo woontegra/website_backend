@@ -9,7 +9,7 @@ import {
 } from '../lib/desktopLicenseExtend'
 import {
   buildDesktopWebsiteRenewLicensePayload,
-  desktopRenewalPurchasePath,
+  desktopRenewalPurchaseHref,
   isCentralDesktopLicenseProduct,
   isDesktopRenewalOpenSuccessful,
 } from '../lib/centralDesktopLicenseProduct'
@@ -234,7 +234,7 @@ export async function issueDesktopLicenseRenewalLink(input: {
     },
   })
 
-  const purchaseUrl = `${woontegraWebsiteBaseUrl()}${desktopRenewalPurchasePath(catalogProduct.slug)}?renewalToken=${encodeURIComponent(plainToken)}`
+  const purchaseUrl = `${woontegraWebsiteBaseUrl()}${desktopRenewalPurchaseHref(catalogProduct.slug, plainToken)}`
   return { purchaseUrl, expiresAt: expiresAt.toISOString() }
 }
 

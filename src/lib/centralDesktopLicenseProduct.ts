@@ -1,6 +1,7 @@
 import { ProductType } from '@prisma/client'
 import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from './licenseAppCode'
 import { isMuvekkilKasaDesktopCentralLicenseProduct } from './muvekkilKasaDesktopProduct'
+import { muvekkilKasaDesktopPlatformForSlug } from './muvekkilKasaDesktopPlatform'
 import { isMuvekkilKasaSaasProduct } from './muvekkilKasaSaasProduct'
 
 export type CentralDesktopLicenseProductRef = {
@@ -48,6 +49,22 @@ export function isCentralDesktopLicenseProduct(
 export function desktopRenewalPurchasePath(slug: string): string {
   const normalized = slug.trim().replace(/^\//, '').toLowerCase()
   return `/yazilimlar/${normalized}`
+}
+
+const MUVEKKIL_KASA_COMPARE_PATH = '/yazilimlar/muvekkil-kasa-defteri'
+const MUVEKKIL_KASA_SURUM_BY_PLATFORM = { WINDOWS: 'masaustu', MACOS: 'macos' } as const
+
+/**
+ * Yenileme bağlantısı (path + query). MK Desktop ürünleri güncel satış sayfasında lisans platformunun
+ * sekmesiyle açılır; diğer ürünler ürün detay sayfasına gider.
+ */
+export function desktopRenewalPurchaseHref(slug: string, renewalToken: string): string {
+  const token = encodeURIComponent(renewalToken)
+  const platform = muvekkilKasaDesktopPlatformForSlug(slug)
+  if (platform) {
+    return `${MUVEKKIL_KASA_COMPARE_PATH}?surum=${MUVEKKIL_KASA_SURUM_BY_PLATFORM[platform]}&renewalToken=${token}`
+  }
+  return `${desktopRenewalPurchasePath(slug)}?renewalToken=${token}`
 }
 
 export function isDesktopRenewalOpenSuccessful(open: { licenseId?: string | null }): boolean {

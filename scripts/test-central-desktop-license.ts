@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import {
   buildDesktopWebsiteRenewLicensePayload,
+  desktopRenewalPurchaseHref,
   desktopRenewalPurchasePath,
   isCentralDesktopLicenseProduct,
   isDesktopRenewalOpenSuccessful,
@@ -131,6 +132,19 @@ function eligible(partial: Parameters<typeof isCentralDesktopLicenseProduct>[0])
   assert.equal(
     desktopRenewalPurchasePath('muvekkil-kasa-defteri-yazilimi'),
     '/yazilimlar/muvekkil-kasa-defteri-yazilimi',
+  )
+  assert.equal(desktopRenewalPurchaseHref('koopplus', 'a+b'), '/yazilimlar/koopplus?renewalToken=a%2Bb')
+  assert.equal(
+    desktopRenewalPurchaseHref('muvekkil-kasa-defteri-yazilimi', 'tok'),
+    '/yazilimlar/muvekkil-kasa-defteri?surum=masaustu&renewalToken=tok',
+  )
+  assert.equal(
+    desktopRenewalPurchaseHref('muvekkil-kasa-defteri-desktop', 'tok'),
+    '/yazilimlar/muvekkil-kasa-defteri?surum=masaustu&renewalToken=tok',
+  )
+  assert.equal(
+    desktopRenewalPurchaseHref('muvekkil-kasa-defteri-macos', 'tok'),
+    '/yazilimlar/muvekkil-kasa-defteri?surum=macos&renewalToken=tok',
   )
 }
 
