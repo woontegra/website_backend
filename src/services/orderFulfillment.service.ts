@@ -26,6 +26,7 @@ import {
   ensureMuvekkilKasaSaasLicensePurchases,
 } from './muvekkilKasaSaasLicensePurchase.service'
 import { ensureDesktopLicenseRenewals } from './desktopLicenseRenewalFulfill.service'
+import { ensureKoopPlusOrders } from './koopplusProvision.service'
 import {
   buildMuvekkilKasaSaasRenewMailLines,
   ensureMuvekkilKasaSaasRenewals,
@@ -282,6 +283,16 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
     })
   }
 
+  // KoopPlus SaaS: yalnızca integrations/orders ile sağlanır (masaüstü merkezi lisanstan hariç).
+  const koopPlusResult = await ensureKoopPlusOrders(fresh.id)
+  if (koopPlusResult.errors.length > 0) {
+    console.error('[orders] koopplus provision errors', {
+      orderId: fresh.id,
+      orderNo: fresh.orderNo,
+      errors: koopPlusResult.errors,
+    })
+  }
+
   const externalResult = await ensureExternalLicenseServerOrders(fresh.id)
   const desktopFirstResult = await ensureBilirkisiDesktopFirstPurchases(fresh.id)
   if (desktopFirstResult.errors.length > 0) {
@@ -450,6 +461,20 @@ export async function fulfillPaidOrderDelivery(orderId: string, req?: Request): 
       return
     }
     if (saasLicensedOk || saasProvisionedOk || saasRenewedOk) {
+      return
+    }
+    // Yalnızca KoopPlus satırları: hoş geldiniz e-postası KoopPlus tarafından gönderilir.
+    if (
+      koopPlusResult.provisioned.length > 0 &&
+      koopPlusResult.errors.length === 0 &&
+      koopPlusResult.provisioned.length === items.length
+    ) {
+      if (!fresh.downloadEmailSentAt) {
+        await prisma.order.update({
+          where: { id: fresh.id },
+          data: { downloadEmailSentAt: new Date() },
+        })
+      }
       return
     }
 

@@ -67,6 +67,8 @@ import {
   invoiceAddressFromDelivery,
   resolveOrderInvoiceAddress,
 } from '../lib/orderInvoiceAddress'
+import { isKoopPlusProduct, normalizeKoopPlusLicenseKey } from '../lib/koopplusProduct'
+import { deriveKoopPlusSyncStatus } from './koopplusProvision.service'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -108,6 +110,8 @@ export type CreateOrderInput = {
   renewalToken?: string | null
   /** Checkout’ta uygulanan kupon kodu. Sunucu yeniden doğrular. */
   couponCode?: string | null
+  /** KoopPlus SaaS yenileme: mevcut lisans anahtarı (yalnızca sepette koopplus ürünü varsa saklanır) */
+  koopplusLicenseKey?: string | null
 }
 
 /** Müşteri tarafında indirme / teslim bağlantısı gösterimi */
@@ -870,6 +874,9 @@ export const ordersService = {
             explicitConsentAt: input.explicitConsent ? now : null,
             acceptedIp: input.acceptedIp?.trim() || null,
             acceptedUserAgent: input.acceptedUserAgent?.trim()?.slice(0, 500) || null,
+            koopplusLicenseKey: lineSnapshots.some((l) => isKoopPlusProduct({ productSlug: l.productSlug }))
+              ? normalizeKoopPlusLicenseKey(input.koopplusLicenseKey)
+              : null,
             items: {
               create: lineSnapshots.map((l) => ({
                 productId: l.productId,
@@ -2027,6 +2034,9 @@ export const ordersAdminService = {
       explicitConsentAt: order.explicitConsentAt?.toISOString() ?? null,
       acceptedIp: order.acceptedIp,
       acceptedUserAgent: order.acceptedUserAgent,
+      /** KoopPlus SaaS entegrasyonu: Gönderildi / Hata / Bekliyor (koopplus ürünü yoksa null) */
+      koopplusSyncStatus: deriveKoopPlusSyncStatus(order.items),
+      hasKoopplusLicenseKey: Boolean(order.koopplusLicenseKey?.trim()),
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
       adminNote: order.adminNote,

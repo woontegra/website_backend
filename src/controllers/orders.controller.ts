@@ -153,6 +153,7 @@ export async function createOrder(req: Request, res: Response) {
       selectedAddressId: readString(body, 'selectedAddressId') || null,
       renewalToken: readString(body, 'renewalToken') || null,
       couponCode: readString(body, 'couponCode') || null,
+      koopplusLicenseKey: readString(body, 'koopplusLicenseKey') || null,
     })
     const order = result.order
     return res.status(201).json({

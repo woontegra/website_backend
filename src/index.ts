@@ -63,6 +63,7 @@ import { desktopLicenseRenewalPublicRoutes } from './routes/desktopLicenseRenewa
 import { bhPublicRoutes } from './routes/bh.public.routes'
 import { bhAdminRoutes } from './routes/bh.admin.routes'
 import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public.routes'
+import { koopplusPublicRoutes } from './routes/koopplus.public.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
 import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
@@ -173,6 +174,7 @@ app.use('/api/orders', ordersPublicRoutes)
 app.use('/api/license', licensePublicRoutes)
 app.use('/api/customers', customersPublicRoutes)
 app.use('/api/bh', bhPublicRoutes)
+app.use('/api/koopplus', koopplusPublicRoutes)
 app.use('/api', affiliateReferralPublicRoutes)
 app.use('/api/payments', paymentsPublicRoutes)
 app.use('/api/product-categories', productCategoriesPublicRoutes)

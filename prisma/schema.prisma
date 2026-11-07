@@ -629,6 +629,8 @@ model Order {
   desktopLicenseNewEndDate      DateTime?
   /// Bilirkişi Desktop ilk satın alma platformu. Yenileme alanı değildir.
   desktopPurchasePlatform       String?       @db.VarChar(16)
+  /// KoopPlus SaaS yenileme: checkout'ta girilen mevcut lisans anahtarı (integrations/orders licenseKey)
+  koopplusLicenseKey            String?       @db.VarChar(64)
   /// Bilirkişi Hesap Woontegra-central PayTR: NEW | RENEWAL
   bhPurchaseContext         String?       @db.VarChar(64)
   /// BH pending payment merchantOid (WTBH…)

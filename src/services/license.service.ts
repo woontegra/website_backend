@@ -20,6 +20,7 @@ import { isSingleLicenseQuantityProduct } from '../lib/productOrderValidation'
 import { muvekkilKasaDesktopOrderLicenseExtras } from '../lib/muvekkilKasaDesktopPlatform'
 import { isValidLicenseAppCodeFormat, normalizeLicenseAppCodeInput } from '../lib/licenseAppCode'
 import { isMuvekkilKasaSaasProduct } from '../lib/muvekkilKasaSaasProduct'
+import { isKoopPlusProduct } from '../lib/koopplusProduct'
 import { requestWebsiteOrderLicense } from './woontegraLicenseServer.client'
 import { resolveMailDownloadHref } from '../lib/mailDeliveryUrl'
 import { resolveOrderItemDeliveryRawUrl, resolveProductDeliveryRawUrl } from '../lib/productDeliveryUrl'
@@ -213,6 +214,10 @@ export async function ensureExternalLicenseServerOrders(orderId: string): Promis
 
   for (const item of order.items) {
     if (isMuvekkilKasaSaasProduct(item.product) || isMuvekkilKasaSaasProduct({ slug: item.productSlug })) {
+      continue
+    }
+    // KoopPlus: integrations/orders (koopplusProvision.service) — masaüstü merkezi lisans çift üretilmez.
+    if (isKoopPlusProduct({ productSlug: item.productSlug, product: item.product as { slug?: string | null } | null })) {
       continue
     }
     if (!isOrderItemEligibleForCentralLicense(item)) continue
