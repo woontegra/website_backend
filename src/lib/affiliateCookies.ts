@@ -65,8 +65,10 @@ export function clearReferralCookie(res: Response) {
 }
 
 /**
- * Bilirkişi `partnerSessionCookieOptions(expiresAt)` ile aynı mantık:
- * HttpOnly + SameSite=Lax + Path=/ + mutlak Expires (oturum TTL’si; magic link TTL değil).
+ * Partner oturum çerezi: HttpOnly + Path=/ + mutlak Expires (oturum TTL’si; magic link TTL değil).
+ * Production’da SameSite=None; Secure — FE absolute Railway API URL kullanınca
+ * (çapraz origin XHR) Lax çerez tarayıcıda tutunmaz / /me’ye gitmez.
+ * Same-origin `/api` proxy ile de None çalışır.
  */
 export function partnerSessionCookieOptions(expiresAt: Date) {
   const secure = process.env.NODE_ENV === 'production'
@@ -75,11 +77,15 @@ export function partnerSessionCookieOptions(expiresAt: Date) {
   return {
     httpOnly: true as const,
     secure,
-    sameSite: 'lax' as const,
+    sameSite: (secure ? 'none' : 'lax') as 'none' | 'lax',
     path: '/',
     expires,
     maxAgeSec,
   }
+}
+
+function partnerSameSiteHeader(sameSite: 'none' | 'lax'): string {
+  return sameSite === 'none' ? 'SameSite=None' : 'SameSite=Lax'
 }
 
 export function buildPartnerSessionSetCookieHeader(rawSessionToken: string, expiresAt: Date): string {
@@ -88,7 +94,7 @@ export function buildPartnerSessionSetCookieHeader(rawSessionToken: string, expi
     `${AFFILIATE_PARTNER_SESSION_COOKIE}=${encodeURIComponent(rawSessionToken)}`,
     `Path=${opts.path}`,
     'HttpOnly',
-    'SameSite=Lax',
+    partnerSameSiteHeader(opts.sameSite),
     `Max-Age=${opts.maxAgeSec}`,
     `Expires=${opts.expires.toUTCString()}`,
   ]
@@ -101,16 +107,16 @@ export function setPartnerSessionCookie(res: Response, rawSessionToken: string, 
 }
 
 export function clearPartnerSessionCookie(res: Response) {
-  const secure = process.env.NODE_ENV === 'production'
+  const opts = partnerSessionCookieOptions(new Date(0))
   const parts = [
     `${AFFILIATE_PARTNER_SESSION_COOKIE}=`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    partnerSameSiteHeader(opts.sameSite),
     'Max-Age=0',
     'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
   ]
-  if (secure) parts.push('Secure')
+  if (opts.secure) parts.push('Secure')
   res.append('Set-Cookie', parts.join('; '))
 }
 

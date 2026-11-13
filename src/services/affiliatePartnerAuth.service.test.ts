@@ -195,6 +195,23 @@ describe('affiliate partner auth TTLs (Bilirkişi-aligned)', () => {
     const maxAge = Number(header.match(/Max-Age=(\d+)/)?.[1])
     assert.ok(maxAge > AFFILIATE_PARTNER_MAGIC_TTL_MS / 1000)
   })
+
+  it('uses SameSite=None; Secure for partner session cookie in production', () => {
+    const prev = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    try {
+      const sessionExpires = new Date(Date.now() + AFFILIATE_PARTNER_SESSION_TTL_MS)
+      const opts = partnerSessionCookieOptions(sessionExpires)
+      assert.equal(opts.sameSite, 'none')
+      assert.equal(opts.secure, true)
+      const header = buildPartnerSessionSetCookieHeader('session-raw-token-value', sessionExpires)
+      assert.match(header, /SameSite=None/)
+      assert.match(header, /Secure/)
+      assert.doesNotMatch(header, /SameSite=Lax/)
+    } finally {
+      process.env.NODE_ENV = prev
+    }
+  })
 })
 
 describe('affiliate partner auth flow', () => {
