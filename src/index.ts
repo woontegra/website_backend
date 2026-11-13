@@ -63,6 +63,8 @@ import { desktopLicenseRenewalPublicRoutes } from './routes/desktopLicenseRenewa
 import { bhPublicRoutes } from './routes/bh.public.routes'
 import { bhAdminRoutes } from './routes/bh.admin.routes'
 import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public.routes'
+import { affiliatePartnersAdminRoutes } from './routes/affiliatePartners.admin.routes'
+import { partnerPortalRoutes } from './routes/partnerPortal.routes'
 import { koopplusPublicRoutes } from './routes/koopplus.public.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
@@ -176,6 +178,7 @@ app.use('/api/customers', customersPublicRoutes)
 app.use('/api/bh', bhPublicRoutes)
 app.use('/api/koopplus', koopplusPublicRoutes)
 app.use('/api', affiliateReferralPublicRoutes)
+app.use('/api/partner', partnerPortalRoutes)
 app.use('/api/payments', paymentsPublicRoutes)
 app.use('/api/product-categories', productCategoriesPublicRoutes)
 app.use('/api/navigation-menu', navigationMenuPublicRoutes)
@@ -216,6 +219,7 @@ app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
 app.use('/api/admin', couponsAdminRoutes)
 app.use('/api/admin', bhAdminRoutes)
+app.use('/api/admin', affiliatePartnersAdminRoutes)
 
 app.get('/api/health', (_req, res) => {
   const r2 = getR2ConfigStatus()
