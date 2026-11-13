@@ -59,7 +59,8 @@ function createMemoryDb(seed: {
   const sessions = new Map<string, SessionRow>((seed.sessions ?? []).map((s) => [s.id, { ...s, access: seed.access }]))
   let access = { ...seed.access }
 
-  const api = {
+  // typeof api in $transaction creates a circular inference; keep the mock loosely typed for tsc.
+  const api: any = {
     affiliatePartner: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         where.id === access.partnerId ? access.partner : null,
@@ -162,7 +163,7 @@ function createMemoryDb(seed: {
         return { count }
       },
     },
-    $transaction: async <T>(fn: (tx: typeof api) => Promise<T>) => fn(api),
+    $transaction: async <T>(fn: (tx: any) => Promise<T>) => fn(api),
     _magics: magics,
     _sessions: sessions,
     _access: () => access,

@@ -1,8 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { AFFILIATE_COMMISSION_STATUS } from '../lib/affiliateCommissionEvaluate'
 import { deriveCommissionPayoutStatus } from '../lib/affiliatePayout'
 import {
@@ -10,8 +9,7 @@ import {
   affiliatePayoutService,
 } from './affiliatePayout.service'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = join(__dirname, '../..')
+const root = process.cwd()
 
 function makeTxDb({
   commissions,
@@ -60,7 +58,10 @@ function makeTxDb({
           paidAt: args.data.paidAt,
           createdAt: new Date(),
           idempotencyKey: args.data.idempotencyKey,
-          items: (args.data.items?.create || []).map((i: { commissionId: string; allocatedAmountKurus: number }) => ({
+          items: ((args.data.items?.create || []) as Array<{
+            commissionId: string
+            allocatedAmountKurus: number
+          }>).map((i) => ({
             commissionId: i.commissionId,
             allocatedAmountKurus: i.allocatedAmountKurus,
           })),
