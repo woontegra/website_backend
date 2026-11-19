@@ -19,6 +19,11 @@ function configuredSlugs(): Set<string> {
   return set
 }
 
+/** Yapılandırılmış bütün KoopPlus ürün slug'ları. */
+export function koopPlusSlugs(): string[] {
+  return [...configuredSlugs()]
+}
+
 export function isKoopPlusSlug(slug: string | null | undefined): boolean {
   const s = (slug ?? '').trim().toLowerCase()
   return Boolean(s) && configuredSlugs().has(s)

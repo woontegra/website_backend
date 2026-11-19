@@ -1,6 +1,15 @@
 import type { Request, Response } from 'express'
 import { getClientIp } from '../lib/clientIp'
 import { postKoopPlusJson } from '../lib/koopplusIntegration'
+import { prisma } from '../lib/prisma'
+import { koopPlusSlugs } from '../lib/koopplusProduct'
+import { campaignsService } from '../services/campaigns.service'
+import {
+  KOOPPLUS_MAX_QUANTITY,
+  clampKoopPlusQuantity,
+  priceKoopPlusLine,
+  readKoopPlusPricingSettings,
+} from '../services/koopplusPricing.service'
 
 /**
  * POST /api/koopplus/demo-request
@@ -106,4 +115,80 @@ export async function createKoopPlusDemoRequest(req: Request, res: Response) {
     console.warn('[koopplus] demo-request rejected', { status: upstream.status })
   }
   return res.status(upstream.status).json(json)
+}
+
+// ---------------------------------------------------------------------------
+// Adetli satış fiyatı (herkese açık)
+// ---------------------------------------------------------------------------
+
+/** Sitede satışta olan KoopPlus ürününün ilk kooperatif fiyatı (kampanya dahil). */
+export async function resolveKoopPlusFirstPrice(): Promise<{ productId: string; price: number; currency: string } | null> {
+  const product = await prisma.product.findFirst({
+    where: { slug: { in: koopPlusSlugs() }, isActive: true },
+    orderBy: { updatedAt: 'desc' },
+  })
+  if (!product) return null
+  const { unitPrice } = await campaignsService.resolveProductUnitPrice({
+    id: product.id,
+    categoryId: product.categoryId,
+    productType: product.productType,
+    price: Number(product.price),
+    purchaseEnabled: product.purchaseEnabled,
+  })
+  return { productId: product.id, price: unitPrice, currency: (product.currency || 'TRY').trim() || 'TRY' }
+}
+
+/** GET /api/koopplus/pricing — ilk ve ek kooperatif fiyatı. */
+export async function getKoopPlusPricing(_req: Request, res: Response) {
+  try {
+    const [first, settings] = await Promise.all([resolveKoopPlusFirstPrice(), readKoopPlusPricingSettings()])
+    return res.json({
+      success: true,
+      data: {
+        firstPrice: first?.price ?? null,
+        additionalPrice: settings.additionalPrice,
+        currency: first?.currency ?? 'TRY',
+        maxQuantity: KOOPPLUS_MAX_QUANTITY,
+      },
+    })
+  } catch (e) {
+    console.error('[koopplus] pricing failed', e instanceof Error ? e.message : e)
+    return res.status(500).json({ success: false, error: 'Fiyat bilgisi alınamadı.' })
+  }
+}
+
+/**
+ * POST /api/koopplus/price-quote — { quantity, licenseKey? }
+ * Ödeme sayfasında gösterilen döküm. E-posta ALINMAZ (müşteri durumu herkese açık sorgulanamasın);
+ * aktif kooperatifi olan müşterinin indirimli tutarı sipariş oluşturulurken sunucuda uygulanır.
+ */
+export async function quoteKoopPlusPrice(req: Request, res: Response) {
+  try {
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>
+    const first = await resolveKoopPlusFirstPrice()
+    if (!first) return res.status(404).json({ success: false, error: 'KoopPlus şu anda satışta değil.' })
+    const licenseKey = typeof body.licenseKey === 'string' ? body.licenseKey : null
+    const line = await priceKoopPlusLine({
+      quantity: clampKoopPlusQuantity(body.quantity),
+      firstPrice: first.price,
+      licenseKey,
+    })
+    return res.json({
+      success: true,
+      data: {
+        quantity: line.quantity,
+        firstUnits: line.firstUnits,
+        additionalUnits: line.additionalUnits,
+        firstPrice: line.firstPrice,
+        additionalPrice: line.additionalPrice,
+        total: line.total,
+        currency: first.currency,
+        reason: line.reason,
+        licenseFound: licenseKey ? line.quote.renewalTier !== null : null,
+      },
+    })
+  } catch (e) {
+    console.error('[koopplus] price-quote failed', e instanceof Error ? e.message : e)
+    return res.status(500).json({ success: false, error: 'Fiyat hesaplanamadı.' })
+  }
 }

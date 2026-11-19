@@ -14,3 +14,15 @@ const demoLimiter = rateLimit({
 })
 
 koopplusPublicRoutes.post('/demo-request', demoLimiter, koopplusPublic.createKoopPlusDemoRequest)
+
+const quoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { success: false, error: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' },
+  skip: () => process.env.NODE_ENV !== 'production',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+koopplusPublicRoutes.get('/pricing', koopplusPublic.getKoopPlusPricing)
+koopplusPublicRoutes.post('/price-quote', quoteLimiter, koopplusPublic.quoteKoopPlusPrice)

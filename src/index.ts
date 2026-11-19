@@ -66,6 +66,7 @@ import { affiliateReferralPublicRoutes } from './routes/affiliateReferral.public
 import { affiliatePartnersAdminRoutes } from './routes/affiliatePartners.admin.routes'
 import { partnerPortalRoutes } from './routes/partnerPortal.routes'
 import { koopplusPublicRoutes } from './routes/koopplus.public.routes'
+import { koopplusAdminRoutes } from './routes/koopplus.admin.routes'
 import { authMiddleware, adminOnly } from './middleware/auth.middleware'
 import * as ordersAdminController from './controllers/orders.admin.controller'
 import * as saasMembershipsAdminController from './controllers/saasMemberships.admin.controller'
@@ -215,6 +216,7 @@ app.use('/api/admin', adminSidebarBadgesRoutes)
 app.use('/api/admin', testDataCleanupAdminRoutes)
 app.use('/api/admin', licenseProgramsAdminRoutes)
 app.use('/api/admin', paymentSettingsAdminRoutes)
+app.use('/api/admin', koopplusAdminRoutes)
 app.use('/api/admin', legalDocumentsAdminRoutes)
 app.use('/api/admin', campaignsAdminRoutes)
 app.use('/api/admin', couponsAdminRoutes)

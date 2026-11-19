@@ -107,6 +107,7 @@ export async function ensureKoopPlusOrders(
           productName: true,
           productSlug: true,
           total: true,
+          quantity: true,
           licenseServerUnitsNotified: true,
           licenseServerLicenseKey: true,
           product: { select: { slug: true } },
@@ -161,7 +162,8 @@ export async function ensureKoopPlusOrders(
     ? Number(order.total)
     : koopItems.reduce((sum, i) => sum + Number(i.total), 0)
 
-  const payload = buildKoopPlusOrderPayload({ order, amount, licenseKey: renewalKey })
+  const quantity = koopItems.reduce((sum, i) => sum + Math.max(1, Number(i.quantity) || 1), 0)
+  const payload = buildKoopPlusOrderPayload({ order, amount, licenseKey: renewalKey, quantity })
   const res = await callKoopPlusOrderWithRetry(payload, opts)
 
   const body = res.json as { success?: unknown } | null

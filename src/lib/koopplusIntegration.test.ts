@@ -142,6 +142,14 @@ test('buildKoopPlusOrderPayload', () => {
   assert.equal(payload.paymentDate, '2026-11-08')
   assert.equal(payload.amount, 6000)
   assert.equal(payload.licenseKey, 'KOOP-AAAA-BBBB-CCCC-DDDD')
+  assert.equal(payload.quantity, 1)
+
+  const multi = buildKoopPlusOrderPayload({
+    order: { orderNo: 'N3', customerName: 'Ali', customerEmail: 'a@b.co' },
+    amount: 19000,
+    quantity: 3,
+  })
+  assert.equal(multi.quantity, 3)
 
   const minimal = buildKoopPlusOrderPayload({
     order: { orderNo: 'N1', customerName: 'Ali', customerEmail: 'a@b.co' },

@@ -23,6 +23,8 @@ export type KoopPlusOrderPayload = {
   paymentDate: string
   amount: number
   licenseKey?: string
+  /** Kooperatif adedi (ilk/yenilenen kooperatif + ek kooperatif hakları). */
+  quantity: number
 }
 
 /** Türkiye (UTC+3, DST yok) takvim günü — YYYY-MM-DD. */
@@ -34,6 +36,8 @@ export function buildKoopPlusOrderPayload(input: {
   order: KoopPlusOrderSource
   amount: number
   licenseKey?: string | null
+  /** Kooperatif adedi; verilmezse 1. */
+  quantity?: number
   now?: Date
 }): KoopPlusOrderPayload {
   const { order } = input
@@ -55,6 +59,7 @@ export function buildKoopPlusOrderPayload(input: {
     paymentDate: formatKoopPlusPaymentDate(paidDate),
     amount: Math.round(input.amount * 100) / 100,
     ...(licenseKey ? { licenseKey } : {}),
+    quantity: Math.max(1, Math.floor(Number(input.quantity ?? 1)) || 1),
   }
 }
 

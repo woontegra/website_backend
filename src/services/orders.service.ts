@@ -69,6 +69,7 @@ import {
 } from '../lib/orderInvoiceAddress'
 import { isKoopPlusProduct, normalizeKoopPlusLicenseKey } from '../lib/koopplusProduct'
 import { deriveKoopPlusSyncStatus } from './koopplusProvision.service'
+import { clampKoopPlusQuantity, priceKoopPlusLine } from './koopplusPricing.service'
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
@@ -740,7 +741,11 @@ export const ordersService = {
         }
         dl = dlResolved
       }
-      const qty = mergedCanonical.get(p.id) ?? 1
+      const isKoopPlusLine = isKoopPlusProduct({ slug: p.slug })
+      // KoopPlus: adet = kooperatif sayısı (1–20), yıl değil.
+      const qty = isKoopPlusLine
+        ? clampKoopPlusQuantity(mergedCanonical.get(p.id) ?? 1)
+        : (mergedCanonical.get(p.id) ?? 1)
       assertSingleLicenseQuantityOrThrow(
         { productType: p.productType, licenseRequired: p.licenseRequired, name: p.name },
         qty,
@@ -753,7 +758,19 @@ export const ordersService = {
         purchaseEnabled: p.purchaseEnabled,
       })
       const unit = new Prisma.Decimal(unitPrice)
-      const lineTotal = new Prisma.Decimal(Number(unit) * qty)
+      // KoopPlus kademeli fiyat: ilk kooperatif ürün fiyatı, ek kooperatifler ek fiyat (sunucuda hesaplanır).
+      const lineTotal = isKoopPlusLine
+        ? new Prisma.Decimal(
+            (
+              await priceKoopPlusLine({
+                quantity: qty,
+                firstPrice: Number(unit),
+                email: input.customerEmail,
+                licenseKey: input.koopplusLicenseKey,
+              })
+            ).total.toFixed(2),
+          )
+        : new Prisma.Decimal(Number(unit) * qty)
       subtotal = subtotal.add(lineTotal)
       lineSnapshots.push({
         productId: p.id,
@@ -776,7 +793,8 @@ export const ordersService = {
         lines: lineSnapshots.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
-          unitPrice: Number(line.unitPrice),
+          // KoopPlus kademeli fiyatta satır toplamı birim × adet değildir; ortalama birim kullanılır.
+          unitPrice: line.quantity > 0 ? Number(line.total) / line.quantity : Number(line.unitPrice),
         })),
       })
     }
@@ -822,7 +840,11 @@ export const ordersService = {
     const productListHtml = `<ul>${lineSnapshots
       .map((l) => {
         const web = l.productType === ProductType.SAAS || l.productType === ProductType.SERVICE
-        const qtyText = web ? `${l.quantity} yıl` : `${l.quantity} adet`
+        const qtyText = isKoopPlusProduct({ productSlug: l.productSlug })
+          ? `${l.quantity} kooperatif`
+          : web
+            ? `${l.quantity} yıl`
+            : `${l.quantity} adet`
         return `<li>${escapeHtml(l.productName)} — ${escapeHtml(qtyText)} — ${Number(l.total).toFixed(2)} ${escapeHtml(currencyDisplay)}</li>`
       })
       .join('')}${
